@@ -1,5 +1,6 @@
 import { getAddress } from 'viem';
 import { throwIfAborted } from './cancellation.js';
+import { isLogRangeError } from './rpc-errors.js';
 
 // IndexedDB is optional storage, never an ownership oracle. Node/private-mode falls back
 // to a session map; every hit is still checked onchain at the requested snapshot.
@@ -69,7 +70,8 @@ export async function discoverOwnedIds({ client, snapshot, nft, abi, owner, star
         [incoming, outgoing] = await Promise.all([query({ to: owner }), query({ from: owner })]);
       } catch (error) {
         throwIfAborted(signal);
-        if (chunk <= 1_000n || !/block range|range.*limit|too many (results|logs)|response.*(large|size)/i.test(error.message)) throw error;
+        // The transport has already tried every log-capable endpoint at this range.
+        if (chunk <= 1_000n || !isLogRangeError(error)) throw error;
         chunk /= 2n;
         continue;
       }

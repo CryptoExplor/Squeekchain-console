@@ -12,10 +12,11 @@ A static, browser-first Squeekchain holder console. The app is branded **Wheelho
 | `sepolia` | Observed v9, **read-only (unverified)**. No published record/ABIs for supported actions. All transaction paths, including transfer and checkpoint, are absent/disabled. |
 | `mainnet` | **Not deployed**. No chain data/action panels. Saved Sepolia transaction Activity remains visible. |
 
-- Sepolia is `11155111` / `0xaa36a7`. A connected Sepolia EIP-1193 wallet is preferred; otherwise reads go browser-direct to three public RPCs or a browser-local custom HTTPS RPC. No server proxy, paid RPC key or backend.
-- Every snapshot requires block-hash agreement with two independent public RPCs, checked again after the reads. Any disagreement makes the result unavailable.
+- Sepolia is `11155111` / `0xaa36a7`. A connected Sepolia EIP-1193 wallet is preferred; otherwise reads go browser-direct to five role-aware public RPCs or a browser-local custom HTTPS RPC in Settings. No server proxy, paid RPC key or backend.
+- Every snapshot requires block-hash agreement with two independent RPC peers (public endpoints plus any supplied RPC), checked again after the reads. Any disagreement makes the result unavailable.
 - Full v6 verification checks the published implementations, runtime hashes, layout digests, admins/owners, versions, configuration and wiring at one block. The result is cached **in memory for the session/profile, keyed by implementation addresses and proxy admins**. Each later snapshot re-reads all four EIP-1967 slots; changed slots trigger full verification and fail closed if they do not match the published record. Output distinguishes the full-verification block from the current slot-check block. Cached verification is committed only after the final block-hash check succeeds.
 - Chain ID is probed once per transport, with concurrent probes shared; errors and wallet `chainChanged` invalidate it. Verification/status/art contract reads use multicall at the snapshot block. Several artwork IDs share one run/snapshot, in batches of up to 24.
+- Public peers: Tenderly, PublicNode, Nodies, OnFinality and 0xRPC. State reads try Tenderly/PublicNode/Nodies first; history scans try Tenderly then OnFinality before reducing the block range. Pruned/history/range/plan errors are availability failures; identity/hash mismatches still stop immediately. A custom RPC is tried first for state/log reads and joins the peers; a Sepolia wallet remains preferred. Public endpoints change often: use `npm run rpc:probe` for current capabilities.
 - NFT discovery uses **owner-filtered incoming and outgoing Transfer events**. IndexedDB stores `{lastScannedBlock, lastScannedHash, ids}` per chain/release/NFT/owner. Subsequent reads scan only new blocks, detect reorged checkpoints, and confirm the final set using `balanceOf` and multicall `ownerOf` at the snapshot. Storage is never an ownership oracle. Node/private mode has an in-memory fallback.
 - Claims deduplicate/sort IDs, batch at 32, verify every owner and show the simulated payout. Each batch is re-previewed after human review; changed amounts stop the flow.
 - Merges require **`BURN-<donorId>` before call construction**, then simulation, human review, a fresh verified simulation, and the owner's wallet signature. No automatic donor selection/submission. Address comparisons are case-insensitive.
@@ -30,13 +31,14 @@ Node 22 is used in CI.
 ```bash
 npm ci
 npm run web                    # build + local static file server, port 5173
+npm run rpc:probe              # endpoint capability table; diagnostic, not live qualification
 npm test                       # deterministic offline regressions, safety, RPC budget, discovery and Activity
 npx playwright install --with-deps chromium
 npm run test:browser            # real Chromium, injected/offline data: layout, profile races, transaction persistence
 npm run test:live               # real Chromium + public Sepolia RPCs; no RPC mocks or signatures
 ```
 
-The live test records public CORS RPC availability, two-peer block agreement and the published v6 graph/network snapshot. A failure must not be reported as a pass. The current sandbox reports **Failed to fetch for all three public RPCs**; run `npm run test:live` locally to establish live qualification. CI installs Chromium **and OS libraries**, runs offline/browser checks, and offers the live check as a manually enabled, non-blocking workflow step.
+The live test records public CORS RPC availability, two-peer block agreement and the published v6 graph/network snapshot. A failure must not be reported as a pass. The earlier sandbox attempt failed on the old three-endpoint list. That list has now been replaced following the user's real-network findings; the new list is **not yet live-qualified**. Run `npm run rpc:probe` and `npm run test:live` locally. The Node probe checks chain ID, a head-minus-12 block, the pinned mining implementation slot at that block, and a 10k-block NFT Transfer log query per endpoint. It does not establish browser CORS, two-peer agreement or full deployment verification. CI installs Chromium **and OS libraries**, runs offline/browser checks, and offers the live check as a manually enabled, non-blocking workflow step.
 
 Switching profiles always wins: reads abort, generation IDs invalidate late results, profile/wallet/position/claim/merge/receipt-view state clears before new reads, and only signing has a busy lock. A wallet request or transaction already sent cannot be cancelled by navigation. Broadcast hashes are saved immediately in localStorage and shown under **Activity across all profiles**, including Mainnet; receipts are monitored while the tab is open and rechecked after reload. No transaction is automatically resubmitted. Closing the tab stops monitoring until it is opened again.
 

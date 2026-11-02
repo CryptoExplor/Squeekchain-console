@@ -1,21 +1,20 @@
 import { createPublicClient, custom, fallback, http, shouldThrow as shouldStop } from 'viem';
 import { abortable, throwIfAborted } from './cancellation.js';
 import { sepolia } from 'viem/chains';
+import { isRpcAvailabilityError, isTrustError, RpcTrustError } from './rpc-errors.js';
+export { RpcTrustError } from './rpc-errors.js';
 
-export const PUBLIC_RPCS = [
-  'https://ethereum-sepolia-rpc.publicnode.com',
-  'https://sepolia.drpc.org',
-  'https://1rpc.io/sepolia',
+// Roles are observed availability preferences, never deployment/trust pins.
+export const PUBLIC_RPC_ENDPOINTS = [
+  { url: 'https://sepolia.gateway.tenderly.co', roles: ['snapshot', 'state', 'logs'] },
+  { url: 'https://ethereum-sepolia-rpc.publicnode.com', roles: ['snapshot', 'state'] },
+  { url: 'https://ethereum-sepolia-public.nodies.app', roles: ['snapshot', 'state'] },
+  { url: 'https://eth-sepolia.api.onfinality.io/public', roles: ['snapshot', 'state', 'logs'] },
+  { url: 'https://0xrpc.io/sep', roles: ['snapshot', 'state'] },
 ];
+export const PUBLIC_RPCS = PUBLIC_RPC_ENDPOINTS.map(endpoint => endpoint.url);
 export const SEPOLIA_ID = 11155111;
 export const SEPOLIA_HEX = '0xaa36a7';
-export class RpcTrustError extends Error {
-  constructor(message) { super(message); this.name = 'RpcTrustError'; }
-}
-function isTrustError(error) {
-  for (let depth = 0; error && depth < 12; depth++, error = error.cause) if (error instanceof RpcTrustError || error.name === 'RpcTrustError') return true;
-  return false;
-}
 export function requireSepolia(id) {
   if (BigInt(id) !== BigInt(SEPOLIA_ID)) throw new RpcTrustError('Unavailable: RPC chainId is not Sepolia (0xaa36a7)');
 }
@@ -25,7 +24,7 @@ function agree(snapshot, blocks) {
   }
 }
 
-// Block hashes are NEVER session-cached. Two distinct public peers agree on every snapshot.
+// Block hashes are NEVER session-cached. Two distinct RPC peers agree on every snapshot.
 export function createSnapshotGuard(client, peers, { signal } = {}) {
   async function check(snapshot) {
     throwIfAborted(signal);
@@ -53,7 +52,7 @@ export function createSnapshotGuard(client, peers, { signal } = {}) {
         if (isTrustError(error)) throw error;
       }
     }
-    if (selected.length < 2) throw new RpcTrustError('Unavailable: two independent Sepolia RPCs are required');
+    if (selected.length < 2) throw new Error('Unavailable: two independent Sepolia RPCs are required');
     const result = { blockNumber: at, blockHash: selected[0].block.hash, peers: selected.map(item => item.peer) };
     // Reuse the peer blocks just fetched instead of downloading them a second time.
     agree(result, [...selected.map(item => item.block), await client.getBlock({ blockNumber: at })]);
@@ -88,16 +87,29 @@ export function chainCheckedRequest(request, { key, chainCache = new Map(), sign
 }
 
 export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Map() } = {}) {
-  const urls = [...new Set([...(rpcUrl ? [rpcUrl] : []), ...PUBLIC_RPCS])];
+  const uniqueUrls = urls => [...new Set(urls.map(url => new URL(url).href))];
+  const urls = uniqueUrls([...(rpcUrl ? [rpcUrl] : []), ...PUBLIC_RPCS]);
   const checked = new Map(urls.map(url => {
-    const raw = createPublicClient({ chain: sepolia, transport: http(url, { timeout: 12_000, retryCount: 1, retryDelay: 750, fetchOptions: { signal } }) });
+    const raw = createPublicClient({ chain: sepolia, transport: http(url, { timeout: 12_000, retryCount: 0, fetchOptions: { signal } }) });
     const request = chainCheckedRequest(raw.request, { key: url, chainCache, signal });
     return [url, custom({ request }, { retryCount: 0 })];
   }));
-  const peers = PUBLIC_RPCS.map(url => createPublicClient({ chain: sepolia, transport: checked.get(url) }));
-  const publicClient = createPublicClient({ chain: sepolia, transport: fallback(urls.map(url => checked.get(url)), {
-    rank: false, retryCount: 0, shouldThrow: error => signal?.aborted || isTrustError(error) || shouldStop(error),
+  // A custom endpoint joins the peer set and is tried first for state/log reads.
+  // Wallet reads remain preferred, but never replace the two independent peers.
+  const roleUrls = role => uniqueUrls([...(rpcUrl ? [rpcUrl] : []), ...PUBLIC_RPC_ENDPOINTS.filter(endpoint => endpoint.roles.includes(role)).map(endpoint => endpoint.url)]);
+  const peerOrigins = new Set();
+  const peers = roleUrls('snapshot').filter(url => {
+    const origin = new URL(url).origin;
+    if (peerOrigins.has(origin)) return false;
+    peerOrigins.add(origin);
+    return true;
+  }).map(url => createPublicClient({ chain: sepolia, transport: checked.get(url) }));
+  const roleClient = role => createPublicClient({ chain: sepolia, transport: fallback(roleUrls(role).map(url => checked.get(url)), {
+    rank: false, retryCount: 0,
+    // Identity/hash failures always stop, even if a wrapped message also mentions limits.
+    shouldThrow: error => signal?.aborted || isTrustError(error) || (!isRpcAvailabilityError(error) && shouldStop(error)),
   }) });
+  const stateClient = roleClient('state'), logsClient = roleClient('logs');
   const walletRequests = new WeakMap();
   const invalidateChain = () => chainCache.clear();
   const client = createPublicClient({ chain: sepolia, batch: { multicall: true }, transport: custom({ request: async args => {
@@ -115,9 +127,16 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
       let id;
       try { id = await request({ method: 'eth_chainId' }); }
       catch (error) { if (error instanceof RpcTrustError) chainCache.delete(wallet); }
-      if (id && BigInt(id) === BigInt(SEPOLIA_ID)) return request(args);
+      if (id && BigInt(id) === BigInt(SEPOLIA_ID)) {
+        try { return await request(args); }
+        catch (error) {
+          throwIfAborted(signal);
+          if (isTrustError(error) || !isRpcAvailabilityError(error)) throw error;
+          // Pruned/range/plan failures are availability problems, not wallet trust.
+        }
+      }
     }
-    return abortable(() => publicClient.request(args), signal);
+    return abortable(() => (args.method === 'eth_getLogs' ? logsClient : stateClient).request(args), signal);
   } }, { retryCount: 0 }) });
   return { client, invalidateChain, ...createSnapshotGuard(client, peers, { signal }) };
 }
