@@ -1,5 +1,5 @@
 /**
- * Squeekchain Mining Console.
+ * Wheelhouse — a Squeekchain holder console.
  *
  * Profile-driven: each deployment profile maps onto an adapter with the same surface
  * (verify / networkStatus / walletStatus / optional owner actions / optional art).
@@ -133,6 +133,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── theme ──────────────────────────────────────────────────────────────────
   function applyTheme(theme) {
+    theme = theme === "dark" ? "dark" : "light";
     doc.documentElement.dataset.theme = theme;
     el.theme.textContent = theme === "dark" ? "☀" : "☾";
     doc.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#0b0b0d" : "#f5f5f7");
@@ -150,8 +151,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!profile.addresses) return null;
     if (adapterFactory) return adapterFactory(profileKey);
     return profile.abiSet === "v9"
-      ? createSqueek9({ profileKey, cache: store })
-      : createSqueekchain({ addresses: profile.addresses, cache: store });
+      ? createSqueek9({ profileKey, cache: store, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null })
+      : createSqueekchain({ addresses: profile.addresses, cache: store, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null });
   }
 
   function renderProfileOptions() {
@@ -168,6 +169,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   async function switchProfile(profileKey) {
+    closeActiveModal?.();
     generation++;
     state.profileKey = getProfile(profileKey).key;
     store.set("squeekchain:profile", state.profileKey);
@@ -202,14 +204,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.cp.reason.textContent = profile.addresses ? "Waiting for verified chain state." : "Unavailable until a mainnet deployment is published and verified.";
     el.verified.textContent = profile.addresses ? "verifying…" : "not deployed";
     el.verified.className = "chip";
-    $("network-context").textContent = profile.chainId === 1 ? "MAINNET · NOT DEPLOYED" : profile.kind === "legacy" ? "SEPOLIA · LEGACY V6" : "SEPOLIA TESTNET";
+    $("network-context").textContent = profile.chainId === 1 ? "MAINNET · NOT DEPLOYED" : profile.kind === "supported" ? "SEPOLIA · V6 SUPPORTED" : "SEPOLIA · V9 UNVERIFIED";
     $("network-mode").textContent = profile.chainId === 1 ? "Waiting for an official deployment record." : "Read freely. Sign only what you understand.";
     renderCapabilities(profile);
     el.net.chain.textContent = profile.chainId === CHAIN.id ? "Sepolia" : "Ethereum";
     el.net.kind.textContent = profile.kind;
     el.net.release.textContent = profile.identities?.release ?? (profile.addresses ? "docs-pinned v6" : "no deployment");
     el.net.notice.textContent = profile.notes ?? "";
-    el.net.notice.className = `notice ${profile.kind === "legacy" ? "warn" : profile.kind === "experimental" ? "" : "bad"}`;
+    el.net.notice.className = `notice ${profile.kind === "supported" ? "" : "warn"}`;
   }
 
   function renderCapabilities(profile) {
@@ -229,12 +231,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }));
   }
 
-  async function refreshTelemetry() {
+  async function refreshTelemetry({ reset = true } = {}) {
     const current = generation;
     const enabled = state.profileKey === "sepolia";
-    for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
-    $("wheel-state").textContent = enabled ? "Loading" : "Unavailable";
-    $("wheel-note").textContent = enabled ? "Reading official device telemetry…" : "Device telemetry belongs to the live Sepolia deployment only.";
+    if (reset || !enabled) {
+      for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
+      $("wheel-state").textContent = enabled ? "Loading" : "Unavailable";
+      $("wheel-note").textContent = enabled ? "Reading official device telemetry…" : "Device telemetry belongs to the live Sepolia deployment only.";
+    }
     if (!enabled) return;
     try {
       const view = telemetryView(await telemetry.read());
@@ -246,6 +250,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       $("wheel-note").textContent = view.note;
     } catch (err) {
       if (destroyed || current !== generation) return;
+      for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
       $("wheel-state").textContent = "Unknown";
       $("wheel-note").textContent = `${err.message} No live reading to display.`;
     }
@@ -292,13 +297,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       state.chainId = Number(await p.request({ method: "eth_chainId" }));
       state.inspected = state.account;
       p.on?.("accountsChanged", (accs) => {
+        closeActiveModal?.();
         state.account = accs?.[0] ?? null;
         state.inspected = state.account;
         state.status = null;
         renderWalletChip();
         refreshWallet();
       });
-      p.on?.("chainChanged", () => refreshAll());
+      p.on?.("chainChanged", () => { closeActiveModal?.(); refreshAll(); });
       hideBanner();
       renderWalletChip();
       await refreshWallet();
@@ -316,23 +322,72 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.walletChip.title = state.account ?? "";
   }
 
-  async function sendTransaction(tx, label) {
+  async function sendTransaction(tx, label, owner = state.account) {
     const p = provider();
     if (!p || !state.account) throw new Error("connect a wallet to sign");
+    const adapter = state.adapter, current = generation;
     await ensureChain(p);
+    const accounts = await p.request({ method: "eth_accounts" });
+    if (current !== generation || !owner || state.account?.toLowerCase() !== owner.toLowerCase() || accounts?.[0]?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet or profile changed; start again");
     const hash = await p.request({
       method: "eth_sendTransaction",
       params: [{ from: state.account, to: tx.to, data: tx.data, value: `0x${BigInt(tx.value ?? 0).toString(16)}` }],
     });
     toast(`${label} submitted ${hash.slice(0, 12)}…`);
-    const receipt = await state.adapter.client.waitForTransactionReceipt({ hash, timeout: 180_000 });
+    const receipt = await adapter.client.waitForTransactionReceipt({ hash, timeout: 180_000 });
     const ok = receipt.status === "success";
+    if (!ok) throw new Error(`${label} reverted. Stopped; no changed-input retry.`);
     toast(`${label} ${ok ? "confirmed" : "reverted"} in block ${receipt.blockNumber}`, ok ? "ok" : "err");
     return { hash, ok, blockNumber: String(receipt.blockNumber), gasUsed: String(receipt.gasUsed) };
   }
 
   // ── modal ─────────────────────────────────────────────────────────────────
+  let closeActiveModal = null;
+
+  function openModal({ initialFocus = el.modal.cancel, onClose }) {
+    const previousFocus = doc.activeElement;
+    const box = el.modal.root.querySelector(".modal-box");
+    const focusable = () => [...box.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')]
+      .filter(node => node.tabIndex >= 0 && !node.matches(':disabled') && !node.closest('.hidden, [hidden], [inert]')
+        && win.getComputedStyle(node).display !== "none" && win.getComputedStyle(node).visibility !== "hidden");
+    const focusInside = () => {
+      const nodes = focusable();
+      (nodes.includes(initialFocus) ? initialFocus : nodes[0] ?? box).focus();
+    };
+    const close = (value = false) => {
+      if (closeActiveModal !== close) return;
+      closeActiveModal = null;
+      doc.removeEventListener("keydown", onKeyDown, true);
+      doc.removeEventListener("focusin", onFocusIn);
+      el.modal.root.classList.add("hidden");
+      onClose(value);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+    const onKeyDown = event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close(false);
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        const nodes = focusable();
+        const index = nodes.indexOf(doc.activeElement);
+        const next = index < 0 ? (event.shiftKey ? nodes.length - 1 : 0)
+          : (index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length;
+        (nodes[next] ?? box).focus();
+      }
+    };
+    const onFocusIn = event => { if (!box.contains(event.target)) focusInside(); };
+    closeActiveModal = close;
+    el.modal.root.classList.remove("hidden");
+    doc.addEventListener("keydown", onKeyDown, true);
+    doc.addEventListener("focusin", onFocusIn);
+    focusInside();
+    return close;
+  }
+
   function confirmModal({ title, body, requireText = null, confirmLabel = "Confirm" }) {
+    closeActiveModal?.();
     return new Promise((resolve) => {
       el.modal.title.textContent = title;
       el.modal.body.textContent = body;
@@ -341,19 +396,23 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       el.modal.input.placeholder = requireText ? `type ${requireText}` : "";
       el.modal.confirm.textContent = confirmLabel;
       el.modal.confirm.disabled = Boolean(requireText);
-      el.modal.root.classList.remove("hidden");
-      const cleanup = (value) => {
-        el.modal.root.classList.add("hidden");
-        el.modal.confirm.onclick = null;
-        el.modal.cancel.onclick = null;
-        el.modal.input.oninput = null;
-        resolve(value);
-      };
+      const close = openModal({
+        initialFocus: requireText ? el.modal.input : el.modal.cancel,
+        onClose: value => {
+          el.modal.confirm.onclick = null;
+          el.modal.cancel.onclick = null;
+          el.modal.input.oninput = null;
+          resolve(value);
+        },
+      });
       el.modal.input.oninput = () => {
         el.modal.confirm.disabled = requireText ? el.modal.input.value.trim() !== requireText : false;
       };
-      el.modal.cancel.onclick = () => cleanup(false);
-      el.modal.confirm.onclick = () => cleanup(true);
+      el.modal.cancel.onclick = () => close(false);
+      el.modal.confirm.onclick = () => {
+        if (requireText && el.modal.input.value.trim() !== requireText) return;
+        close(true);
+      };
     });
   }
 
@@ -454,7 +513,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         const td = doc.createElement("td");
         if (c.num) td.className = "num";
         if (c.key === "claimable") td.textContent = s.claimable ? num(Number(s.claimable.sqk), 4) : "—";
-        else if (c.key === "deposited") td.textContent = s.deposited ? "yes" : "no";
+        else if (c.key === "deposited") td.textContent = s.deposited == null ? "Unknown" : s.deposited ? "yes" : "no";
         else if (c.key === "pendingRound") td.textContent = s.pendingRound && s.pendingRound !== "0" ? `r${s.pendingRound}` : "—";
         else if (c.key === "art") {
           const btn = doc.createElement("button");
@@ -477,7 +536,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for (const pair of plan?.pairs ?? []) {
       const li = doc.createElement("li");
       const text = doc.createElement("span");
-      text.innerHTML = `keep <strong>#${pair.survivor}</strong> · burn <strong>#${pair.donor}</strong> · L${pair.level}→L${pair.nextLevel} · power ${pair.powerBefore}→${pair.powerAfter} <span class="gain">+${pair.powerGainPercent}%</span>`;
+      text.textContent = `keep #${pair.survivor} · burn #${pair.donor} · L${pair.level}→L${pair.nextLevel} · power ${pair.powerBefore}→${pair.powerAfter} (+${pair.powerGainPercent}%)`;
       if (signerOwns && caps.merge) {
         const button = doc.createElement("button");
         button.className = "btn btn-danger";
@@ -499,12 +558,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!state.adapter) return null;
     const adapter = state.adapter, current = generation;
     try {
-      const [net, v] = await Promise.all([adapter.networkStatus(), adapter.verify()]);
+      $("profile-panel").setAttribute("aria-busy", "true");
+      const net = await adapter.networkStatus();
+      const v = net.verification ?? await adapter.verify();
       if (destroyed || current !== generation) return null;
       renderNetwork(net);
-      el.verified.textContent = v.ok ? "verified ✓" : `${v.problems.length} problem(s)`;
-      el.verified.className = `chip ${v.ok ? (v.trusted === false ? "warn" : "ok") : "bad"}`;
-      el.verified.title = v.ok ? (v.trusted === false ? "identities from the official dApp bundle + API, not a published record" : "matches the docs record") : v.problems.join("; ");
+      el.verified.textContent = v.trusted === false ? "read-only (unverified)" : v.ok ? "verified ✓" : `${v.problems?.length ?? 1} problem(s)`;
+      el.verified.className = `chip ${v.trusted === false ? "warn" : v.ok ? "ok" : "bad"}`;
+      el.verified.title = v.trusted === false ? "Read-only (unverified): observed identities are not published trust pins. All transactions disabled." : v.ok ? `Published identities match at block ${v.blockNumber ?? "unknown"}; two public RPC block hashes agree.` : (v.problems ?? []).join("; ");
       return net;
     } catch (err) {
       if (destroyed || current !== generation) return null;
@@ -514,6 +575,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       el.verified.className = "chip bad";
       showBanner(`Read failed: ${errorMessage(err)}. Nothing was signed.`, "bad");
       return null;
+    } finally {
+      if (current === generation) $("profile-panel").setAttribute("aria-busy", "false");
     }
   }
 
@@ -605,7 +668,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     });
     if (!confirmed) return { ok: false, reason: "cancelled" };
     const receipts = [];
-    for (const batch of preview.batches) receipts.push(await sendTransaction(batch.tx, `claim(${batch.tokenIds.length} ids)`));
+    const adapter = state.adapter;
+    for (const batch of preview.batches) {
+      if (state.adapter !== adapter || state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet or profile changed. Stopped.");
+      const fresh = await adapter.claimPreview(owner, batch.tokenIds);
+      if (!fresh.ok || fresh.batches.length !== 1 || fresh.batches[0].amount.base !== batch.amount.base) throw new Error("Claim outcome changed. Review a fresh preview; no automatic retry.");
+      receipts.push(await sendTransaction(fresh.batches[0].tx, `claim(${batch.tokenIds.length} ids)`, owner));
+    }
     await refreshAll();
     return { ok: true, total: preview.total, receipts };
   }
@@ -613,15 +682,25 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   async function requestMerge(pair) {
     if (!capabilities().merge) throw new Error("Merges are not supported on this profile.");
     const owner = state.account ?? state.inspected;
-    const preview = await state.adapter.mergePreview(owner, pair.survivor, pair.donor);
+    const adapter = state.adapter, current = generation;
+    const confirm = `BURN-${BigInt(pair.donor)}`;
     const confirmed = await confirmModal({
-      title: `Merge ${pair.survivor} ← ${pair.donor}`,
-      body: `#${pair.donor} is BURNED permanently and cannot be restored. #${pair.survivor} becomes level ${pair.nextLevel}. Simulated gas ≈ ${preview.gas}. Type the donor token ID to confirm.`,
-      requireText: pair.donor,
-      confirmLabel: "Burn donor & merge",
+      title: `Keep #${pair.survivor} · burn #${pair.donor}`,
+      body: `#${pair.donor} is BURNED permanently and cannot be restored. #${pair.survivor} survives. Type ${confirm} before we build or simulate this call. You will review the simulation before your wallet opens.`,
+      requireText: confirm,
+      confirmLabel: "Acknowledge burn & simulate",
     });
     if (!confirmed) return { ok: false, reason: "cancelled" };
-    const result = await sendTransaction(preview.tx, `merge(${pair.survivor} ← ${pair.donor})`);
+    if (current !== generation || owner !== (state.account ?? state.inspected)) throw new Error("Wallet or profile changed. Start again.");
+    const preview = await adapter.mergePreview(owner, pair.survivor, pair.donor, { confirm });
+    if (!preview.ok) return preview;
+    const sign = await confirmModal({ title: "Review simulated merge", body: `${preview.warning}. Result: level ${preview.nextLevel}. Simulated gas ≈ ${preview.gas}. Keep #${pair.survivor}; permanently burn #${pair.donor}.`, confirmLabel: "Review in wallet" });
+    if (!sign) return { ok: false, reason: "cancelled" };
+    if (current !== generation || owner !== state.account) throw new Error("Connect the owner wallet and start again.");
+    // Fresh verification, ownership, eligibility and simulation after human review.
+    const fresh = await adapter.mergePreview(owner, pair.survivor, pair.donor, { confirm });
+    if (!fresh.ok) return fresh;
+    const result = await sendTransaction(fresh.tx, `merge(${pair.survivor} ← ${pair.donor})`, owner);
     await refreshAll();
     return { ok: true, ...result };
   }
@@ -670,6 +749,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   function openArtDetail(item) {
+    closeActiveModal?.();
     el.modal.title.textContent = item.name ?? `Squeek #${item.tokenId}`;
     el.modal.body.replaceChildren();
     const wrap = doc.createElement("div");
@@ -680,7 +760,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const side = doc.createElement("div");
     const desc = doc.createElement("p");
     desc.className = "muted small";
-    desc.textContent = item.description ?? "";
+    desc.textContent = `${item.description ?? ""}${item.artworkIntegrity ? ` · Artwork integrity: ${item.artworkIntegrity}` : ""}`;
     const attrs = doc.createElement("div");
     attrs.className = "attrs";
     for (const a of item.attributes ?? []) {
@@ -700,15 +780,15 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.modal.confirm.textContent = "Close";
     el.modal.confirm.disabled = false;
     el.modal.confirm.className = "btn btn-primary";
-    el.modal.root.classList.remove("hidden");
-    const close = () => {
-      el.modal.root.classList.add("hidden");
-      el.modal.confirm.onclick = null;
-      el.modal.cancel.onclick = null;
-      el.modal.confirm.className = "btn btn-danger";
-    };
-    el.modal.confirm.onclick = close;
-    el.modal.cancel.onclick = close;
+    const close = openModal({
+      onClose: () => {
+        el.modal.confirm.onclick = null;
+        el.modal.cancel.onclick = null;
+        el.modal.confirm.className = "btn btn-danger";
+      },
+    });
+    el.modal.confirm.onclick = () => close();
+    el.modal.cancel.onclick = () => close();
   }
 
   // ── tool registry ─────────────────────────────────────────────────────────
@@ -746,7 +826,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       };
     }
     if (caps.checkpoint) {
-      tools.squeek_checkpoint_preview = { description: "Whether checkpoint() can advance now, with unsigned tx + gas.", run: async () => state.adapter.checkpointPreview(state.account ?? undefined) };
+      tools.squeek_checkpoint_preview = { description: "Whether checkpoint() can advance now, with unsigned tx + gas.", run: async args => state.adapter.checkpointPreview(args.from ?? state.account ?? undefined) };
       tools.squeek_request_checkpoint = { description: "Open the wallet popup to submit checkpoint(). Works for any wallet.", run: async () => requestCheckpoint() };
     }
     if (caps.claim) {
@@ -760,7 +840,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       tools.squeek_merge_plan = { description: "Same-level merge pairs that satisfy every onchain precondition.", run: async (args) => state.adapter.mergePlan(requireOwner(args)) };
       tools.squeek_merge_preview = {
         description: "Simulate one merge (gas + irreversibility warning).",
-        run: async (args) => state.adapter.mergePreview(requireOwner(args), args.survivor, args.donor),
+        run: async (args) => state.adapter.mergePreview(requireOwner(args), args.survivor, args.donor, { confirm: args.confirm }),
       };
       tools.squeek_request_merge = {
         description: "Open the wallet popup to merge a pair. Requires confirm: 'BURN-<donor>'.",
@@ -814,7 +894,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     await withBusy(connect);
   };
-  el.refresh.onclick = () => { void refreshTelemetry(); return withBusy(refreshAll); };
+  el.refresh.onclick = () => { void refreshTelemetry({ reset: false }); return withBusy(refreshAll); };
   el.cp.button.onclick = () => withBusy(requestCheckpoint);
   el.holder.claim.onclick = () => withBusy(() => {
     const raw = $("claim-ids").value.trim();
@@ -890,6 +970,18 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     );
   }
 
+  // Custom RPC is browser-local; never sent to our server. Public peers still cross-check every snapshot.
+  $("rpc-url").value = store.get("wheelhouse:rpc") ?? "";
+  $("btn-save-rpc").onclick = () => withBusy(async () => {
+    const value = $("rpc-url").value.trim();
+    if (value) {
+      const url = new URL(value);
+      if (url.protocol !== "https:" || url.username || url.password) throw new Error("Use an HTTPS RPC URL without embedded credentials");
+    }
+    store.set("wheelhouse:rpc", value);
+    await switchProfile(state.profileKey);
+  });
+
   // ── boot ──────────────────────────────────────────────────────────────────
   applyTheme(store.get(THEME_KEY) ?? "light");
   renderProfileOptions();
@@ -901,7 +993,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   else refreshAll().then(renderToolOptions);
   void refreshTelemetry();
 
-  const telemetryTimer = win.setInterval?.(() => { if (!destroyed) void refreshTelemetry(); }, 15_000);
+  const telemetryTimer = win.setInterval?.(() => { if (!destroyed) void refreshTelemetry({ reset: false }); }, 15_000);
   const timer = win.setInterval?.(() => {
     if (!state.busy && state.adapter) refreshAll();
   }, 45_000);
@@ -925,7 +1017,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim,
     requestMerge,
     selectTab,
-    destroy: () => { destroyed = true; generation++; win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
+    destroy: () => { closeActiveModal?.(); destroyed = true; generation++; win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
   };
 }
 

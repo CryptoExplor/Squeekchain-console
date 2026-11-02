@@ -57,5 +57,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  process.stdout.write(`The Wheel on http://${HOST}:${PORT}\n`);
+  process.stdout.write(`Wheelhouse on http://${HOST}:${PORT}\n`);
 });

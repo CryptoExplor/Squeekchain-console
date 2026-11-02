@@ -11,7 +11,7 @@
  * Every method returns JSON-serializable data (bigints become decimal strings),
  * so the same call works in a browser, over MCP, or in a Node script.
  */
-import { createPublicClient, fallback, http, encodeFunctionData, getAddress } from "viem";
+import { encodeFunctionData, getAddress, formatEther } from "viem";
 import { sepolia } from "viem/chains";
 import { coreAbi, miningAbi, nftAbi, tokenAbi } from "./abi.js";
 
@@ -23,47 +23,16 @@ export const CHAIN = {
   name: "Sepolia",
   hexId: "0xaa36a7",
   // Public endpoints, tried in order and failing over on 429s/outages.
-  rpcUrls: [
-    "https://ethereum-sepolia-rpc.publicnode.com",
-    "https://sepolia.gateway.tenderly.co",
-    "https://1rpc.io/sepolia",
-  ],
+  rpcUrls: PUBLIC_RPCS,
 };
 
-// Published deployment record (docs.squeekchain.com/developers#deployments).
-export const DEPLOYMENT = {
-  core: "0x74665dAecA35A2303e767E76a2FF1FB6F93e119f",
-  mining: "0x3beE588fC20dE788Bac17d33b41Da7346cb27EC4",
-  token: "0x6872bfa5ccc3e9e440c6c16e5ffdabb8dba4cc76",
-  nft: "0x0eAF3E0d40A0a8E5a6Ac030b2459E9FB0B7905c6",
-  implementations: {
-    core: "0x0a71c86ab63a77675002a389fdf4d096a07b11e2",
-    mining: "0x08890b360c65fd878344bf6e23d1c36358433b4e",
-  },
-  layoutDigests: {
-    core: "0x9a9c008e029460808209571703fbf2679785874e0e6d3232f16a864d12abcb20",
-    mining: "0xace564e9c052f30122779a32fdf3333ebce7cc708eae9c01cb7875b4f6ad37a6",
-  },
-  proxyAdmins: {
-    core: "0x05a9af6c3f6780dd58168f2e145cdd0d64564a5e",
-    mining: "0x7369d930f8dfb7a6657578eda5906d3472e4ac9a",
-  },
-  timelock: "0x6B35AB6E96EF292E4fdD3f15a4E812f3CA291844",
-  nftStartBlock: 11902282n,
-  versions: { core: 3, mining: 6 },
-};
-
-export const COLLECTION = 0; // Squeeks
-const IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
-const ADMIN_SLOT = "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103";
+export { DEPLOYMENT } from "./record.js";
+import { DEPLOYMENT } from "./record.js";
+import { createRpcContext, PUBLIC_RPCS } from "./rpc.js";
+import { verifyGraphAt } from "./verify.js";
+import { parseSqueekMetadata } from "./metadata.js";
+export const COLLECTION = 0;
 const ZERO = "0x0000000000000000000000000000000000000000";
-
-const identityAbi = [
-  { type: "function", name: "implementationCodeAddress", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-  { type: "function", name: "implementationCodeVersion", stateMutability: "view", inputs: [], outputs: [{ type: "uint64" }] },
-  { type: "function", name: "implementationStorageLayoutDigest", stateMutability: "view", inputs: [], outputs: [{ type: "bytes32" }] },
-  { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-];
 
 // ── formatting helpers (shared by web + MCP output) ───────────────────────────
 const DECIMALS = 18n;
@@ -104,40 +73,40 @@ function wrap(err, fallback) {
   return new SqueekchainError(err?.shortMessage || err?.message || fallback, { code: "network", cause: err });
 }
 
-/**
- * @param {object} opts
- * @param {string} [opts.rpcUrl]           override the default public RPC
- * @param {object} [opts.addresses]        override the deployment addresses
- * @param {{get:Function,set:Function}} [opts.cache]  optional token-ID cache (localStorage, Map, …)
- * @param {boolean} [opts.skipVerification] testing/sandbox escape hatch only
- */
-export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, cache = null, skipVerification = false } = {}) {
-  const addr = {
-    core: getAddress(addresses.core ?? DEPLOYMENT.core),
-    mining: getAddress(addresses.mining ?? DEPLOYMENT.mining),
-    token: getAddress(addresses.token ?? DEPLOYMENT.token),
-    nft: getAddress(addresses.nft ?? DEPLOYMENT.nft),
-  };
-
-  const transport =
-    rpcUrl === CHAIN.rpcUrls[0]
-      ? fallback(
-          CHAIN.rpcUrls.map((url) => http(url, { timeout: 30_000, retryCount: 2, retryDelay: 600 })),
-          { rank: false, retryCount: 1 },
-        )
-      : http(rpcUrl, { timeout: 30_000, retryCount: 3, retryDelay: 800 });
-
-  const client = createPublicClient({ chain: sepolia, transport });
-  const read = (contract, abi, functionName, args = []) => client.readContract({ address: addr[contract], abi, functionName, args });
+/** Public methods are serialized, verified and pinned to one cross-checked snapshot. */
+export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provider, rpcContext, ...options } = {}) {
+  if (options.skipVerification) throw new Error("Verification cannot be disabled");
+  const addr = Object.fromEntries(["core", "mining", "token", "nft"].map(name => {
+    if (addresses[name] && addresses[name].toLowerCase() !== DEPLOYMENT[name].toLowerCase()) throw new Error("Only the published deployment record is supported");
+    return [name, getAddress(DEPLOYMENT[name])];
+  }));
+  const context = rpcContext ?? createRpcContext({ rpcUrl, provider });
+  const client = context.client;
+  let activeSnapshot = null, verification = null, queue = Promise.resolve();
+  const read = (contract, abi, functionName, args = []) => client.readContract({ address: addr[contract], abi, functionName, args, blockNumber: activeSnapshot.blockNumber });
+  function run(operation) {
+    const task = queue.then(async () => {
+      activeSnapshot = await context.snapshot();
+      try {
+        verification = await verifyGraphAt(client, activeSnapshot);
+        const result = await operation();
+        await context.check(activeSnapshot);
+        return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash } } : result;
+      } catch (error) { throw wrap(error, "Snapshot unavailable"); }
+      finally { activeSnapshot = null; verification = null; }
+    });
+    queue = task.catch(() => {});
+    return task;
+  }
 
   // ── token discovery ─────────────────────────────────────────────────────────
-  const cacheKey = (owner) => `squeekchain:ids:${owner.toLowerCase()}`;
+  const cacheKey = (owner) => `squeekchain:ids:${DEPLOYMENT.release}:${owner.toLowerCase()}`;
   const readCache = (owner) => {
     try {
       const hit = cache?.get ? cache.get(cacheKey(owner)) : null;
       if (!hit) return null;
       const parsed = typeof hit === "string" ? JSON.parse(hit) : hit;
-      if (!parsed?.at || Date.now() / 1000 - parsed.at > 900) return null;
+      if (parsed?.blockHash !== activeSnapshot.blockHash) return null;
       return parsed.ids.map(BigInt);
     } catch {
       return null;
@@ -145,7 +114,7 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
   };
   const writeCache = (owner, ids) => {
     try {
-      cache?.set?.(cacheKey(owner), JSON.stringify({ at: Math.floor(Date.now() / 1000), ids: ids.map(String) }));
+      cache?.set?.(cacheKey(owner), JSON.stringify({ blockHash: activeSnapshot.blockHash, ids: ids.map(String) }));
     } catch {
       /* best effort */
     }
@@ -188,6 +157,7 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
       const res = await client.multicall({
         contracts: ids.map((tokenId) => ({ address: addr.nft, abi: nftAbi, functionName: "ownerOf", args: [tokenId] })),
         allowFailure: true,
+        blockNumber: activeSnapshot.blockNumber,
       });
       res.forEach((r, i) => {
         if (r.status === "success" && String(r.result).toLowerCase() === owner.toLowerCase()) found.push(ids[i]);
@@ -198,78 +168,8 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
 
   const sortIds = (ids) => [...new Set(ids.map(String))].map(BigInt).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
-  // ── verification ────────────────────────────────────────────────────────────
-  async function verify({ pinIdentities = true } = {}) {
-    const latest = await client.getBlockNumber();
-    const problems = [];
-    const detail = {};
-
-    for (const name of ["mining", "core"]) {
-      const proxy = addr[name];
-      const [implWord, adminWord] = await Promise.all([
-        client.getStorageAt({ address: proxy, slot: IMPLEMENTATION_SLOT }),
-        client.getStorageAt({ address: proxy, slot: ADMIN_SLOT }),
-      ]);
-      const implementation = getAddress(`0x${(implWord ?? "0x").slice(-40)}`);
-      const admin = getAddress(`0x${(adminWord ?? "0x").slice(-40)}`);
-      const [codeVersion, layout] = await Promise.all([
-        client.readContract({ address: proxy, abi: identityAbi, functionName: "implementationCodeVersion" }),
-        client.readContract({ address: proxy, abi: identityAbi, functionName: "implementationStorageLayoutDigest" }),
-      ]);
-      detail[name] = { proxy, implementation, admin, version: Number(codeVersion), layout };
-
-      if (Number(codeVersion) !== DEPLOYMENT.versions[name]) {
-        problems.push(`${name}: implementation version ${codeVersion} != ${DEPLOYMENT.versions[name]}`);
-      }
-      if (pinIdentities) {
-        if (implementation.toLowerCase() !== DEPLOYMENT.implementations[name].toLowerCase()) {
-          problems.push(`${name}: implementation ${implementation} != pinned ${DEPLOYMENT.implementations[name]}`);
-        }
-        if (String(layout).toLowerCase() !== DEPLOYMENT.layoutDigests[name].toLowerCase()) {
-          problems.push(`${name}: layout digest != pinned`);
-        }
-        if (admin.toLowerCase() !== DEPLOYMENT.proxyAdmins[name].toLowerCase()) {
-          problems.push(`${name}: proxy admin ${admin} != pinned`);
-        }
-      }
-    }
-
-    const [miningCore, tokenMining, policy] = await Promise.all([
-      read("mining", miningAbi, "core"),
-      read("token", tokenAbi, "mining"),
-      read("mining", miningAbi, "collectionPolicy", [COLLECTION]),
-    ]);
-    if (miningCore.toLowerCase() !== addr.core.toLowerCase()) problems.push("mining.core() != core");
-    if (tokenMining.toLowerCase() !== addr.mining.toLowerCase()) problems.push("token.mining() != mining");
-    if (policy.nft.toLowerCase() !== addr.nft.toLowerCase()) problems.push("collectionPolicy(0).nft != nft");
-
-    return {
-      ok: problems.length === 0,
-      problems,
-      blockNumber: String(latest),
-      chainId: CHAIN.id,
-      detail: jsonify(detail),
-      wiring: { miningCore, tokenMining, nft: policy.nft },
-    };
-  }
-
-  async function assertVerified() {
-    if (skipVerification) return null;
-    const v = await verify();
-    if (!v.ok) {
-      throw new SqueekchainError(`deployment verification failed: ${v.problems.join("; ")}`, { code: "verification" });
-    }
-    return v;
-  }
-
-  // ── reads ───────────────────────────────────────────────────────────────────
-  let netCache = null;
-  async function networkStatus({ force = false } = {}) {
-    if (!force && netCache && Date.now() - netCache.at < 4_000) return netCache.value;
-    const value = await readNetworkStatus();
-    netCache = { at: Date.now(), value };
-    return value;
-  }
+  // Internal reads reuse the operation's verified snapshot; no cross-snapshot caches.
+  async function networkStatus() { return readNetworkStatus(); }
 
   async function readNetworkStatus() {
     const [miningState, coreState, accounting, cpStatus, policy, rewardPerBlock, supplyCap, config] = await Promise.all([
@@ -300,7 +200,7 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
       },
       mining: {
         processedThroughRound: String(miningState.processedThroughRound),
-        lagRounds: String(Number(coreState.settledThroughRound) - Number(miningState.processedThroughRound)),
+        lagRounds: String(BigInt(coreState.settledThroughRound) - BigInt(miningState.processedThroughRound)),
         totalWeight: String(miningState.totalWeight),
         rewardIndex: String(miningState.rewardIndex),
         minted: sqkAmount(miningState.minted),
@@ -341,11 +241,12 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
         contracts.push({ address: addr.mining, abi: miningAbi, functionName: "position", args: [COLLECTION, tokenId] });
         contracts.push({ address: addr.nft, abi: nftAbi, functionName: "ownerOf", args: [tokenId] });
       }
-      const res = await client.multicall({ contracts, allowFailure: true });
+      const res = await client.multicall({ contracts, allowFailure: true, blockNumber: activeSnapshot.blockNumber });
       slice.forEach((tokenId, j) => {
         const pos = res[j * 2];
         const holderRes = res[j * 2 + 1];
-        if (pos.status !== "success" || Number(pos.result.level) === 0) return;
+        if (pos.status !== "success" || holderRes.status !== "success") throw new Error(`Position unavailable for token ${tokenId}`);
+        if (Number(pos.result.level) === 0) return;
         const p = pos.result;
         out.push({
           tokenId: String(tokenId),
@@ -371,11 +272,13 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
         args: [COLLECTION, [tokenId]],
       })),
       allowFailure: true,
+      blockNumber: activeSnapshot.blockNumber,
     });
     const perToken = new Map();
     let total = 0n;
     res.forEach((r, i) => {
-      const amount = r.status === "success" ? r.result : 0n;
+      if (r.status !== "success") throw new Error(`Claimable unavailable for token ${tokenIds[i]}`);
+      const amount = r.result;
       perToken.set(tokenIds[i], amount);
       total += amount;
     });
@@ -395,7 +298,7 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
       const cached = readCache(owner);
       if (cached) return cached;
     }
-    const latest = await client.getBlockNumber();
+    const latest = activeSnapshot.blockNumber;
     let ids;
     try {
       ids = await scanLogs(owner, latest);
@@ -404,25 +307,17 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
       ids = await scanOwners(owner);
     }
     ids = sortIds(ids);
+    if (ids.length !== Number(balance)) throw new Error("Incomplete discovery; holdings unavailable");
     writeCache(owner, ids);
     return ids;
   }
 
-  /** Everything a holder (or a curious onlooker) needs about one address (memoised for 4s). */
-  const walletCache = new Map();
-  async function walletStatus(owner, { force = false } = {}) {
-    const address = getAddress(owner);
-    const hit = walletCache.get(address.toLowerCase());
-    if (!force && hit && Date.now() - hit.at < 4_000) return hit.value;
-    const value = await readWalletStatus(address, { force });
-    walletCache.set(address.toLowerCase(), { at: Date.now(), value });
-    return value;
-  }
+  async function walletStatus(owner, options = {}) { return readWalletStatus(getAddress(owner), options); }
 
   async function readWalletStatus(address, { force } = {}) {
     const [ids, ethBalance, sqkBalance, net] = await Promise.all([
       discoverTokenIds(address, { force }),
-      client.getBalance({ address }),
+      client.getBalance({ address, blockNumber: activeSnapshot.blockNumber }),
       read("token", tokenAbi, "balanceOf", [address]),
       networkStatus(),
     ]);
@@ -436,7 +331,7 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
     return {
       owner: address,
       chainId: CHAIN.id,
-      ethBalance: { base: String(ethBalance), eth: (Number(ethBalance) / 1e18).toFixed(6) },
+      ethBalance: { base: String(ethBalance), eth: formatEther(ethBalance) },
       sqkBalance: sqkAmount(sqkBalance),
       squeeks: mine.map((p) => ({
         ...p,
@@ -473,67 +368,41 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
 
   // ── previews: simulate first, always ────────────────────────────────────────
   async function checkpointPreview(from) {
-    const net = await networkStatus();
-    if (!net.checkpoint.canCheckpoint) {
-      return { ok: false, reason: net.checkpoint.reason, checkpoint: net.checkpoint };
-    }
-    const built = buildCheckpoint();
-    try {
-      const gas = await client.estimateGas({ account: from || undefined, to: addr.mining, data: built.data, value: 0n });
-      return { ok: true, tx: built, gas: String(gas), checkpoint: net.checkpoint };
-    } catch (err) {
-      throw wrap(err, "checkpoint simulation failed");
-    }
+    const [corePaused, nextRound, roundSettled] = await read("mining", miningAbi, "checkpointStatus");
+    const checkpoint = { corePaused, nextRound: String(nextRound), roundSettled };
+    if (corePaused || !roundSettled) return { ok: false, checkpoint, reason: corePaused ? "SqueekCore is paused" : `Round ${nextRound} is not settled` };
+    if (!from) return { ok: false, checkpoint, reason: "Supply a caller address to simulate checkpoint" };
+    await client.simulateContract({ address: addr.mining, abi: miningAbi, functionName: "checkpoint", account: getAddress(from), blockNumber: activeSnapshot.blockNumber });
+    const tx = buildCheckpoint();
+    const gas = await client.estimateGas({ ...tx, value: 0n, account: getAddress(from), blockNumber: activeSnapshot.blockNumber });
+    return { ok: true, checkpoint, tx, gas: String(gas) };
   }
 
-  async function claimPreview(owner, tokenIds, { status: prefetched } = {}) {
-    await assertVerified();
+  async function claimPreview(owner, tokenIds) {
     const address = getAddress(owner);
-    const status = prefetched ?? (await walletStatus(address, { force: true }));
-    const owned = status.squeeks.map((s) => BigInt(s.tokenId));
-    const wanted = tokenIds?.length ? sortIds(tokenIds.map(BigInt)) : owned;
-    const missing = wanted.find((id) => !owned.includes(id));
-    if (missing !== undefined) throw new SqueekchainError(`caller does not own token ${missing}; no IDs were dropped`, { code: "input" });
-    const ids = wanted;
-    if (ids.some(id => id <= 0n)) throw new SqueekchainError("token IDs must be positive", { code: "input" });
-    // A cached portfolio is display data, not proof of current ownership.
-    if (ids.length) {
-      const blockNumber = await client.getBlockNumber();
-      for (const id of ids) {
-        const holder = await client.readContract({ address: addr.nft, abi: nftAbi, functionName: "ownerOf", args: [id], blockNumber });
-        if (holder.toLowerCase() !== address.toLowerCase()) throw new SqueekchainError(`caller no longer owns token ${id}`, { code: "input" });
-      }
+    const ids = tokenIds === undefined ? await discoverTokenIds(address, { force: true }) : sortIds(tokenIds.map(BigInt));
+    if (ids.some(id => id <= 0n)) throw new Error("Token IDs must be positive");
+    if (!ids.length) return { ok: false, reason: "No token IDs selected or owned", batches: [] };
+    for (const id of ids) {
+      const holder = await read("nft", nftAbi, "ownerOf", [id]);
+      if (holder.toLowerCase() !== address.toLowerCase()) throw new Error(`Caller does not own token ${id}; no IDs were dropped`);
     }
-    if (ids.length === 0) return { ok: false, reason: "no live Squeeks owned by this address", batches: [] };
-
     const batches = [];
     for (let i = 0; i < ids.length; i += 32) {
       const slice = ids.slice(i, i + 32);
+      const estimate = await read("mining", miningAbi, "claimable", [COLLECTION, slice]);
+      const { result } = await client.simulateContract({ address: addr.mining, abi: miningAbi, functionName: "claim", args: [COLLECTION, slice], account: address, blockNumber: activeSnapshot.blockNumber });
       const built = buildClaim(slice);
-      const amount = slice.reduce((sum, id) => {
-        const row = status.squeeks.find((s) => s.tokenId === String(id));
-        return sum + BigInt(row?.claimable.base ?? 0);
-      }, 0n);
-      let gas = null;
-      let error = null;
-      try {
-        gas = String(await client.estimateGas({ account: address, to: built.tx.to, data: built.tx.data, value: 0n }));
-      } catch (err) {
-        error = decodeRevert(err)?.name ?? (err.shortMessage || err.message);
-      }
-      batches.push({ ...built, amount: sqkAmount(amount), gas, error });
+      const gas = await client.estimateGas({ ...built.tx, value: 0n, account: address, blockNumber: activeSnapshot.blockNumber });
+      batches.push({ ...built, amount: sqkAmount(result), estimate: sqkAmount(estimate), gas: String(gas), error: null });
     }
-    return {
-      ok: batches.every((b) => !b.error),
-      batches,
-      total: sqkAmount(batches.reduce((sum, b) => sum + BigInt(b.amount.base), 0n)),
-    };
+    return { ok: true, batches, total: sqkAmount(batches.reduce((sum, batch) => sum + BigInt(batch.amount.base), 0n)) };
   }
 
   /** Greedy same-level pairing, mirroring the onchain preconditions exactly. */
-  async function mergePlan(owner, { status: prefetched } = {}) {
+  async function mergePlan(owner) {
     const address = getAddress(owner);
-    const [status, net] = await Promise.all([prefetched ?? walletStatus(address, { force: true }), networkStatus()]);
+    const [status, net] = await Promise.all([walletStatus(address, { force: true }), networkStatus()]);
     const height = BigInt(net.core.blockHeight);
     const eligible = status.squeeks.filter(
       (s) => s.level < net.policy.maximumLevel && BigInt(s.pendingRound) === 0n && BigInt(s.nextMergeBlock) <= height,
@@ -577,36 +446,47 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
     };
   }
 
-  async function mergePreview(owner, survivorId, donorId) {
-    await assertVerified();
+  async function mergePreview(owner, survivorId, donorId, { confirm } = {}) {
+    requireBurn(donorId, confirm);
     const address = getAddress(owner);
-    const [positions] = await Promise.all([positionsFor([BigInt(survivorId), BigInt(donorId)])]);
-    if (positions.length !== 2) throw new SqueekchainError("both tokens need a live position", { code: "input" });
-    if (positions.some((p) => p.holder?.toLowerCase() !== address.toLowerCase())) {
-      throw new SqueekchainError("caller does not own both tokens", { code: "input" });
-    }
-    if (positions[0].level !== positions[1].level) throw new SqueekchainError("tokens are at different levels", { code: "input" });
+    const ids = [BigInt(survivorId), BigInt(donorId)];
+    if (ids[0] === ids[1] || ids.some(id => id <= 0n)) throw new Error("Choose two distinct positive token IDs");
+    const [positions, policy, core] = await Promise.all([positionsFor(ids), read("mining", miningAbi, "collectionPolicy", [0]), read("core", coreAbi, "state")]);
+    if (positions.length !== 2 || positions.some(p => p.holder.toLowerCase() !== address.toLowerCase())) throw new Error("Caller must own both live tokens");
+    if (positions[0].level !== positions[1].level) throw new Error("Tokens have different levels");
+    if (positions.some(p => p.level >= Number(policy.maximumLevel))) throw new Error("Maximum level reached");
+    if (positions.some(p => BigInt(p.pendingRound) !== 0n)) throw new Error("Pending activation");
+    if (positions.some(p => BigInt(p.nextMergeBlock) > BigInt(core.blockHeight))) throw new Error("Merge cooldown active (completed Squeek blocks)");
+    await client.simulateContract({ address: addr.mining, abi: miningAbi, functionName: "merge", args: [0, ...ids], account: address, blockNumber: activeSnapshot.blockNumber });
     const built = buildMerge(survivorId, donorId);
-    const gas = String(await client.estimateGas({ account: address, to: built.tx.to, data: built.tx.data, value: 0n }));
-    return { ok: true, ...built, tx: built.tx, gas, warning: "the donor NFT is burned permanently and cannot be restored" };
+    const gas = await client.estimateGas({ ...built.tx, value: 0n, account: address, blockNumber: activeSnapshot.blockNumber });
+    return { ok: true, ...built, nextLevel: positions[0].level + 1, gas: String(gas), warning: `Squeek #${donorId} is burned forever; #${survivorId} survives` };
+  }
+
+  async function art(tokenId) {
+    const uri = await read("nft", nftAbi, "tokenURI", [BigInt(tokenId)]);
+    return { tokenId: String(tokenId), ...parseSqueekMetadata(uri), artworkIntegrity: "Unknown: immutable renderer/page runtime hashes are not published in the deployment record" };
   }
 
   return {
-    addresses: addr,
-    rpcUrl,
-    client,
-    verify,
-    assertVerified,
-    networkStatus,
-    walletStatus,
-    discoverTokenIds,
-    positionsFor,
-    checkpointPreview,
-    claimPreview,
-    mergePlan,
-    mergePreview,
-    buildCheckpoint,
-    buildClaim,
-    buildMerge,
+    addresses: addr, rpcUrl, client,
+    verify: () => run(async () => verification),
+    assertVerified: () => run(async () => verification),
+    networkStatus: () => run(networkStatus),
+    walletStatus: owner => run(() => walletStatus(owner)),
+    discoverTokenIds: owner => run(() => discoverTokenIds(owner)),
+    positionsFor: ids => run(() => positionsFor(ids.map(BigInt))),
+    checkpointPreview: from => run(() => checkpointPreview(from)),
+    claimPreview: (owner, ids) => run(() => claimPreview(owner, ids)),
+    mergePlan: owner => run(() => mergePlan(owner)),
+    mergePreview: (owner, survivor, donor, options = {}) => {
+      requireBurn(donor, options.confirm);
+      return run(() => mergePreview(owner, survivor, donor, options));
+    },
+    art: id => run(() => art(id)),
   };
+}
+
+export function requireBurn(donor, confirm) {
+  if (!/^\d+$/.test(String(donor)) || BigInt(donor) <= 0n || confirm !== `BURN-${BigInt(donor)}`) throw new Error(`Explicit confirmation required: BURN-${donor}`);
 }
