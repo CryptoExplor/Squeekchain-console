@@ -72,6 +72,8 @@
       <details class="rpc-settings"><summary>Connection & trust</summary><p>Connected Sepolia wallet preferred. Otherwise, browser-direct public RPCs. Every snapshot must match block hashes from two independent public RPCs; mismatch means unavailable. No server proxy.</p><label for="rpc-url">Optional custom HTTPS RPC (saved only in this browser; avoid URLs with secrets)</label><div class="row"><input id="rpc-url" type="url" placeholder="Default: public Sepolia RPCs" autocomplete="off" spellcheck="false" /><button class="btn" id="btn-save-rpc">Save connection</button></div><p class="muted small">Custom RPCs do not replace the public cross-check. Mainnet and undocumented v9 transactions stay disabled.</p></details>
       <div id="banner" class="notice hidden" role="status" aria-live="polite"></div>
 
+      <section id="not-deployed" class="notice hidden" role="status" aria-live="polite"><h2>Mainnet · not deployed</h2><p id="not-deployed-note"></p></section>
+      <div id="deployment-content">
       <nav class="tabs" role="tablist" aria-label="Console sections">
         <button class="tab" role="tab" data-tab="overview" aria-selected="true"><span class="tab-number">01</span> Overview</button>
         <button class="tab" role="tab" data-tab="holdings" aria-selected="false"><span class="tab-number">02</span> My Squeeks</button>
@@ -231,6 +233,7 @@
           <pre class="out hidden" id="tool-result"></pre>
         </div>
       </section>
+      </div><!-- deployment-content: hidden entirely for undeployed profiles -->
     </main>
 
     <footer>

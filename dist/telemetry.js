@@ -15,12 +15,14 @@ export function createTelemetry({ fetcher = globalThis.fetch, now = Date.now } =
   let cached = null;
   let retryAt = 0;
   return {
-    async read() {
+    async read({ signal } = {}) {
+      signal?.throwIfAborted();
       if (now() < retryAt) throw new Error('Rate limited. Waiting before the next refresh.');
       const response = await fetcher('https://api.squeekchain.com/v1/status', {
         headers: etag ? { 'If-None-Match': etag } : {},
-        signal: AbortSignal.timeout(10_000),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
       });
+      signal?.throwIfAborted();
       if (response.status === 304 && cached) return cached;
       if (!response.ok) {
         if (response.status === 429 || response.status === 503) {
@@ -30,6 +32,7 @@ export function createTelemetry({ fetcher = globalThis.fetch, now = Date.now } =
         throw new Error(`Official API unavailable (HTTP ${response.status}).`);
       }
       const data = await response.json();
+      signal?.throwIfAborted();
       if (data.schemaVersion !== 1) throw new Error('Unsupported telemetry schema.');
       if (data.status === 'unavailable') throw new Error(String(data.reason ?? 'Device data unavailable.'));
       const m = data.measurement;

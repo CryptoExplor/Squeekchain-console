@@ -44,6 +44,8 @@ assert.ok((await api.callTool('squeek_request_merge')).error);
 await api.loadArt(['1']);
 assert.equal($('art-grid').querySelectorAll('img').length, 1);
 await api.switchProfile('sepolia-v6');
+assert.equal(api.state.account, null, 'switch clears the connected-wallet view');
+await api.connect();
 assert.ok(Object.keys(api.tools()).includes('squeek_request_merge'));
 $('claim-ids').value = '1, 2';
 await $('btn-claim').onclick();

@@ -67,7 +67,7 @@ try {
   assert.equal($('wheel-rpm').textContent, '20.0');
 
   const beforePoll = reading();
-  intervals.get(15_000)();
+  intervals.get(15_000)(); await tick();
   assert.deepEqual(reading(), beforePoll, 'polling keeps the complete reading while fetching');
   release(response(null, 403)); await tick();
   assert.equal($('wheel-state').textContent, 'Unknown');
@@ -75,11 +75,11 @@ try {
   assert.equal($('net-round').textContent, '1000', 'API failure leaves chain panels alone');
 
   // An in-flight reading may not repaint a different profile.
-  intervals.get(15_000)();
+  intervals.get(15_000)(); await tick();
   await api.switchProfile('mainnet');
   const unavailable = reading(), previousRequests = requests;
   release(response(measurement(30000))); await tick();
-  await $('btn-refresh').onclick(); intervals.get(15_000)(); await tick();
+  await $('btn-refresh').onclick(); intervals.get(15_000)(); await tick(); await tick();
   assert.deepEqual(reading(), unavailable);
   assert.equal($('wheel-state').textContent, 'Unavailable');
   assert.equal(requests, previousRequests, 'non-Sepolia refreshes never fetch device telemetry');
@@ -121,6 +121,7 @@ try {
 
   verifyFails = false;
   await api.switchProfile('sepolia-v6');
+  await api.connect();
   api.selectTab('holdings');
   const key = (name, shiftKey = false) => {
     const event = new win.KeyboardEvent('keydown', { key: name, shiftKey, bubbles: true, cancelable: true });

@@ -1,3 +1,4 @@
+import { throwIfAborted } from "./cancellation.js";
 /**
  * UNVERIFIED read-only adapter for the observed (undocumented) Sepolia graph: issuance v9 + staking v2 + new SqueekNFT.
  *
@@ -19,24 +20,28 @@ const jsonify = (v) => JSON.parse(JSON.stringify(v, (_k, x) => (typeof x === "bi
 export { parseSqueekMetadata } from "./metadata.js";
 import { parseSqueekMetadata } from "./metadata.js";
 
-export function createSqueek9({ profileKey = "sepolia", rpcUrl, cache = null, provider, rpcContext } = {}) {
+export function createSqueek9({ profileKey = "sepolia", rpcUrl, cache = null, provider, rpcContext, signal } = {}) {
   const profile = getProfile(profileKey);
   if (!profile.addresses) throw new SqueekchainError(`${profile.label} has no deployment`, { code: "input" });
   if (profile.abiSet !== "v9") throw new Error("v9 adapter requires the read-only observed profile");
   const addr = Object.fromEntries(Object.entries(profile.addresses).map(([k, v]) => [k, getAddress(v)]));
 
-  const context = rpcContext ?? createRpcContext({ rpcUrl, provider });
+  const context = rpcContext ?? createRpcContext({ rpcUrl, provider, signal });
   const client = context.client;
   let activeSnapshot, queue = Promise.resolve();
   const read = (contract, abi, functionName, args = []) => client.readContract({ address: addr[contract], abi, functionName, args, blockNumber: activeSnapshot.blockNumber });
   function run(operation) {
     const task = queue.then(async () => {
+      throwIfAborted(signal);
       activeSnapshot = await context.snapshot();
       try {
         const observation = await verify();
         if (observation.problems.length) throw new Error(`Observed graph mismatch: ${observation.problems.join("; ")}`);
+        throwIfAborted(signal);
         const result = await operation();
+        throwIfAborted(signal);
         await context.check(activeSnapshot);
+        throwIfAborted(signal);
         return result && !Array.isArray(result) ? { ...result, verification: observation, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash } } : result;
       } finally { activeSnapshot = null; }
     });

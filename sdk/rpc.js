@@ -1,4 +1,5 @@
 import { createPublicClient, custom, fallback, http } from 'viem';
+import { abortable, throwIfAborted } from './cancellation.js';
 import { sepolia } from 'viem/chains';
 import { shouldThrow as shouldStop } from 'viem';
 
@@ -17,8 +18,9 @@ export function requireSepolia(id) {
 }
 
 // Pure, injectable trust boundary; production supplies distinct HTTP peers below.
-export function createSnapshotGuard(client, peers) {
+export function createSnapshotGuard(client, peers, { signal } = {}) {
   async function check(snapshot) {
+    throwIfAborted(signal);
     requireSepolia(await client.getChainId());
     const blocks = await Promise.all([client, ...snapshot.peers].map(async peer => {
       requireSepolia(await peer.getChainId());
@@ -29,6 +31,7 @@ export function createSnapshotGuard(client, peers) {
     }
   }
   async function snapshot(blockNumber) {
+    throwIfAborted(signal);
     requireSepolia(await client.getChainId());
     const head = blockNumber === undefined ? await client.getBlockNumber({ cacheTime: 0 }) : null;
     const at = blockNumber ?? (head > 12n ? head - 12n : head);
@@ -42,6 +45,7 @@ export function createSnapshotGuard(client, peers) {
         if (selected.length === 2) break;
       } catch (error) {
         // Availability failures may fail over; identity mismatches must never be retried away.
+        throwIfAborted(signal);
         if (error instanceof RpcTrustError) throw error;
       }
     }
@@ -53,28 +57,30 @@ export function createSnapshotGuard(client, peers) {
   return { snapshot, check };
 }
 
-export function createRpcContext({ rpcUrl, provider } = {}) {
+export function createRpcContext({ rpcUrl, provider, signal } = {}) {
   const urls = [...new Set([...(rpcUrl ? [rpcUrl] : []), ...PUBLIC_RPCS])];
-  const peers = PUBLIC_RPCS.map(url => createPublicClient({ chain: sepolia, transport: http(url, { timeout: 12_000, retryCount: 1, retryDelay: 750 }) }));
+  const peers = PUBLIC_RPCS.map(url => createPublicClient({ chain: sepolia, transport: http(url, { timeout: 12_000, retryCount: 1, retryDelay: 750, fetchOptions: { signal } }) }));
   // Validate the actual chain on every transport request, including a fallback endpoint.
   const checked = urls.map(url => options => {
-    const transport = http(url, { timeout: 12_000, retryCount: 1, retryDelay: 750 })(options);
+    const transport = http(url, { timeout: 12_000, retryCount: 1, retryDelay: 750, fetchOptions: { signal } })(options);
     return { ...transport, request: async request => {
-      const id = await transport.request({ method: 'eth_chainId' });
+      throwIfAborted(signal);
+      const id = await abortable(() => transport.request({ method: 'eth_chainId' }), signal);
       requireSepolia(id);
-      return request.method === 'eth_chainId' ? id : transport.request(request);
+      return request.method === 'eth_chainId' ? id : abortable(() => transport.request(request), signal);
     } };
   });
-  const publicClient = createPublicClient({ chain: sepolia, transport: fallback(checked, { rank: false, retryCount: 0, shouldThrow: error => error instanceof RpcTrustError || shouldStop(error) }) });
+  const publicClient = createPublicClient({ chain: sepolia, transport: fallback(checked, { rank: false, retryCount: 0, shouldThrow: error => signal?.aborted || error instanceof RpcTrustError || shouldStop(error) }) });
   const client = createPublicClient({ chain: sepolia, transport: custom({ request: async request => {
+    throwIfAborted(signal);
     const wallet = provider?.();
     if (wallet) {
       let id;
-      try { id = await wallet.request({ method: 'eth_chainId' }); } catch { /* disconnected: public reads */ }
-      if (id && BigInt(id) === BigInt(SEPOLIA_ID)) return wallet.request(request);
+      try { id = await abortable(() => wallet.request({ method: 'eth_chainId' }), signal); } catch { /* disconnected: public reads */ }
+      if (id && BigInt(id) === BigInt(SEPOLIA_ID)) return abortable(() => wallet.request(request), signal);
     }
-    return publicClient.request(request);
+    return abortable(() => publicClient.request(request), signal);
   } }, { retryCount: 0 }) });
-  const guard = createSnapshotGuard(client, peers);
+  const guard = createSnapshotGuard(client, peers, { signal });
   return { client, ...guard };
 }

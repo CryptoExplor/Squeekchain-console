@@ -18,6 +18,7 @@ import {
   TOOL_SPECS,
   buildManifest,
   CHAIN,
+  abortable,
 } from "./bundle.js";
 
 import { createTelemetry, telemetryView } from "./telemetry.js";
@@ -103,7 +104,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     status: null,
     plan: null,
     art: new Map(),
-    busy: false,
+    busy: false, // transaction signing ONLY; never used to gate reads or navigation
+    receipts: [],
     artifactsLoaded: false,
   };
 
@@ -143,16 +145,27 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── profile switching ──────────────────────────────────────────────────────
   let generation = 0;
+  let loadController = new AbortController();
+  const captureLoad = () => ({ generation, signal: loadController.signal, adapter: state.adapter, profileKey: state.profileKey });
+  const isCurrent = load => !destroyed && load.generation === generation && !load.signal.aborted;
+  const assertCurrent = load => { if (!isCurrent(load)) throw new DOMException("Profile changed; result discarded", "AbortError"); };
+  async function viewAwait(load, operation) {
+    assertCurrent(load);
+    const value = await abortable(operation, load.signal);
+    assertCurrent(load);
+    return value;
+  }
+  const readFor = (load, method, ...args) => viewAwait(load, () => load.adapter[method](...args));
   let destroyed = false;
   const telemetry = createTelemetry({ fetcher });
 
   function buildAdapter(profileKey) {
     const profile = getProfile(profileKey);
     if (!profile.addresses) return null;
-    if (adapterFactory) return adapterFactory(profileKey);
+    if (adapterFactory) return adapterFactory(profileKey, { signal: loadController.signal, generation });
     return profile.abiSet === "v9"
-      ? createSqueek9({ profileKey, cache: store, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null })
-      : createSqueekchain({ addresses: profile.addresses, cache: store, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null });
+      ? createSqueek9({ profileKey, cache: store, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null })
+      : createSqueekchain({ addresses: profile.addresses, cache: store, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null });
   }
 
   function renderProfileOptions() {
@@ -169,30 +182,59 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   async function switchProfile(profileKey) {
-    closeActiveModal?.();
+    // Navigation ALWAYS wins, including while a simulation or wallet prompt is pending.
+    loadController.abort();
     generation++;
+    loadController = new AbortController();
+    closeActiveModal?.();
     state.profileKey = getProfile(profileKey).key;
-    store.set("squeekchain:profile", state.profileKey);
-    state.adapter = buildAdapter(state.profileKey);
+    state.adapter = null;
+    state.account = state.chainId = state.inspected = null;
     state.net = state.status = state.plan = null;
+    state.receipts = [];
     state.art.clear();
+    state.artifactsLoaded = false;
     el.art.grid.replaceChildren();
     el.art.status.textContent = "";
-    for (const id of ["claim-ids", "merge-survivor", "merge-donor"]) $(id).value = "";
-    el.cp.out.classList.add("hidden");
-    el.holder.claimOut.classList.add("hidden");
-    el.agent.out.classList.add("hidden");
+    el.holder.tbody.replaceChildren();
+    el.holder.head.replaceChildren();
+    el.holder.mergeList.replaceChildren();
+    for (const node of [el.cp.out, el.holder.claimOut, el.agent.out]) {
+      node.textContent = "";
+      node.classList.add("hidden");
+    }
+    for (const node of [el.holder.count, el.holder.power, el.holder.share, el.holder.claimable]) node.textContent = "—";
+    el.holder.hint.textContent = el.holder.mergeNote.textContent = "";
+    for (const id of ["claim-ids", "merge-survivor", "merge-donor", "watch-input", "art-token", "tool-args", "modal-input"]) $(id).value = "";
+    el.modal.body.replaceChildren();
+    el.modal.title.textContent = "";
+    el.toasts.replaceChildren();
+    $("profile-panel").setAttribute("aria-busy", "false");
+    store.set("squeekchain:profile", state.profileKey);
+    renderWalletChip();
     renderProfileOptions();
     renderNetworkPlaceholder();
     renderHolder(null);
-    renderToolOptions();
     hideBanner();
+    renderDeploymentVisibility();
+    state.adapter = buildAdapter(state.profileKey);
+    renderToolOptions();
     void refreshTelemetry();
     if (!state.adapter) {
-      showBanner(getProfile(state.profileKey).notes, "warn");
+      showBanner(getProfile(state.profileKey).notes + (state.busy ? " A prior wallet request may still complete; check that wallet before retrying." : ""), "warn");
       return;
     }
     await refreshAll();
+  }
+
+  function renderDeploymentVisibility() {
+    const deployed = Boolean(getProfile(state.profileKey).addresses);
+    $("deployment-content").classList.toggle("hidden", !deployed);
+    $("not-deployed").classList.toggle("hidden", deployed);
+    $("not-deployed-note").textContent = deployed ? "" : getProfile(state.profileKey).notes;
+    for (const node of [el.connect, el.refresh, ...doc.querySelectorAll('[data-go], .rpc-settings')]) node.classList.toggle("hidden", !deployed);
+    if (!deployed) el.panels.forEach(panel => panel.classList.add("hidden"));
+    else selectTab(store.get("squeekchain:tab") ?? "overview");
   }
 
   const capabilities = () => getProfile(state.profileKey).capabilities;
@@ -232,7 +274,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   async function refreshTelemetry({ reset = true } = {}) {
-    const current = generation;
+    const load = captureLoad();
     const enabled = state.profileKey === "sepolia";
     if (reset || !enabled) {
       for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
@@ -241,15 +283,15 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     if (!enabled) return;
     try {
-      const view = telemetryView(await telemetry.read());
-      if (destroyed || current !== generation) return;
+      const view = telemetryView(await viewAwait(load, () => telemetry.read({ signal: load.signal })));
+      if (!isCurrent(load)) return;
       $("wheel-state").textContent = view.state;
       $("wheel-rpm").textContent = view.rpm;
       $("wheel-speed").textContent = view.speed;
       $("wheel-distance").textContent = view.distance;
       $("wheel-note").textContent = view.note;
     } catch (err) {
-      if (destroyed || current !== generation) return;
+      if (!isCurrent(load)) return;
       for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
       $("wheel-state").textContent = "Unknown";
       $("wheel-note").textContent = `${err.message} No live reading to display.`;
@@ -257,8 +299,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   // ── wallet ────────────────────────────────────────────────────────────────
-  async function ensureChain(p) {
-    const profile = getProfile(state.profileKey);
+  async function ensureChain(p, profileKey = state.profileKey) {
+    const profile = getProfile(profileKey);
     const current = await p.request({ method: "eth_chainId" });
     if (String(current).toLowerCase() === profile.hexChainId) return;
     try {
@@ -281,7 +323,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
   }
 
+  let walletListenersRegistered = false;
   async function connect() {
+    const load = captureLoad();
     if (!state.adapter) { showBanner("Mainnet is not deployed. Select Sepolia to connect and inspect.", "warn"); return null; }
     const p = provider();
     if (!p) {
@@ -291,12 +335,15 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       return null;
     }
     try {
-      const accounts = await p.request({ method: "eth_requestAccounts" });
-      await ensureChain(p);
+      const accounts = await viewAwait(load, () => p.request({ method: "eth_requestAccounts" }));
+      await viewAwait(load, () => ensureChain(p, load.profileKey));
+      const chainId = Number(await viewAwait(load, () => p.request({ method: "eth_chainId" })));
       state.account = accounts?.[0] ?? null;
-      state.chainId = Number(await p.request({ method: "eth_chainId" }));
+      state.chainId = chainId;
       state.inspected = state.account;
+      if (!walletListenersRegistered) {
       p.on?.("accountsChanged", (accs) => {
+        if (!state.account || !state.adapter || destroyed) return;
         closeActiveModal?.();
         state.account = accs?.[0] ?? null;
         state.inspected = state.account;
@@ -304,12 +351,15 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         renderWalletChip();
         refreshWallet();
       });
-      p.on?.("chainChanged", () => { closeActiveModal?.(); refreshAll(); });
+      p.on?.("chainChanged", () => { if (!state.account || destroyed) return; closeActiveModal?.(); void refreshAll(); });
+      walletListenersRegistered = true;
+      }
       hideBanner();
       renderWalletChip();
       await refreshWallet();
       return state.account;
     } catch (err) {
+      if (!isCurrent(load)) return null;
       showBanner(`Wallet connection failed: ${errorMessage(err)}`, "bad");
       return null;
     }
@@ -322,23 +372,38 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.walletChip.title = state.account ?? "";
   }
 
-  async function sendTransaction(tx, label, owner = state.account) {
+  async function sendTransaction(tx, label, owner = state.account, load = captureLoad()) {
+    assertCurrent(load);
     const p = provider();
     if (!p || !state.account) throw new Error("connect a wallet to sign");
-    const adapter = state.adapter, current = generation;
-    await ensureChain(p);
-    const accounts = await p.request({ method: "eth_accounts" });
-    if (current !== generation || !owner || state.account?.toLowerCase() !== owner.toLowerCase() || accounts?.[0]?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet or profile changed; start again");
-    const hash = await p.request({
-      method: "eth_sendTransaction",
-      params: [{ from: state.account, to: tx.to, data: tx.data, value: `0x${BigInt(tx.value ?? 0).toString(16)}` }],
-    });
+    if (state.busy) throw new Error("A wallet signing request is already pending");
+    state.busy = true;
+    if (state.net) renderNetwork(state.net);
+    let hash;
+    try {
+      await ensureChain(p, load.profileKey);
+      assertCurrent(load);
+      const accounts = await p.request({ method: "eth_accounts" });
+      assertCurrent(load);
+      if (!owner || state.account?.toLowerCase() !== owner.toLowerCase() || accounts?.[0]?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet changed; start again");
+      // A profile switch cannot cancel this wallet popup or an already-broadcast transaction.
+      hash = await p.request({ method: "eth_sendTransaction", params: [{ from: owner, to: tx.to, data: tx.data, value: `0x${BigInt(tx.value ?? 0).toString(16)}` }] });
+    } finally {
+      state.busy = false;
+      if (isCurrent(load)) {
+        if (state.net) renderNetwork(state.net);
+        renderHolder(state.status, state.plan);
+      }
+    }
+    assertCurrent(load);
     toast(`${label} submitted ${hash.slice(0, 12)}…`);
-    const receipt = await adapter.client.waitForTransactionReceipt({ hash, timeout: 180_000 });
+    const receipt = await viewAwait(load, () => load.adapter.client.waitForTransactionReceipt({ hash, timeout: 180_000 }));
     const ok = receipt.status === "success";
     if (!ok) throw new Error(`${label} reverted. Stopped; no changed-input retry.`);
-    toast(`${label} ${ok ? "confirmed" : "reverted"} in block ${receipt.blockNumber}`, ok ? "ok" : "err");
-    return { hash, ok, blockNumber: String(receipt.blockNumber), gasUsed: String(receipt.gasUsed) };
+    const result = { hash, ok, blockNumber: String(receipt.blockNumber), gasUsed: String(receipt.gasUsed) };
+    state.receipts.push(result);
+    toast(`${label} confirmed in block ${receipt.blockNumber}`, "ok");
+    return result;
   }
 
   // ── modal ─────────────────────────────────────────────────────────────────
@@ -520,7 +585,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
           btn.className = "btn btn-ghost";
           btn.style.padding = "2px 8px";
           btn.textContent = "view";
-          btn.onclick = () => { selectTab("art"); withBusy(() => loadArt([s.tokenId])); };
+          btn.onclick = () => { selectTab("art"); viewTask(() => loadArt([s.tokenId])); };
           td.appendChild(btn);
         } else td.textContent = s[c.key] ?? "—";
         tr.appendChild(td);
@@ -541,7 +606,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         const button = doc.createElement("button");
         button.className = "btn btn-danger";
         button.textContent = "Merge";
-        button.onclick = () => withBusy(() => requestMerge(pair));
+        button.onclick = () => viewTask(() => requestMerge(pair));
         li.append(text, button);
       } else {
         const note = doc.createElement("span");
@@ -556,19 +621,19 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   // ── refresh ───────────────────────────────────────────────────────────────
   async function refreshNetwork() {
     if (!state.adapter) return null;
-    const adapter = state.adapter, current = generation;
+    const load = captureLoad();
     try {
       $("profile-panel").setAttribute("aria-busy", "true");
-      const net = await adapter.networkStatus();
-      const v = net.verification ?? await adapter.verify();
-      if (destroyed || current !== generation) return null;
+      const net = await readFor(load, "networkStatus");
+      const v = net.verification ?? await readFor(load, "verify");
+      if (!isCurrent(load)) return null;
       renderNetwork(net);
       el.verified.textContent = v.trusted === false ? "read-only (unverified)" : v.ok ? "verified ✓" : `${v.problems?.length ?? 1} problem(s)`;
       el.verified.className = `chip ${v.trusted === false ? "warn" : v.ok ? "ok" : "bad"}`;
       el.verified.title = v.trusted === false ? "Read-only (unverified): observed identities are not published trust pins. All transactions disabled." : v.ok ? `Published identities match at block ${v.blockNumber ?? "unknown"}; two public RPC block hashes agree.` : (v.problems ?? []).join("; ");
       return net;
     } catch (err) {
-      if (destroyed || current !== generation) return null;
+      if (!isCurrent(load)) return null;
       state.net = null;
       renderNetworkPlaceholder();
       el.verified.textContent = "read failed";
@@ -576,7 +641,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       showBanner(`Read failed: ${errorMessage(err)}. Nothing was signed.`, "bad");
       return null;
     } finally {
-      if (current === generation) $("profile-panel").setAttribute("aria-busy", "false");
+      if (isCurrent(load)) $("profile-panel").setAttribute("aria-busy", "false");
     }
   }
 
@@ -586,19 +651,20 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       renderHolder(null);
       return null;
     }
-    const adapter = state.adapter, current = generation;
+    const load = captureLoad();
     try {
-      const status = await adapter.walletStatus(owner);
-      if (destroyed || current !== generation || owner !== (state.inspected ?? state.account)) return null;
+      const status = await readFor(load, "walletStatus", owner);
+      if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
       renderWalletChipStats(status);
       let plan = null;
       if (capabilities().merge && status.totals.count > 1 && state.adapter.mergePlan) {
-        plan = await state.adapter.mergePlan(owner, { status });
+        plan = await readFor(load, "mergePlan", owner, { status });
       }
-      if (destroyed || current !== generation || owner !== (state.inspected ?? state.account)) return null;
+      if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
       renderHolder(status, plan);
       return status;
     } catch (err) {
+      if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
       showBanner(`Could not read ${short(owner)}: ${errorMessage(err)}`, "bad");
       return null;
     }
@@ -610,27 +676,23 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (current === generation && !destroyed) await refreshWallet();
   }
 
-  const withBusy = async (fn) => {
-    if (state.busy) return null;
-    state.busy = true;
-    if (state.net) renderNetwork(state.net);
-    try {
-      return await fn();
-    } catch (err) {
+  const viewTask = async fn => {
+    const load = captureLoad();
+    try { return await viewAwait(load, fn); }
+    catch (err) {
+      if (!isCurrent(load) || err?.name === "AbortError") return { ok: false, reason: "profile-changed" };
       toast(errorMessage(err), "err");
       showBanner(errorMessage(err), "bad");
       return null;
-    } finally {
-      state.busy = false;
-      if (state.net) renderNetwork(state.net);
     }
   };
 
   // ── actions ───────────────────────────────────────────────────────────────
   async function requestCheckpoint() {
+    const load = captureLoad(), owner = state.account;
     const caps = capabilities();
     if (!caps.checkpoint) throw new Error("checkpoint is read-only on this profile (v9 flows undocumented)");
-    const preview = await state.adapter.checkpointPreview(state.account ?? undefined);
+    const preview = await readFor(load, "checkpointPreview", owner ?? undefined);
     showOut(el.cp.out, preview);
     if (!preview.ok) {
       toast(preview.reason ?? "checkpoint unavailable", "err");
@@ -640,18 +702,17 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       showBanner("Simulation succeeded — connect a wallet to submit the checkpoint.");
       return { ok: false, reason: "no wallet" };
     }
-    const result = await sendTransaction(preview.tx, "checkpoint()");
+    const result = await sendTransaction(preview.tx, "checkpoint()", owner, load);
     await refreshAll();
     return { ok: true, ...result, gas: preview.gas };
   }
 
   async function requestClaim(tokenIds) {
+    const load = captureLoad();
     const caps = capabilities();
     if (!caps.claim) throw new Error("claims are read-only on this profile (v9 staking flows undocumented)");
     const owner = state.inspected ?? state.account;
-    const preview = await state.adapter.claimPreview(owner, tokenIds, {
-      status: state.status?.owner === owner ? state.status : undefined,
-    });
+    const preview = await readFor(load, "claimPreview", owner, tokenIds);
     showOut(el.holder.claimOut, preview);
     if (!preview.ok) {
       toast(preview.batches?.[0]?.error ?? "claim simulation failed", "err");
@@ -668,12 +729,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     });
     if (!confirmed) return { ok: false, reason: "cancelled" };
     const receipts = [];
-    const adapter = state.adapter;
+    assertCurrent(load);
     for (const batch of preview.batches) {
-      if (state.adapter !== adapter || state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet or profile changed. Stopped.");
-      const fresh = await adapter.claimPreview(owner, batch.tokenIds);
+      if (!isCurrent(load) || state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet or profile changed. Stopped.");
+      const fresh = await readFor(load, "claimPreview", owner, batch.tokenIds);
       if (!fresh.ok || fresh.batches.length !== 1 || fresh.batches[0].amount.base !== batch.amount.base) throw new Error("Claim outcome changed. Review a fresh preview; no automatic retry.");
-      receipts.push(await sendTransaction(fresh.batches[0].tx, `claim(${batch.tokenIds.length} ids)`, owner));
+      receipts.push(await sendTransaction(fresh.batches[0].tx, `claim(${batch.tokenIds.length} ids)`, owner, load));
     }
     await refreshAll();
     return { ok: true, total: preview.total, receipts };
@@ -682,7 +743,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   async function requestMerge(pair) {
     if (!capabilities().merge) throw new Error("Merges are not supported on this profile.");
     const owner = state.account ?? state.inspected;
-    const adapter = state.adapter, current = generation;
+    const load = captureLoad();
     const confirm = `BURN-${BigInt(pair.donor)}`;
     const confirmed = await confirmModal({
       title: `Keep #${pair.survivor} · burn #${pair.donor}`,
@@ -691,23 +752,23 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       confirmLabel: "Acknowledge burn & simulate",
     });
     if (!confirmed) return { ok: false, reason: "cancelled" };
-    if (current !== generation || owner !== (state.account ?? state.inspected)) throw new Error("Wallet or profile changed. Start again.");
-    const preview = await adapter.mergePreview(owner, pair.survivor, pair.donor, { confirm });
+    if (!isCurrent(load) || owner !== (state.account ?? state.inspected)) throw new Error("Wallet or profile changed. Start again.");
+    const preview = await readFor(load, "mergePreview", owner, pair.survivor, pair.donor, { confirm });
     if (!preview.ok) return preview;
     const sign = await confirmModal({ title: "Review simulated merge", body: `${preview.warning}. Result: level ${preview.nextLevel}. Simulated gas ≈ ${preview.gas}. Keep #${pair.survivor}; permanently burn #${pair.donor}.`, confirmLabel: "Review in wallet" });
     if (!sign) return { ok: false, reason: "cancelled" };
-    if (current !== generation || owner !== state.account) throw new Error("Connect the owner wallet and start again.");
+    if (!isCurrent(load) || owner !== state.account) throw new Error("Connect the owner wallet and start again.");
     // Fresh verification, ownership, eligibility and simulation after human review.
-    const fresh = await adapter.mergePreview(owner, pair.survivor, pair.donor, { confirm });
+    const fresh = await readFor(load, "mergePreview", owner, pair.survivor, pair.donor, { confirm });
     if (!fresh.ok) return fresh;
-    const result = await sendTransaction(fresh.tx, `merge(${pair.survivor} ← ${pair.donor})`, owner);
+    const result = await sendTransaction(fresh.tx, `merge(${pair.survivor} ← ${pair.donor})`, owner, load);
     await refreshAll();
     return { ok: true, ...result };
   }
 
   // ── art ───────────────────────────────────────────────────────────────────
   async function loadArt(tokenIds) {
-    const adapter = state.adapter, current = generation;
+    const load = captureLoad();
     if (!state.adapter?.art) {
       toast("this profile has no art adapter", "err");
       return [];
@@ -716,15 +777,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const loaded = [];
     for (const id of tokenIds) {
       try {
-        const art = state.art.get(String(id)) ?? (await adapter.art(id));
-        if (destroyed || current !== generation) return [];
+        const art = state.art.get(String(id)) ?? (await readFor(load, "art", id));
+        if (!isCurrent(load)) return [];
         state.art.set(String(id), art);
         loaded.push(art);
       } catch (err) {
+        if (!isCurrent(load)) return [];
         toast(`art ${id}: ${errorMessage(err)}`, "err");
       }
     }
-    if (destroyed || current !== generation) return [];
+    if (!isCurrent(load)) return [];
     renderArt(loaded);
     el.art.status.textContent = `${state.art.size} rendered`;
     return loaded;
@@ -848,7 +910,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
           if (!args.survivor || !args.donor) throw new Error("survivor and donor are required");
           if (args.confirm !== `BURN-${args.donor}`) throw new Error(`refusing to merge without confirm: "BURN-${args.donor}"`);
           const owner = requireOwner(args);
-          const plan = await state.adapter.mergePlan(owner);
+          const load = captureLoad();
+          const plan = await readFor(load, "mergePlan", owner);
           const pair = plan.pairs.find((p) => p.survivor === String(args.survivor) && p.donor === String(args.donor));
           if (!pair) throw new Error("that pair is not currently mergeable");
           return requestMerge(pair);
@@ -862,12 +925,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const manifest = () => ({ ...buildManifest({ surface: "web" }), activeProfile: state.profileKey, availableTools: Object.keys(buildTools()) });
 
   async function callTool(name, args = {}) {
+    const load = captureLoad();
     if (!state.adapter) return { error: `profile ${state.profileKey} has no deployment`, available: [] };
     const tool = buildTools()[name];
     if (!tool) return { error: `unknown tool for profile ${state.profileKey}: ${name}`, available: Object.keys(buildTools()) };
     try {
-      return await tool.run(args ?? {});
+      return await viewAwait(load, () => tool.run(args ?? {}));
     } catch (err) {
+      if (!isCurrent(load)) return { error: "Profile changed; tool result discarded", cancelled: true };
       return { error: errorMessage(err), revert: err?.revert ?? null };
     }
   }
@@ -882,7 +947,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   el.tabs.forEach((t) => (t.onclick = () => selectTab(t.dataset.tab)));
   doc.querySelectorAll("[data-go]").forEach(button => { button.onclick = () => { selectTab(button.dataset.go); doc.querySelector(".tabs").scrollIntoView?.({ behavior: "smooth", block: "start" }); }; });
 
-  el.profileSelect.onchange = () => withBusy(() => switchProfile(el.profileSelect.value));
+  el.profileSelect.onchange = () => switchProfile(el.profileSelect.value);
   el.connect.onclick = async () => {
     if (state.account) {
       state.account = null;
@@ -892,40 +957,40 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       renderHolder(null);
       return;
     }
-    await withBusy(connect);
+    await viewTask(connect);
   };
-  el.refresh.onclick = () => { void refreshTelemetry({ reset: false }); return withBusy(refreshAll); };
-  el.cp.button.onclick = () => withBusy(requestCheckpoint);
-  el.holder.claim.onclick = () => withBusy(() => {
+  el.refresh.onclick = () => { void refreshTelemetry({ reset: false }); return viewTask(refreshAll); };
+  el.cp.button.onclick = () => viewTask(requestCheckpoint);
+  el.holder.claim.onclick = () => viewTask(() => {
     const raw = $("claim-ids").value.trim();
     if (raw && !/^\d+(?:[\s,]+\d+)*$/.test(raw)) throw new Error("Use comma- or space-separated positive token IDs.");
     const ids = raw ? raw.split(/[\s,]+/) : undefined;
     if (ids?.some(id => BigInt(id) === 0n)) throw new Error("Token IDs must be positive.");
     return requestClaim(ids);
   });
-  $("btn-custom-merge").onclick = () => withBusy(() => {
+  $("btn-custom-merge").onclick = () => viewTask(() => {
     const survivor = $("merge-survivor").value.trim(), donor = $("merge-donor").value.trim();
     if (![survivor, donor].every(id => /^\d+$/.test(id) && BigInt(id) > 0n) || BigInt(survivor) === BigInt(donor)) throw new Error("Choose two different positive token IDs.");
     const position = state.status?.squeeks.find(s => BigInt(s.tokenId) === BigInt(survivor));
     if (!position) throw new Error("The survivor must be in the inspected wallet.");
     return requestMerge({ survivor: String(BigInt(survivor)), donor: String(BigInt(donor)), nextLevel: Number(position.level) + 1 });
   });
-  el.holder.plan.onclick = () => withBusy(refreshWallet);
+  el.holder.plan.onclick = () => viewTask(refreshWallet);
   el.holder.watch.onclick = async () => {
     const value = el.holder.watchInput.value.trim();
     if (!/^0x[0-9a-fA-F]{40}$/.test(value)) return toast("enter a valid 0x address", "err");
     state.inspected = value;
-    await withBusy(refreshWallet);
+    await viewTask(refreshWallet);
   };
   el.art.one.onclick = () => {
     const id = el.art.token.value.trim();
     if (!/^\d+$/.test(id)) return toast("enter a token id", "err");
-    withBusy(() => loadArt([id]));
+    viewTask(() => loadArt([id]));
   };
   el.art.mine.onclick = () => {
     const ids = (state.status?.squeeks ?? []).map((s) => s.tokenId);
     if (ids.length === 0) return toast("no Squeeks in the current view", "err");
-    withBusy(() => loadArt(ids));
+    viewTask(() => loadArt(ids));
   };
 
   el.agent.run.onclick = async () => {
@@ -935,8 +1000,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     } catch {
       return showOut(el.agent.out, { error: "args must be valid JSON" });
     }
-    const result = await withBusy(() => callTool(el.agent.select.value, args));
-    showOut(el.agent.out, result);
+    const load = captureLoad();
+    const result = await viewTask(() => callTool(el.agent.select.value, args));
+    if (isCurrent(load)) showOut(el.agent.out, result);
   };
   el.agent.copy.onclick = async () => {
     const text = json(manifest());
@@ -972,7 +1038,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // Custom RPC is browser-local; never sent to our server. Public peers still cross-check every snapshot.
   $("rpc-url").value = store.get("wheelhouse:rpc") ?? "";
-  $("btn-save-rpc").onclick = () => withBusy(async () => {
+  $("btn-save-rpc").onclick = async () => {
+    try {
     const value = $("rpc-url").value.trim();
     if (value) {
       const url = new URL(value);
@@ -980,7 +1047,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     store.set("wheelhouse:rpc", value);
     await switchProfile(state.profileKey);
-  });
+    } catch (err) { showBanner(errorMessage(err), "bad"); }
+  };
 
   // ── boot ──────────────────────────────────────────────────────────────────
   applyTheme(store.get(THEME_KEY) ?? "light");
@@ -988,14 +1056,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   renderWalletChip();
   state.adapter = buildAdapter(state.profileKey);
   renderNetworkPlaceholder();
-  selectTab(store.get("squeekchain:tab") ?? "overview");
+  renderDeploymentVisibility();
   if (!state.adapter) showBanner(getProfile(state.profileKey).notes, "warn");
-  else refreshAll().then(renderToolOptions);
+  else refreshAll().then(() => { if (!destroyed) renderToolOptions(); });
   void refreshTelemetry();
 
   const telemetryTimer = win.setInterval?.(() => { if (!destroyed) void refreshTelemetry({ reset: false }); }, 15_000);
   const timer = win.setInterval?.(() => {
-    if (!state.busy && state.adapter) refreshAll();
+    if (state.adapter) void refreshAll();
   }, 45_000);
 
   return {
@@ -1013,11 +1081,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     refresh: refreshAll,
     switchProfile,
     loadArt,
-    requestCheckpoint,
-    requestClaim,
-    requestMerge,
+    requestCheckpoint: () => viewTask(requestCheckpoint),
+    requestClaim: ids => viewTask(() => requestClaim(ids)),
+    requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { closeActiveModal?.(); destroyed = true; generation++; win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
+    destroy: () => { closeActiveModal?.(); destroyed = true; generation++; loadController.abort(); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
   };
 }
 

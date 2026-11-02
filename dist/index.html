@@ -3,9 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>The Wheel · Squeekchain console</title>
-    <meta name="description" content="The Wheel — checkpoint, claim, merge and inspect Squeeks on Squeekchain. Reads are permissionless; owner actions are signed in your own wallet." />
+    <title>Wheelhouse · Squeekchain console</title>
+    <meta name="description" content="Wheelhouse — checkpoint, claim, merge and inspect Squeeks on Squeekchain. Reads are permissionless; owner actions are signed in your own wallet." />
     <meta name="theme-color" content="#f5f5f7" />
+    <script>try { document.documentElement.dataset.theme = localStorage.getItem('squeekchain:theme') === 'dark' ? 'dark' : 'light'; } catch { /* light default */ }</script>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='6' fill='%2316161c'/><g fill='none' stroke='%23ffc048' stroke-width='2.2'><circle cx='20' cy='20' r='11'/><circle cx='20' cy='20' r='3.4'/><path d='M20 9v3.6M20 27.4V31M9 20h3.6M27.4 20H31'/></g></svg>" />
   </head>
@@ -21,7 +22,7 @@
           </svg>
         </div>
         <div>
-          <span class="brand-name">THE WHEEL<span class="brand-dot">.</span></span>
+          <span class="brand-name">WHEELHOUSE<span class="brand-dot">.</span></span>
           <span class="label">A Squeekchain holder console</span>
         </div>
       </div>
@@ -29,7 +30,7 @@
         <a class="header-link" href="https://squeekchain.com" target="_blank" rel="noreferrer">Squeekchain ↗</a>
         <a class="header-link" href="https://docs.squeekchain.com" target="_blank" rel="noreferrer">Docs ↗</a>
         <select aria-label="Network deployment" id="profile-select" title="Deployment"></select>
-        <span class="chip" id="verified-chip">verifying…</span>
+        <span class="chip" id="verified-chip" role="status" aria-live="polite">verifying…</span>
         <span class="chip" id="wallet-chip">not connected</span>
         <button class="btn btn-primary" id="btn-connect">Connect wallet</button>
         <button class="btn icon" id="btn-theme" title="Toggle theme" aria-label="Toggle theme">☾</button>
@@ -68,8 +69,11 @@
         </div>
       </section>
       <div class="network-strip"><span><span class="status-dot"></span> <b id="network-context">SEPOLIA TESTNET</b></span><span id="network-mode">Read freely. Sign only what you understand.</span><a href="https://docs.squeekchain.com/developers/owner-actions/" target="_blank" rel="noreferrer">How it works ↗</a></div>
-      <div id="banner" class="notice hidden"></div>
+      <details class="rpc-settings"><summary>Connection & trust</summary><p>Connected Sepolia wallet preferred. Otherwise, browser-direct public RPCs. Every snapshot must match block hashes from two independent public RPCs; mismatch means unavailable. No server proxy.</p><label for="rpc-url">Optional custom HTTPS RPC (saved only in this browser; avoid URLs with secrets)</label><div class="row"><input id="rpc-url" type="url" placeholder="Default: public Sepolia RPCs" autocomplete="off" spellcheck="false" /><button class="btn" id="btn-save-rpc">Save connection</button></div><p class="muted small">Custom RPCs do not replace the public cross-check. Mainnet and undocumented v9 transactions stay disabled.</p></details>
+      <div id="banner" class="notice hidden" role="status" aria-live="polite"></div>
 
+      <section id="not-deployed" class="notice hidden" role="status" aria-live="polite"><h2>Mainnet · not deployed</h2><p id="not-deployed-note"></p></section>
+      <div id="deployment-content">
       <nav class="tabs" role="tablist" aria-label="Console sections">
         <button class="tab" role="tab" data-tab="overview" aria-selected="true"><span class="tab-number">01</span> Overview</button>
         <button class="tab" role="tab" data-tab="holdings" aria-selected="false"><span class="tab-number">02</span> My Squeeks</button>
@@ -229,14 +233,16 @@
           <pre class="out hidden" id="tool-result"></pre>
         </div>
       </section>
+      </div><!-- deployment-content: hidden entirely for undeployed profiles -->
     </main>
 
     <footer>
-      <div class="footer-top"><span class="brand-name">THE WHEEL<span class="brand-dot">.</span></span><span>Powered by a hamster. Built for the holders.</span><a href="https://docs.squeekchain.com/developers/" target="_blank" rel="noreferrer">Read the docs ↗</a></div>
+      <div class="footer-top"><span class="brand-name">WHEELHOUSE<span class="brand-dot">.</span></span><span>Powered by a hamster. Built for the holders.</span><a href="https://docs.squeekchain.com/developers/" target="_blank" rel="noreferrer">Read the docs ↗</a></div>
       <p class="label">
-        The Wheel · testnet software · addresses come from the published deployment record (v6) and the official dApp bundle +
-        public API (live v9) · the app refuses to act when identities change · nothing here holds a key
+        Wheelhouse · testnet software · addresses come from the published deployment record (v6) and the official dApp bundle +
+        public API (observed v9, read-only and unverified) · no v9 transactions · no owner keys
       </p>
+      <div class="footer-links"><a href="https://github.com/CryptoExplor/Squeekchain-console" target="_blank" rel="noreferrer">Source ↗</a><a href="https://docs.squeekchain.com/developers/owner-actions/" target="_blank" rel="noreferrer">Safety & owner actions ↗</a><span>Independent community tool · Sepolia only · not investment advice</span></div>
     </footer>
 
     <div class="modal hidden" id="modal">

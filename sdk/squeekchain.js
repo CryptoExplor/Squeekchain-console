@@ -1,3 +1,4 @@
+import { throwIfAborted } from "./cancellation.js";
 /**
  * squeekchain SDK — one isomorphic core for the CLI, the browser dApp and the MCP server.
  *
@@ -74,23 +75,27 @@ function wrap(err, fallback) {
 }
 
 /** Public methods are serialized, verified and pinned to one cross-checked snapshot. */
-export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provider, rpcContext, ...options } = {}) {
+export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provider, rpcContext, signal, ...options } = {}) {
   if (options.skipVerification) throw new Error("Verification cannot be disabled");
   const addr = Object.fromEntries(["core", "mining", "token", "nft"].map(name => {
     if (addresses[name] && addresses[name].toLowerCase() !== DEPLOYMENT[name].toLowerCase()) throw new Error("Only the published deployment record is supported");
     return [name, getAddress(DEPLOYMENT[name])];
   }));
-  const context = rpcContext ?? createRpcContext({ rpcUrl, provider });
+  const context = rpcContext ?? createRpcContext({ rpcUrl, provider, signal });
   const client = context.client;
   let activeSnapshot = null, verification = null, queue = Promise.resolve();
   const read = (contract, abi, functionName, args = []) => client.readContract({ address: addr[contract], abi, functionName, args, blockNumber: activeSnapshot.blockNumber });
   function run(operation) {
     const task = queue.then(async () => {
+      throwIfAborted(signal);
       activeSnapshot = await context.snapshot();
       try {
         verification = await verifyGraphAt(client, activeSnapshot);
+        throwIfAborted(signal);
         const result = await operation();
+        throwIfAborted(signal);
         await context.check(activeSnapshot);
+        throwIfAborted(signal);
         return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash } } : result;
       } catch (error) { throw wrap(error, "Snapshot unavailable"); }
       finally { activeSnapshot = null; verification = null; }
