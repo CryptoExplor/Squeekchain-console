@@ -143,6 +143,11 @@ try {
   assert.equal(doc.activeElement, $('btn-claim'));
   assert.equal(key('Tab').defaultPrevented, false, 'keyboard listener is removed on dismissal');
 
+  const clickedCancel = api.requestClaim(); await tick();
+  $('btn-modal-cancel').click();
+  assert.equal((await clickedCancel).reason, 'cancelled', 'explicit user Cancel remains distinct from a profile switch');
+  assert.equal(modalVisible(), false);
+
   // Confirmation follows the same close/restore lifecycle (zero-call fixture).
   const confirmed = api.requestClaim(); await tick();
   $('btn-modal-confirm').click(); await confirmed;
@@ -158,6 +163,15 @@ try {
   $('btn-modal-cancel').click(); await merge;
   assert.equal(doc.activeElement, $('btn-custom-merge'));
 
+  // Address casing alone cannot invalidate the owner's explicit burn acknowledgement.
+  const caseOnly = api.requestMerge({ survivor: '1', donor: '2' }); await tick();
+  api.state.account = owner.toLowerCase();
+  $('modal-input').value = 'BURN-2'; $('modal-input').dispatchEvent(new win.Event('input'));
+  $('btn-modal-confirm').click(); await tick();
+  assert.equal($('modal-title').textContent, 'Review simulated merge');
+  $('btn-modal-cancel').click();
+  assert.equal((await caseOnly).reason, 'cancelled');
+
   api.selectTab('art'); await api.loadArt(['1']);
   $('btn-art-one').focus(); $('art-grid').firstElementChild.click();
   assert.ok(modalVisible());
@@ -172,7 +186,7 @@ try {
   api.selectTab('holdings'); $('btn-claim').focus();
   const dismissedOnSwitch = api.requestClaim(); await tick();
   await api.switchProfile('mainnet');
-  assert.equal((await dismissedOnSwitch).reason, 'cancelled');
+  assert.equal((await dismissedOnSwitch).reason, 'profile-changed');
   assert.equal(modalVisible(), false);
   assert.equal(sends, 0);
   console.log('PASS review: confirmation/art focus entry, Tab/Shift+Tab trap, Escape, click dismissal and focus restoration');

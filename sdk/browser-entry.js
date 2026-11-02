@@ -5,3 +5,7 @@ export { createSqueek9, parseSqueekMetadata } from "./v9.js";
 export { PROFILES, DEFAULT_PROFILE, getProfile, listProfiles } from "./deployments.js";
 
 export { abortable } from "./cancellation.js";
+
+export { createDiscoveryStore } from "./discovery.js";
+
+export { createRpcContext } from "./rpc.js";

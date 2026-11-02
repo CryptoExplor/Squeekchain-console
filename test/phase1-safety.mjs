@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { build } from 'esbuild';
-import { keccak256 } from 'viem';
+import { encodeFunctionResult, decodeFunctionData, multicall3Abi, encodeEventTopics, parseAbi, toHex, keccak256 } from 'viem';
 import { DEPLOYMENT, CORE_CONFIGURATION } from '../sdk/record.js';
 import { createSqueekchain, requireBurn } from '../sdk/squeekchain.js';
 import { createSqueek9 } from '../sdk/v9.js';
-import { createSnapshotGuard, RpcTrustError, requireSepolia, PUBLIC_RPCS } from '../sdk/rpc.js';
+import { createRpcContext, chainCheckedRequest, createSnapshotGuard, RpcTrustError, requireSepolia, PUBLIC_RPCS } from '../sdk/rpc.js';
+import { coreAbi, miningAbi, nftAbi, tokenAbi } from '../sdk/abi.js';
 import { verifyGraphAt, IMPLEMENTATION_SLOT } from '../sdk/verify.js';
 import { DEFAULT_PROFILE, PROFILES } from '../sdk/deployments.js';
 import { TOOL_SPECS } from '../sdk/tools.js';
@@ -74,16 +75,16 @@ function fakeClient({ alter = (_request, value) => value } = {}) {
     estimateGas: tracked('estimateGas', () => 100000n),
     getContractEvents: tracked('getContractEvents', request => {
       assert.equal(request.toBlock, blockNumber);
-      return [1n, 2n].map(tokenId => ({ args: { tokenId, to: owner } }));
+      return request.args.from ? [] : [1n, 2n].map((tokenId, logIndex) => ({ blockNumber, logIndex, args: { tokenId, from: other, to: owner } }));
     }),
   };
   client.getCode = tracked('getCode', ({ address }) => {
     const name = Object.entries(DEPLOYMENT.implementations).find(([, value]) => same(value, address))?.[0];
     return codes[name] ?? '0x6000';
   });
-  client.multicall = tracked('multicall', async ({ contracts, blockNumber: at }) => Promise.all(contracts.map(async contract => {
-    try { return { status: 'success', result: await client.readContract({ ...contract, blockNumber: at }) }; }
-    catch (error) { return { status: 'failure', error }; }
+  client.multicall = tracked('multicall', async ({ contracts, blockNumber: at, allowFailure }) => Promise.all(contracts.map(async contract => {
+    try { const result = await client.readContract({ ...contract, blockNumber: at }); return allowFailure === false ? result : { status: 'success', result }; }
+    catch (error) { if (allowFailure === false) throw error; return { status: 'failure', error }; }
   })));
   return client;
 }
@@ -185,3 +186,131 @@ const keeper = spawnSync(process.execPath, ['keeper/checkpoint.mjs'], { encoding
 assert.equal(keeper.status, 1); assert.match(keeper.stderr, /Keeper OFF/);
 assert.throws(() => parseSqueekMetadata('data:application/json;base64,' + Buffer.from(JSON.stringify({ image: 'https://evil.test/art.svg' })).toString('base64')), /Unsupported art/);
 console.log('PASS key isolation: unsigned owner CLI/MCP, no mine/live signing, keeper off, isolated-image metadata restriction');
+
+// Transport probes are shared once per endpoint, invalidated on errors, never per eth_call.
+const chainCache = new Map();
+let probes = 0, fail = false, chain = '0xaa36a7';
+const checkedRequest = chainCheckedRequest(async ({ method }) => {
+  if (method === 'eth_chainId') { probes++; return chain; }
+  if (fail) throw new Error('Transport failure');
+  return '0x1';
+}, { key: 'test', chainCache });
+await Promise.all(Array.from({ length: 20 }, () => checkedRequest({ method: 'eth_blockNumber' })));
+assert.equal(probes, 1);
+fail = true;
+await assert.rejects(checkedRequest({ method: 'eth_blockNumber' }), /Transport failure/);
+assert.equal(probes, 2);
+chainCache.clear(); chain = '0x1'; fail = false;
+await assert.rejects(checkedRequest({ method: 'eth_blockNumber' }), /chainId/);
+console.log('PASS chain cache: shared probes, error recheck, wrong-chain rejection');
+
+// Count actual JSON-RPC requests through the real viem transport, NOT mock method calls.
+// The wire fixture uses the same synthetic pinned runtimes as the positive SDK tests.
+const realFetch = globalThis.fetch;
+const wire = [], wireClient = fakeClient();
+const adminAbi = parseAbi(['function owner() view returns (address)']);
+const abiFor = address => same(address, DEPLOYMENT.core) ? coreAbi : same(address, DEPLOYMENT.mining) ? miningAbi : same(address, DEPLOYMENT.nft) ? nftAbi : same(address, DEPLOYMENT.token) ? tokenAbi : adminAbi;
+function fill(parameter, value) {
+  if (parameter.type.endsWith('[]')) return (value ?? []).map(item => fill({ ...parameter, type: parameter.type.slice(0, -2) }, item));
+  if (parameter.type === 'tuple') return Object.fromEntries(parameter.components.map(component => [component.name, fill(component, value?.[component.name])]));
+  if (value != null) return value;
+  if (parameter.type === 'bool') return false;
+  if (parameter.type === 'address') return other;
+  if (parameter.type.startsWith('bytes')) return parameter.type === 'bytes' ? '0x' : `0x${'00'.repeat(Number(parameter.type.slice(5)))}`;
+  return 0n;
+}
+async function callWire(address, data, at) {
+  if (same(address, '0xca11bde05977b3631167028862be2a173976ca11')) {
+    const decoded = decodeFunctionData({ abi: multicall3Abi, data });
+    if (decoded.functionName === 'getEthBalance') return encodeFunctionResult({ abi: multicall3Abi, functionName: 'getEthBalance', result: 10n ** 18n });
+    const [calls] = decoded.args;
+    const results = await Promise.all(calls.map(async call => {
+      try { return { success: true, returnData: await callWire(call.target, call.callData, at) }; }
+      catch (error) { if (!call.allowFailure) throw error; return { success: false, returnData: '0x' }; }
+    }));
+    return encodeFunctionResult({ abi: multicall3Abi, functionName: 'aggregate3', result: results });
+  }
+  const abi = abiFor(address);
+  const { functionName, args = [] } = decodeFunctionData({ abi, data });
+  const result = await wireClient.readContract({ address, abi, functionName, args, blockNumber: at });
+  const outputs = abi.find(item => item.type === 'function' && item.name === functionName).outputs;
+  const values = outputs.map((output, index) => fill(output, outputs.length === 1 ? result : result[index]));
+  return encodeFunctionResult({ abi, functionName, result: outputs.length === 1 ? values[0] : values });
+}
+globalThis.fetch = async (_url, init) => {
+  const request = JSON.parse(init.body); wire.push(request);
+  const { method, params = [] } = request;
+  let result;
+  if (method === 'eth_chainId') result = '0xaa36a7';
+  else if (method === 'eth_blockNumber') result = toHex(blockNumber + 12n);
+  else if (method === 'eth_getBlockByNumber') result = { hash, number: params[0], transactions: [], timestamp: '0x1' };
+  else if (method === 'eth_getStorageAt') result = await wireClient.getStorageAt({ address: params[0], slot: params[1], blockNumber: BigInt(params[2]) });
+  else if (method === 'eth_getCode') result = await wireClient.getCode({ address: params[0], blockNumber: BigInt(params[1]) });
+  else if (method === 'eth_getBalance') result = toHex(10n ** 18n);
+  else if (method === 'eth_call') result = await callWire(params[0].to, params[0].data, BigInt(params[1]));
+  else if (method === 'eth_getLogs') {
+    result = params[0].topics[2] ? [1n, 2n].map((id, index) => ({
+      address: DEPLOYMENT.nft, blockNumber: toHex(blockNumber), blockHash: hash,
+      transactionHash: hash, transactionIndex: '0x0', logIndex: toHex(index), removed: false, data: '0x',
+      topics: encodeEventTopics({ abi: nftAbi, eventName: 'Transfer', args: { from: other, to: owner, tokenId: id } }),
+    })) : [];
+  } else throw new Error(`Unmocked wire RPC ${method}`);
+  return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }), { headers: { 'content-type': 'application/json' } });
+};
+try {
+  const context = createRpcContext();
+  const wireSdk = createFixtureSdk({ rpcContext: context });
+  await wireSdk.networkStatus();
+  const cold = wire.length;
+  wire.length = 0;
+  const warm = await wireSdk.networkStatus();
+  assert.equal(warm.verification.cacheHit, true);
+  assert.ok(wire.length <= 25, `Warm v6 page load exceeded RPC budget: ${wire.length}`);
+  assert.equal(wire.filter(request => request.method === 'eth_getStorageAt').length, 4);
+  assert.equal(wire.filter(request => request.method === 'eth_getCode').length, 0);
+  assert.equal(wire.filter(request => request.method === 'eth_chainId').length, 0);
+  const warmCount = wire.length;
+  wire.length = 0;
+  const batch = await wireSdk.artBatch(['1', '2', '3']);
+  assert.equal(batch.length, 3);
+  assert.equal(wire.filter(request => request.method === 'eth_call').length, 1, 'all art in one multicall/snapshot');
+  wire.length = 0;
+  await wireSdk.walletStatus(owner);
+  assert.ok(wire.length <= 25, `Warm wallet page load exceeded RPC budget: ${wire.length}`);
+  console.log(`PASS actual wire budget: cold network ${cold}; warm network ${warmCount}; wallet ${wire.length} requests; art batch one eth_call`);
+  const wireFetch = globalThis.fetch, contacted = [];
+  globalThis.fetch = async (url, init) => {
+    contacted.push(url);
+    const request = JSON.parse(init.body);
+    if (request.method === 'eth_chainId') return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: '0x1' }), { headers: { 'content-type': 'application/json' } });
+    return wireFetch(url, init);
+  };
+  await assert.rejects(createRpcContext().snapshot(), /chainId|Sepolia/);
+  assert.equal(new Set(contacted).size, 1, 'wrapped trust errors must not be retried away through other RPCs');
+  globalThis.fetch = wireFetch;
+
+} finally { globalThis.fetch = realFetch; }
+
+// A changed implementation/admin must not reuse the session's verified identities.
+const cacheClient = fakeClient();
+let slotChanged = false;
+const getSlot = cacheClient.getStorageAt;
+cacheClient.getStorageAt = request => slotChanged && request.slot === IMPLEMENTATION_SLOT ? Promise.resolve(`0x${'0'.repeat(63)}1`) : getSlot(request);
+const cachedSdk = createFixtureSdk({ rpcContext: { client: cacheClient, snapshot: async () => snapshot, check: async () => {} } });
+await cachedSdk.networkStatus();
+slotChanged = true;
+await assert.rejects(cachedSdk.networkStatus(), /implementation/);
+console.log('PASS graph cache: proxy slot changes fail closed instead of trusting cached verification');
+
+const adminClient = fakeClient();
+let adminChanged = false;
+const adminSlotRead = adminClient.getStorageAt;
+adminClient.getStorageAt = request => adminChanged && request.slot !== IMPLEMENTATION_SLOT ? Promise.resolve(`0x${'0'.repeat(63)}1`) : adminSlotRead(request);
+const adminSdk = createFixtureSdk({ rpcContext: { client: adminClient, snapshot: async () => snapshot, check: async () => {} } });
+await adminSdk.networkStatus(); adminChanged = true;
+await assert.rejects(adminSdk.networkStatus(), /proxy admin/);
+const uncommitted = new Map();
+const reorgSdk = createFixtureSdk({ verificationCache: uncommitted, rpcContext: { client: fakeClient(), snapshot: async () => snapshot, check: async () => { throw new Error('Final hash mismatch'); } } });
+await assert.rejects(reorgSdk.networkStatus(), /Final hash mismatch/);
+assert.equal(uncommitted.size, 0, 'failed final snapshot guard cannot populate the verification cache');
+console.log('PASS cache integrity: proxy admin changes and final-guard failures do not reuse/seed trust');

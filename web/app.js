@@ -19,14 +19,17 @@ import {
   buildManifest,
   CHAIN,
   abortable,
+  createDiscoveryStore,
+  createRpcContext,
 } from "./bundle.js";
 
+import { createActivity } from "./activity.js";
 import { createTelemetry, telemetryView } from "./telemetry.js";
 
 const EXPLORER = "https://eth-sepolia.blockscout.com";
 const THEME_KEY = "squeekchain:theme";
 
-export function mount({ doc = document, win = window, adapterFactory, fetcher = globalThis.fetch } = {}) {
+export function mount({ doc = document, win = window, adapterFactory, fetcher = globalThis.fetch, activityReader } = {}) {
   const $ = (id) => doc.getElementById(id);
   const el = {
     profileSelect: $("profile-select"),
@@ -158,14 +161,47 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const readFor = (load, method, ...args) => viewAwait(load, () => load.adapter[method](...args));
   let destroyed = false;
   const telemetry = createTelemetry({ fetcher });
+  const verificationCache = new Map();
+  const chainCache = new Map();
+  const discoveryCache = createDiscoveryStore(win.indexedDB);
+  let receiptContext, receiptRpcUrl;
+  const activity = createActivity({ storage: store, onChange: renderActivity, receiptReader: activityReader ?? (async (item, { signal }) => {
+    const rpcUrl = store.get('wheelhouse:rpc') || undefined;
+    if (!receiptContext || rpcUrl !== receiptRpcUrl) {
+      receiptContext = createRpcContext({ rpcUrl, chainCache, signal, provider: () => state.account ? provider() : null });
+      receiptRpcUrl = rpcUrl;
+    }
+    const receipt = await receiptContext.client.getTransactionReceipt({ hash: item.hash });
+    const snapshot = await receiptContext.snapshot(receipt.blockNumber);
+    if (snapshot.blockHash.toLowerCase() !== receipt.blockHash.toLowerCase()) throw new Error('Receipt block hash mismatch');
+    await receiptContext.check(snapshot);
+    const head = await receiptContext.client.getBlockNumber({ cacheTime: 0 });
+    if (head < receipt.blockNumber) throw new Error('Receipt is ahead of the RPC head');
+    return { receipt, confirmations: head - receipt.blockNumber + 1n };
+  }) });
+  function renderActivity(items) {
+    $('activity-panel').classList.toggle('hidden', items.length === 0);
+    $('activity-list').replaceChildren(...items.map(item => {
+      const row = doc.createElement('li');
+      const link = doc.createElement('a');
+      link.href = `${EXPLORER}/tx/${item.hash}`; link.target = '_blank'; link.rel = 'noreferrer';
+      link.textContent = `${item.label} · ${item.hash.slice(0, 10)}…`;
+      const detail = doc.createElement('span');
+      detail.textContent = `${item.chain ?? 'Sepolia'} · ${item.status}${item.receiptStatus === 'reverted' && item.status === 'mined' ? ' (reverted)' : ''} · ${item.time}${item.lastError ? ` · ${item.lastError}` : ''}`;
+      row.append(link, detail);
+      return row;
+    }));
+  }
+  $('btn-refresh-activity').onclick = () => activity.refresh();
+
 
   function buildAdapter(profileKey) {
     const profile = getProfile(profileKey);
     if (!profile.addresses) return null;
     if (adapterFactory) return adapterFactory(profileKey, { signal: loadController.signal, generation });
     return profile.abiSet === "v9"
-      ? createSqueek9({ profileKey, cache: store, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null })
-      : createSqueekchain({ addresses: profile.addresses, cache: store, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null });
+      ? createSqueek9({ profileKey, cache: store, verificationCache, chainCache, discoveryCache, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null })
+      : createSqueekchain({ addresses: profile.addresses, cache: store, verificationCache, chainCache, discoveryCache, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null });
   }
 
   function renderProfileOptions() {
@@ -351,7 +387,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         renderWalletChip();
         refreshWallet();
       });
-      p.on?.("chainChanged", () => { if (!state.account || destroyed) return; closeActiveModal?.(); void refreshAll(); });
+      p.on?.("chainChanged", () => { state.adapter?.invalidateChain?.(); if (!state.account || destroyed) return; closeActiveModal?.(); void refreshAll(); });
       walletListenersRegistered = true;
       }
       hideBanner();
@@ -388,6 +424,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (!owner || state.account?.toLowerCase() !== owner.toLowerCase() || accounts?.[0]?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet changed; start again");
       // A profile switch cannot cancel this wallet popup or an already-broadcast transaction.
       hash = await p.request({ method: "eth_sendTransaction", params: [{ from: owner, to: tx.to, data: tx.data, value: `0x${BigInt(tx.value ?? 0).toString(16)}` }] });
+      // Persist BEFORE checking profile generation. Even a late wallet response belongs in Activity.
+      activity.record(hash, label, CHAIN.id);
+      void activity.refresh();
     } finally {
       state.busy = false;
       if (isCurrent(load)) {
@@ -397,12 +436,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     assertCurrent(load);
     toast(`${label} submitted ${hash.slice(0, 12)}…`);
-    const receipt = await viewAwait(load, () => load.adapter.client.waitForTransactionReceipt({ hash, timeout: 180_000 }));
-    const ok = receipt.status === "success";
+    const receipt = await viewAwait(load, () => activity.wait(hash));
+    const ok = receipt.receiptStatus === "success";
     if (!ok) throw new Error(`${label} reverted. Stopped; no changed-input retry.`);
-    const result = { hash, ok, blockNumber: String(receipt.blockNumber), gasUsed: String(receipt.gasUsed) };
+    const result = { hash, ok, blockNumber: receipt.blockNumber, status: receipt.status };
     state.receipts.push(result);
-    toast(`${label} confirmed in block ${receipt.blockNumber}`, "ok");
+    toast(`${label} mined in block ${receipt.blockNumber}. Activity tracks confirmations.`, "ok");
     return result;
   }
 
@@ -532,7 +571,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         ];
   }
 
-  function renderHolder(status, plan) {
+  function renderHolder(status, plan = null) {
     state.status = status;
     state.plan = plan;
     const caps = capabilities();
@@ -619,6 +658,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   // ── refresh ───────────────────────────────────────────────────────────────
+  function renderVerification(v) {
+      el.verified.textContent = v.trusted === false ? "read-only (unverified)" : v.ok ? "verified ✓" : `${v.problems?.length ?? 1} problem(s)`;
+      el.verified.className = `chip ${v.trusted === false ? "warn" : v.ok ? "ok" : "bad"}`;
+      el.verified.title = v.trusted === false ? "Read-only (unverified): observed identities are not published trust pins. All transactions disabled." : v.ok ? `Published identities fully verified at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; proxy slots checked at ${v.blockNumber ?? "unknown"}. Two public RPC block hashes agree for this snapshot.` : (v.problems ?? []).join("; ");
+  }
+
   async function refreshNetwork() {
     if (!state.adapter) return null;
     const load = captureLoad();
@@ -628,9 +673,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       const v = net.verification ?? await readFor(load, "verify");
       if (!isCurrent(load)) return null;
       renderNetwork(net);
-      el.verified.textContent = v.trusted === false ? "read-only (unverified)" : v.ok ? "verified ✓" : `${v.problems?.length ?? 1} problem(s)`;
-      el.verified.className = `chip ${v.trusted === false ? "warn" : v.ok ? "ok" : "bad"}`;
-      el.verified.title = v.trusted === false ? "Read-only (unverified): observed identities are not published trust pins. All transactions disabled." : v.ok ? `Published identities match at block ${v.blockNumber ?? "unknown"}; two public RPC block hashes agree.` : (v.problems ?? []).join("; ");
+      renderVerification(v);
       return net;
     } catch (err) {
       if (!isCurrent(load)) return null;
@@ -656,12 +699,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       const status = await readFor(load, "walletStatus", owner);
       if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
       renderWalletChipStats(status);
-      let plan = null;
-      if (capabilities().merge && status.totals.count > 1 && state.adapter.mergePlan) {
+      let plan = status.mergePlan ?? null;
+      if (!plan && capabilities().merge && status.totals.count > 1 && state.adapter.mergePlan) {
         plan = await readFor(load, "mergePlan", owner, { status });
       }
       if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
       renderHolder(status, plan);
+      if (status.net && status.verification) { renderNetwork(status.net); renderVerification(status.verification); }
       return status;
     } catch (err) {
       if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
@@ -671,9 +715,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   async function refreshAll() {
-    const current = generation;
-    await refreshNetwork();
-    if (current === generation && !destroyed) await refreshWallet();
+    const load = captureLoad();
+    if (state.adapter && (state.inspected ?? state.account)) {
+      // Production walletStatus includes network state and a pure merge plan from
+      // the SAME run/snapshot. Do not pay for a second network/plan snapshot.
+      const status = await refreshWallet();
+      if (isCurrent(load) && !status?.net) await refreshNetwork();
+    } else await refreshNetwork();
   }
 
   const viewTask = async fn => {
@@ -752,12 +800,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       confirmLabel: "Acknowledge burn & simulate",
     });
     if (!confirmed) return { ok: false, reason: "cancelled" };
-    if (!isCurrent(load) || owner !== (state.account ?? state.inspected)) throw new Error("Wallet or profile changed. Start again.");
+    if (!isCurrent(load) || owner?.toLowerCase() !== (state.account ?? state.inspected)?.toLowerCase()) throw new Error("Wallet or profile changed. Start again.");
     const preview = await readFor(load, "mergePreview", owner, pair.survivor, pair.donor, { confirm });
     if (!preview.ok) return preview;
     const sign = await confirmModal({ title: "Review simulated merge", body: `${preview.warning}. Result: level ${preview.nextLevel}. Simulated gas ≈ ${preview.gas}. Keep #${pair.survivor}; permanently burn #${pair.donor}.`, confirmLabel: "Review in wallet" });
     if (!sign) return { ok: false, reason: "cancelled" };
-    if (!isCurrent(load) || owner !== state.account) throw new Error("Connect the owner wallet and start again.");
+    if (!isCurrent(load) || owner?.toLowerCase() !== state.account?.toLowerCase()) throw new Error("Connect the owner wallet and start again.");
     // Fresh verification, ownership, eligibility and simulation after human review.
     const fresh = await readFor(load, "mergePreview", owner, pair.survivor, pair.donor, { confirm });
     if (!fresh.ok) return fresh;
@@ -775,17 +823,22 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     el.art.status.textContent = `rendering ${tokenIds.length} token(s)…`;
     const loaded = [];
-    for (const id of tokenIds) {
+    const missing = tokenIds.filter(id => !state.art.has(String(id)));
+    for (let offset = 0; offset < missing.length; offset += 24) {
+      const ids = missing.slice(offset, offset + 24);
       try {
-        const art = state.art.get(String(id)) ?? (await readFor(load, "art", id));
+        const batch = load.adapter.artBatch ? await readFor(load, 'artBatch', ids) : await Promise.all(ids.map(id => readFor(load, 'art', id)));
         if (!isCurrent(load)) return [];
-        state.art.set(String(id), art);
-        loaded.push(art);
+        for (const item of batch) {
+          if (item.error) toast(`art ${item.tokenId}: ${item.error}`, 'err');
+          else state.art.set(String(item.tokenId), item);
+        }
       } catch (err) {
         if (!isCurrent(load)) return [];
-        toast(`art ${id}: ${errorMessage(err)}`, "err");
+        toast(`art unavailable: ${errorMessage(err)}`, 'err');
       }
     }
+    for (const id of tokenIds) { const item = state.art.get(String(id)); if (item) loaded.push(item); }
     if (!isCurrent(load)) return [];
     renderArt(loaded);
     el.art.status.textContent = `${state.art.size} rendered`;
@@ -1060,6 +1113,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   if (!state.adapter) showBanner(getProfile(state.profileKey).notes, "warn");
   else refreshAll().then(() => { if (!destroyed) renderToolOptions(); });
   void refreshTelemetry();
+  renderActivity(activity.list());
+  void activity.refresh();
+  const activityTimer = win.setInterval?.(() => { if (!destroyed) void activity.refresh(); }, 15_000);
 
   const telemetryTimer = win.setInterval?.(() => { if (!destroyed) void refreshTelemetry({ reset: false }); }, 15_000);
   const timer = win.setInterval?.(() => {
@@ -1077,6 +1133,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     tools,
     callTool,
     manifest,
+    activity,
     connect,
     refresh: refreshAll,
     switchProfile,
@@ -1085,7 +1142,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { closeActiveModal?.(); destroyed = true; generation++; loadController.abort(); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
+    destroy: () => { closeActiveModal?.(); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
   };
 }
 

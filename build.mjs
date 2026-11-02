@@ -28,7 +28,7 @@ fs.writeFileSync("web/tools.json", `${JSON.stringify(buildManifest(), null, 2)}\
 const OUT = "dist";
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
-for (const file of ["index.html", "styles.css", "app.js", "telemetry.js", "bundle.js", "tools.json"]) {
+for (const file of ["index.html", "styles.css", "app.js", "telemetry.js", "activity.js", "bundle.js", "tools.json"]) {
   fs.copyFileSync(path.join("web", file), path.join(OUT, file));
 }
 fs.mkdirSync(path.join(OUT, "fonts"), { recursive: true });
@@ -36,6 +36,10 @@ for (const file of fs.readdirSync(path.join("web", "fonts")).filter((f) => f.end
   fs.copyFileSync(path.join("web", "fonts", file), path.join(OUT, "fonts", file));
 }
 
+// Build-time parity, never a reason to check generated dist/ into Git.
+for (const file of ["index.html", "styles.css", "app.js", "telemetry.js", "activity.js", "bundle.js", "tools.json"]) {
+  if (!fs.readFileSync(path.join("web", file)).equals(fs.readFileSync(path.join(OUT, file)))) throw new Error(`Static output mismatch: ${file}`);
+}
 const manifest = buildManifest();
 process.stdout.write(
   `bundled web/bundle.js (${(bytes / 1024).toFixed(1)} KB) · ` +

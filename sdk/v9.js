@@ -12,6 +12,7 @@ import { getAddress, formatEther } from "viem";
 import { core9Abi, issuance9Abi, nft9Abi, staking9Abi, token9Abi } from "./abi-v9.js";
 import { getProfile } from "./deployments.js";
 import { sqkAmount, SqueekchainError } from "./squeekchain.js";
+import { discoverOwnedIds } from "./discovery.js";
 import { createRpcContext } from "./rpc.js";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -20,13 +21,13 @@ const jsonify = (v) => JSON.parse(JSON.stringify(v, (_k, x) => (typeof x === "bi
 export { parseSqueekMetadata } from "./metadata.js";
 import { parseSqueekMetadata } from "./metadata.js";
 
-export function createSqueek9({ profileKey = "sepolia", rpcUrl, cache = null, provider, rpcContext, signal } = {}) {
+export function createSqueek9({ profileKey = "sepolia", rpcUrl, cache = null, provider, rpcContext, signal, chainCache, discoveryCache } = {}) {
   const profile = getProfile(profileKey);
   if (!profile.addresses) throw new SqueekchainError(`${profile.label} has no deployment`, { code: "input" });
   if (profile.abiSet !== "v9") throw new Error("v9 adapter requires the read-only observed profile");
   const addr = Object.fromEntries(Object.entries(profile.addresses).map(([k, v]) => [k, getAddress(v)]));
 
-  const context = rpcContext ?? createRpcContext({ rpcUrl, provider, signal });
+  const context = rpcContext ?? createRpcContext({ rpcUrl, provider, signal, chainCache });
   const client = context.client;
   let activeSnapshot, queue = Promise.resolve();
   const read = (contract, abi, functionName, args = []) => client.readContract({ address: addr[contract], abi, functionName, args, blockNumber: activeSnapshot.blockNumber });
@@ -152,46 +153,9 @@ export function createSqueek9({ profileKey = "sepolia", rpcUrl, cache = null, pr
     return value;
   }
 
-  async function idsOwned(owner, { force = false } = {}) {
-    const key = `squeek9:ids:${owner.toLowerCase()}`;
-    if (!force && cache?.get) {
-      try {
-        const hit = JSON.parse(cache.get(key) ?? "null");
-        if (hit && hit.blockHash === activeSnapshot.blockHash) return hit.ids.map(BigInt);
-      } catch {
-        /* ignore */
-      }
-    }
-    const balance = Number(await read("nft", nft9Abi, "balanceOf", [getAddress(owner)]));
-    if (balance === 0) {
-      cache?.set?.(key, JSON.stringify({ blockHash: activeSnapshot.blockHash, ids: [] }));
-      return [];
-    }
-    const latest = activeSnapshot.blockNumber;
-    const owned = new Map();
-    let chunk = 45_000n;
-    let cursor = profile.startBlock;
-    while (cursor <= latest) {
-      const end = cursor + chunk - 1n > latest ? latest : cursor + chunk - 1n;
-      try {
-        const logs = await client.getContractEvents({ address: addr.nft, abi: nft9Abi, eventName: "Transfer", fromBlock: cursor, toBlock: end });
-        for (const l of logs) {
-          if (String(l.args.to).toLowerCase() === ZERO) owned.delete(l.args.tokenId);
-          else owned.set(l.args.tokenId, l.args.to);
-        }
-        cursor = end + 1n;
-      } catch (err) {
-        if (chunk <= 1_000n) {
-          throw new Error(`Token discovery unavailable: ${err.message}`);
-        }
-        chunk /= 2n;
-      }
-    }
-    const ids = [...owned.entries()].filter(([, h]) => String(h).toLowerCase() === owner.toLowerCase()).map(([id]) => id).sort((a, b) => (a < b ? -1 : 1));
-    if (ids.length !== balance) throw new Error("Incomplete token discovery; holdings unavailable");
-    cache?.set?.(key, JSON.stringify({ blockHash: activeSnapshot.blockHash, ids: ids.map(String) }));
-    return ids;
-  }
+  const idsOwned = owner => discoverOwnedIds({ client, snapshot: activeSnapshot,
+    nft: addr.nft, abi: nft9Abi, owner, startBlock: profile.startBlock,
+    namespace: `unverified:${profile.identities.release}`, store: discoveryCache, signal });
 
   async function walletStatus(owner, { force = false } = {}) {
     const address = getAddress(owner);
@@ -261,17 +225,20 @@ export function createSqueek9({ profileKey = "sepolia", rpcUrl, cache = null, pr
     return { tokenId: String(tokenId), ...parseSqueekMetadata(uri) };
   }
 
-  async function artBatch(tokenIds, limit = 12) {
-    const out = [];
-    for (const tokenId of tokenIds.slice(0, limit)) {
-      out.push(await art(tokenId).catch((err) => ({ tokenId: String(tokenId), error: err.message })));
-    }
-    return out;
+  async function artBatch(tokenIds, limit = 24) {
+    const ids = tokenIds.slice(0, Math.min(limit, 24)).map(BigInt);
+    const values = await client.multicall({ contracts: ids.map(id => ({ address: addr.nft, abi: nft9Abi, functionName: 'tokenURI', args: [id] })), allowFailure: true, blockNumber: activeSnapshot.blockNumber });
+    return values.map((value, index) => {
+      try {
+        if (value.status !== 'success') throw new Error('tokenURI unavailable');
+        return { tokenId: String(ids[index]), ...parseSqueekMetadata(value.result) };
+      } catch (error) { return { tokenId: String(ids[index]), error: error.message }; }
+    });
   }
 
   // No builders, simulations, transfer, signing or submission for undocumented v9.
   return {
-    profile, addresses: addr, client, capabilities: profile.capabilities,
+    profile, addresses: addr, client, invalidateChain: context.invalidateChain, capabilities: profile.capabilities,
     verify: () => run(verify),
     networkStatus: () => run(networkStatus),
     walletStatus: owner => run(() => walletStatus(owner)),

@@ -66,16 +66,17 @@ async function installRaceHarness(page) {
     window.ethereum = { request: async ({ method }) => {
       if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [owner];
       if (method === 'eth_chainId') return '0xaa36a7';
-      if (method === 'eth_sendTransaction') { h.sends++; throw new Error('No signing in browser regression tests'); }
+      if (method === 'eth_sendTransaction') { h.sends++; if (h.allowSend) return new Promise(resolve => { h.resolveSend = resolve; }); throw new Error('No signing in browser regression tests'); }
       throw new Error(`Unexpected wallet method ${method}`);
     }, on() {} };
     const holdings = { owner, ethBalance: { eth: '0.1' }, totals: { count: 1, power: '1000', sharePercent: 1, claimable: { sqk: '1' } }, squeeks: [{ tokenId: '1', level: 1, claimable: { sqk: '1' } }] };
-    window.squeek = mount({ adapterFactory: (profileKey, load) => {
+    window.squeek = mount({ activityReader: async () => new Promise(resolve => { h.resolveReceipt = resolve; }), adapterFactory: (profileKey, load) => {
       h.loads.push({ profileKey, ...load });
       return {
         networkStatus: async () => h.pendingNetwork ? new Promise(resolve => h.reads.push({ profileKey, ...load, resolve })) : network('10'),
         verify: async () => ({ ok: true, trusted: profileKey === 'sepolia-v6', problems: [] }),
         walletStatus: async () => holdings,
+        checkpointPreview: async () => ({ ok: true, tx: { to: owner, data: '0xc2c4c5c1', value: '0' }, gas: '100' }),
         claimPreview: async () => h.pendingSimulation ? new Promise(resolve => h.sims.push({ ...load, resolve })) : { ok: false, reason: 'Fixture stops before signing' },
       };
     }, fetcher: async () => ({ ok: false, status: 503, headers: new Headers(), json: async () => ({}) }) });
@@ -147,5 +148,31 @@ test('switch during simulation: discard the preview and never open a wallet or c
   await expect(page.locator('#claim-result')).toBeEmpty();
   await expect(page.locator('#deployment-content')).toBeHidden();
   expect(await page.evaluate(() => window.races.sends)).toBe(0);
+  await page.evaluate(() => window.squeek.destroy());
+});
+
+test('broadcast Activity survives a profile switch, late wallet response and page reload', async ({ page }) => {
+  await installRaceHarness(page);
+  const hash = `0x${'ab'.repeat(32)}`;
+  await page.evaluate(() => { window.races.allowSend = true; window.pendingSend = window.squeek.requestCheckpoint(); });
+  await page.waitForFunction(() => window.races.sends === 1);
+  await page.selectOption('#profile-select', 'mainnet');
+  await expect(page.locator('#deployment-content')).toBeHidden();
+  // Wallet response arrives AFTER navigation. It must still be persisted and tracked.
+  await page.evaluate(hash => { window.races.resolveSend(hash); }, hash);
+  await page.waitForFunction(() => window.races.resolveReceipt);
+  await expect(page.locator('#activity-panel')).toBeVisible();
+  await expect(page.locator('#activity-list a')).toHaveAttribute('href', `https://eth-sepolia.blockscout.com/tx/${hash}`);
+  expect(await page.evaluate(() => window.squeek.state.receipts)).toEqual([]);
+  await page.evaluate(hash => {
+    window.races.resolveReceipt({ receipt: { transactionHash: hash, blockHash: `0x${'cd'.repeat(32)}`, blockNumber: 50n, status: 'success' }, confirmations: 12n });
+  }, hash);
+  await expect(page.locator('#activity-list')).toContainText('confirmed');
+  expect(await page.evaluate(async () => (await window.pendingSend).reason)).toBe('profile-changed');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('wheelhouse:pending-transactions:v1'))[0])).toMatchObject({ hash, chain: 'Sepolia', label: 'checkpoint()' });
+  await page.reload();
+  await expect(page.locator('#not-deployed')).toBeVisible();
+  await expect(page.locator('#activity-panel')).toBeVisible();
+  await expect(page.locator('#activity-list a')).toHaveAttribute('href', `https://eth-sepolia.blockscout.com/tx/${hash}`);
   await page.evaluate(() => window.squeek.destroy());
 });

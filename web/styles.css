@@ -476,3 +476,7 @@ footer > p.label { font-size: 7px; letter-spacing: .03em; }
   .footer-links { gap: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { #profile-panel[aria-busy="true"] .stat strong { animation: none; } }
+
+#activity-list { padding-left: 20px; overflow-wrap: anywhere; }
+#activity-list li { margin: 12px 0; }
+#activity-list span { display: block; color: var(--sqk-gray-lit); font: 11px/1.7 var(--sqk-font-data); }
