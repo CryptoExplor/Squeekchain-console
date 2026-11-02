@@ -13,14 +13,15 @@
     "serve": "node build.mjs && node web/server.mjs",
     "dev": "node web/server.mjs",
     "mcp": "node mcp/server.js",
-    "test:web": "node test/web-smoke.mjs",
+    "test:web": "node test/ui.mjs",
     "verify": "node src/cli.js verify",
     "status": "node src/cli.js status",
     "checkpoint": "node src/cli.js checkpoint",
     "claim": "node src/cli.js claim",
     "merge": "node src/cli.js merge",
     "mine": "node src/cli.js mine",
-    "test": "node test/web-smoke.mjs"
+    "test": "node test/ui.mjs",
+    "test:live": "node test/web-smoke.mjs"
   },
   "dependencies": {
     "viem": "^2.57.14"
