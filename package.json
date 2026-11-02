@@ -19,7 +19,7 @@
     "checkpoint": "node src/cli.js checkpoint",
     "claim": "node src/cli.js claim",
     "merge": "node src/cli.js merge",
-    "test": "node test/ui.mjs && node test/audit-baseline.mjs && node test/review-regressions.mjs && node test/phase1-safety.mjs && node test/discovery.mjs && node test/activity.mjs && node test/rpc-failover.mjs",
+    "test": "node test/ui.mjs && node test/audit-baseline.mjs && node test/review-regressions.mjs && node test/phase1-safety.mjs && node test/discovery.mjs && node test/activity.mjs && node test/rpc-failover.mjs && node test/account-discovery.mjs",
     "test:live": "npm run build && playwright test --config playwright.config.mjs test/live.spec.mjs",
     "test:audit": "node test/audit-baseline.mjs",
     "test:browser": "npm run build && playwright test --config playwright.config.mjs test/browser.spec.mjs",

@@ -108,7 +108,8 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
     return task;
   }
 
-  // Only owner-filtered incremental logs; cached IDs are re-confirmed at this snapshot.
+  // Owner-filtered incremental logs, with untrusted official-account ID hints on log outages.
+  // Every final set (cache/logs/API) is confirmed onchain at this snapshot.
   const discoverTokenIds = owner => discoverOwnedIds({ client, snapshot: activeSnapshot,
     nft: addr.nft, abi: nftAbi, owner, startBlock: DEPLOYMENT.nftStartBlock,
     namespace: DEPLOYMENT.release, store: discoveryCache, signal });

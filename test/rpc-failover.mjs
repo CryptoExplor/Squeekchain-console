@@ -10,7 +10,7 @@ import { probeEndpoint } from '../src/rpc-probe.mjs';
 
 const [tenderly, publicnode, nodies, onfinality, zero] = PUBLIC_RPCS;
 assert.deepEqual(PUBLIC_RPCS, ['https://sepolia.gateway.tenderly.co', 'https://ethereum-sepolia-rpc.publicnode.com', 'https://ethereum-sepolia-public.nodies.app', 'https://eth-sepolia.api.onfinality.io/public', 'https://0xrpc.io/sep']);
-assert.deepEqual(PUBLIC_RPC_ENDPOINTS.filter(item => item.roles.includes('logs')).map(item => item.url), [tenderly, onfinality]);
+assert.deepEqual(PUBLIC_RPC_ENDPOINTS.filter(item => item.roles.includes('logs')).map(item => item.url), [tenderly, onfinality, zero]);
 assert.deepEqual(PUBLIC_RPC_ENDPOINTS.filter(item => item.roles.includes('state')).map(item => item.url), [tenderly, publicnode, nodies, onfinality, zero]);
 const hash = `0x${'ab'.repeat(32)}`, word = `0x${'0'.repeat(24)}${DEPLOYMENT.implementations.mining.slice(2)}`;
 const payloads = [
@@ -34,6 +34,7 @@ globalThis.fetch = async (url, init) => {
   const request = JSON.parse(init.body), { method, params = [] } = request;
   const call = { url: String(url).replace(/\/$/, ''), method, params }; calls.push(call);
   const routed = route(call);
+  if (routed?.httpStatus) return new Response('rate limited', { status: routed.httpStatus, headers: { 'Retry-After': routed.retryAfter } });
   return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, ...(routed ?? { result: success(method, params) }) }), { headers: { 'content-type': 'application/json' } });
 };
 try {
@@ -47,10 +48,36 @@ try {
     calls = [];
     await client.getContractEvents({ address: DEPLOYMENT.nft, abi: nftAbi, eventName: 'Transfer', fromBlock: 1n, toBlock: 45_000n });
     const scans = calls.filter(call => call.method === 'eth_getLogs');
-    assert.deepEqual(scans.map(call => call.url), [tenderly, onfinality]);
+    assert.deepEqual(scans.map(call => call.url), [tenderly, zero]);
     assert.deepEqual(scans[0].params, scans[1].params, 'fail over at the exact same range before shrinking');
   }
   console.log('PASS RPC availability payloads: 4444/pruned history, historical state, range too large, free plan and forbidden; role-based state/log failover');
+
+  // OnFinality is last. Retry-After suppresses all endpoint requests, including
+  // identity re-probes, across contexts until the deadline (no sleeping/hot loop).
+  const cooldowns = new Map();
+  let clock = Date.parse('2026-11-03T00:00:00Z');
+  calls = [];
+  route = call => {
+    if (call.method !== 'eth_getLogs') return null;
+    if (call.url === tenderly || call.url === zero) return { error: payloads[0] };
+    if (call.url === onfinality) return { httpStatus: 429, retryAfter: '7' };
+    return null;
+  };
+  const logRequest = client => client.getContractEvents({ address: DEPLOYMENT.nft, abi: nftAbi, eventName: 'Transfer', fromBlock: 1n, toBlock: 45_000n });
+  const rateLimited = () => createRpcContext({ rpcCooldowns: cooldowns, now: () => clock }).client;
+  await assert.rejects(logRequest(rateLimited()), /rate limited|429|Retry-After/);
+  assert.deepEqual(calls.filter(call => call.method === 'eth_getLogs').map(call => call.url), [tenderly, zero, onfinality]);
+  assert.equal(cooldowns.get(new URL(onfinality).href), clock + 7_000);
+  await assert.rejects(logRequest(rateLimited()), error => isLogRangeError(error), 'terminal 429/cooldown preserves earlier range failure for discovery shrinking');
+  const initialFinality = calls.filter(call => call.url === onfinality).length;
+  await assert.rejects(logRequest(rateLimited()), /rate limited|429|Retry-After/);
+  assert.equal(calls.filter(call => call.url === onfinality).length, initialFinality, 'no requests during the shared cooldown');
+  clock += 7_000;
+  route = call => call.method === 'eth_getLogs' && [tenderly, zero].includes(call.url) ? { error: payloads[0] } : null;
+  await logRequest(rateLimited());
+  assert.ok(calls.filter(call => call.url === onfinality).length > initialFinality);
+  console.log('PASS log order Tenderly → 0xRPC → OnFinality, shared Retry-After backoff and recovery');
 
   // A supplied endpoint is both a preferred read transport and an independent peer.
   calls = [];
@@ -130,15 +157,15 @@ try {
   const ids = await discoverOwnedIds({
     client: { ...discoveryClient, readContract: async () => 1n, multicall: async () => [owner] },
     snapshot: { blockNumber: 45_000n, blockHash: hash }, nft: DEPLOYMENT.nft, abi: nftAbi,
-    owner, startBlock: 1n, namespace: 'failover', store: createDiscoveryStore(null),
+    owner, startBlock: 1n, namespace: 'failover', store: createDiscoveryStore(null), accountSource: null,
   });
   assert.deepEqual(ids, [1n]);
   const scans = calls.filter(call => call.method === 'eth_getLogs');
   const firstSmall = scans.findIndex(call => BigInt(call.params[0].toBlock) - BigInt(call.params[0].fromBlock) + 1n <= 22_500n);
-  assert.equal(firstSmall, 4, 'two owner filters try both endpoints at 45k before shrinking');
-  assert.deepEqual(scans.slice(0, firstSmall).map(call => call.url).sort(), [tenderly, tenderly, onfinality, onfinality].sort());
+  assert.equal(firstSmall, 6, 'two owner filters try all three log endpoints at 45k before shrinking');
+  assert.deepEqual(scans.slice(0, firstSmall).map(call => call.url).sort(), [tenderly, tenderly, zero, zero, onfinality, onfinality].sort());
   assert.ok(scans.slice(firstSmall).every(call => call.url === tenderly));
-  console.log('PASS discovery shrinks only after Tenderly and OnFinality both reject the original range');
+  console.log('PASS discovery shrinks only after Tenderly, 0xRPC and OnFinality reject the original range');
 } finally { globalThis.fetch = realFetch; }
 
 // Probe contract: exact head-12 storage/block and inclusive 10k NFT Transfer range.

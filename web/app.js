@@ -52,6 +52,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       paused: $("net-paused"),
       release: $("profile-release"),
       notice: $("profile-notice"),
+      settlement: $("settlement-notice"),
     },
     cp: { button: $("btn-checkpoint"), reason: $("cp-reason"), out: $("cp-result"), explain: $("cp-explain") },
     holder: {
@@ -277,6 +278,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   function renderNetworkPlaceholder() {
     const profile = getProfile(state.profileKey);
+    el.net.settlement.textContent = "";
+    el.net.settlement.classList.add("hidden");
     for (const key of ["round", "blocks", "lag", "issued", "squeeks", "paused"]) el.net[key].textContent = "—";
     el.cp.button.disabled = true;
     el.cp.reason.textContent = profile.addresses ? "Waiting for verified chain state." : "Unavailable until a mainnet deployment is published and verified.";
@@ -525,6 +528,18 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     state.net = net;
     renderNetworkPlaceholder();
     el.net.round.textContent = net.core.settledThroughRound;
+    if (getProfile(state.profileKey).abiSet === "v6" && /^\d+$/.test(String(net.core.settledThroughRound))) {
+      let note = `Settlement frontier at round ${net.core.settledThroughRound}.`;
+      if (net.checkpoint.canCheckpoint === false && net.checkpoint.roundSettled === false && String(net.mining.lagRounds) === "0") {
+        note += " No new rewards are being issued on this deployment at this snapshot: the next round is not settled. Existing rewards may still be claimable.";
+      } else if (net.checkpoint.canCheckpoint === true) {
+        note += " Settled rounds are available to checkpoint; new rewards may be issued after a successful checkpoint.";
+      } else {
+        note += " Reward issuance depends on live settlement and checkpoint readiness; this reading does not establish a permanent freeze.";
+      }
+      el.net.settlement.textContent = note;
+      el.net.settlement.classList.remove("hidden");
+    }
     el.net.blocks.textContent = num(net.core.blockHeight);
     el.net.lag.textContent = `${net.mining.lagRounds} round(s)`;
     const issued = net.mining.issued ?? net.mining.minted;

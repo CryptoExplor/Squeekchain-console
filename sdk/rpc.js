@@ -1,16 +1,18 @@
 import { createPublicClient, custom, fallback, http, shouldThrow as shouldStop } from 'viem';
 import { abortable, throwIfAborted } from './cancellation.js';
 import { sepolia } from 'viem/chains';
-import { isRpcAvailabilityError, isTrustError, RpcTrustError } from './rpc-errors.js';
+import { isLogRangeError, isRpcAvailabilityError, isTrustError, RpcTrustError } from './rpc-errors.js';
 export { RpcTrustError } from './rpc-errors.js';
+import { retryAfterMs } from './retry-after.js';
+const sessionCooldowns = new Map();
 
 // Roles are observed availability preferences, never deployment/trust pins.
 export const PUBLIC_RPC_ENDPOINTS = [
-  { url: 'https://sepolia.gateway.tenderly.co', roles: ['snapshot', 'state', 'logs'] },
+  { url: 'https://sepolia.gateway.tenderly.co', roles: ['snapshot', 'state', 'logs'], logOrder: 1 },
   { url: 'https://ethereum-sepolia-rpc.publicnode.com', roles: ['snapshot', 'state'] },
   { url: 'https://ethereum-sepolia-public.nodies.app', roles: ['snapshot', 'state'] },
-  { url: 'https://eth-sepolia.api.onfinality.io/public', roles: ['snapshot', 'state', 'logs'] },
-  { url: 'https://0xrpc.io/sep', roles: ['snapshot', 'state'] },
+  { url: 'https://eth-sepolia.api.onfinality.io/public', roles: ['snapshot', 'state', 'logs'], logOrder: 3 },
+  { url: 'https://0xrpc.io/sep', roles: ['snapshot', 'state', 'logs'], logOrder: 2 },
 ];
 export const PUBLIC_RPCS = PUBLIC_RPC_ENDPOINTS.map(endpoint => endpoint.url);
 export const SEPOLIA_ID = 11155111;
@@ -86,17 +88,35 @@ export function chainCheckedRequest(request, { key, chainCache = new Map(), sign
   };
 }
 
-export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Map() } = {}) {
+export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Map(), rpcCooldowns = sessionCooldowns, now = Date.now } = {}) {
   const uniqueUrls = urls => [...new Set(urls.map(url => new URL(url).href))];
   const urls = uniqueUrls([...(rpcUrl ? [rpcUrl] : []), ...PUBLIC_RPCS]);
   const checked = new Map(urls.map(url => {
-    const raw = createPublicClient({ chain: sepolia, transport: http(url, { timeout: 12_000, retryCount: 0, fetchOptions: { signal } }) });
-    const request = chainCheckedRequest(raw.request, { key: url, chainCache, signal });
+    const raw = createPublicClient({ chain: sepolia, transport: http(url, {
+      timeout: 12_000, retryCount: 0, fetchOptions: { signal },
+      onFetchResponse: response => {
+        if (response.status === 429 || response.status === 503) {
+          const timestamp = now();
+          rpcCooldowns.set(url, timestamp + retryAfterMs(response.headers.get('Retry-After'), timestamp));
+        }
+      },
+    }) });
+    const request = chainCheckedRequest(args => {
+      // Skip a rate-limited endpoint, including identity re-probes. Do not sleep or
+      // block healthy fallbacks. Shared across contexts/profile refreshes in this tab.
+      if (now() < (rpcCooldowns.get(url) ?? 0)) throw new Error('RPC rate limited; waiting for Retry-After backoff');
+      return raw.request(args);
+    }, { key: url, chainCache, signal });
     return [url, custom({ request }, { retryCount: 0 })];
   }));
   // A custom endpoint joins the peer set and is tried first for state/log reads.
   // Wallet reads remain preferred, but never replace the two independent peers.
-  const roleUrls = role => uniqueUrls([...(rpcUrl ? [rpcUrl] : []), ...PUBLIC_RPC_ENDPOINTS.filter(endpoint => endpoint.roles.includes(role)).map(endpoint => endpoint.url)]);
+  const roleUrls = role => {
+    const endpoints = PUBLIC_RPC_ENDPOINTS.filter(endpoint => endpoint.roles.includes(role));
+    if (role === 'logs') endpoints.sort((a, b) => a.logOrder - b.logOrder);
+    const preferred = endpoints.map(endpoint => endpoint.url);
+    return uniqueUrls([...(rpcUrl ? [rpcUrl] : []), ...preferred]);
+  };
   const peerOrigins = new Set();
   const peers = roleUrls('snapshot').filter(url => {
     const origin = new URL(url).origin;
@@ -104,12 +124,27 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     peerOrigins.add(origin);
     return true;
   }).map(url => createPublicClient({ chain: sepolia, transport: checked.get(url) }));
-  const roleClient = role => createPublicClient({ chain: sepolia, transport: fallback(roleUrls(role).map(url => checked.get(url)), {
-    rank: false, retryCount: 0,
-    // Identity/hash failures always stop, even if a wrapped message also mentions limits.
-    shouldThrow: error => signal?.aborted || isTrustError(error) || (!isRpcAvailabilityError(error) && shouldStop(error)),
+  // Identity/hash failures always stop, even if a wrapped message mentions limits.
+  const shouldThrow = error => signal?.aborted || isTrustError(error) || (!isRpcAvailabilityError(error) && shouldStop(error));
+  const stateClient = createPublicClient({ chain: sepolia, transport: fallback(roleUrls('state').map(url => checked.get(url)), {
+    rank: false, retryCount: 0, shouldThrow,
   }) });
-  const stateClient = roleClient('state'), logsClient = roleClient('logs');
+  const logPeers = roleUrls('logs').map(url => createPublicClient({ chain: sepolia, transport: checked.get(url) }));
+  const logsClient = createPublicClient({ chain: sepolia, transport: custom({ request: async args => {
+    let lastError, rangeFailure;
+    for (const peer of logPeers) {
+      try { return await peer.request(args); }
+      catch (error) {
+        if (shouldThrow(error)) throw error;
+        lastError = error;
+        if (isLogRangeError(error)) rangeFailure ??= error;
+      }
+    }
+    // A last-resort 429/cooldown must not hide an earlier range/pruned failure:
+    // discovery can still try smaller ranges after its account-hint fast path.
+    if (rangeFailure) throw new Error(`Log endpoints unavailable: ${lastError.message}`, { cause: rangeFailure });
+    throw lastError;
+  } }, { retryCount: 0 }) });
   const walletRequests = new WeakMap();
   const invalidateChain = () => chainCache.clear();
   const client = createPublicClient({ chain: sepolia, batch: { multicall: true }, transport: custom({ request: async args => {

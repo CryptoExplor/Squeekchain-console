@@ -73,7 +73,7 @@ async function installRaceHarness(page) {
     window.squeek = mount({ activityReader: async () => new Promise(resolve => { h.resolveReceipt = resolve; }), adapterFactory: (profileKey, load) => {
       h.loads.push({ profileKey, ...load });
       return {
-        networkStatus: async () => h.pendingNetwork ? new Promise(resolve => h.reads.push({ profileKey, ...load, resolve })) : network('10'),
+        networkStatus: async () => h.pendingNetwork ? new Promise(resolve => h.reads.push({ profileKey, ...load, resolve })) : h.network('10'),
         verify: async () => ({ ok: true, trusted: profileKey === 'sepolia-v6', problems: [] }),
         walletStatus: async () => holdings,
         checkpointPreview: async () => ({ ok: true, tx: { to: owner, data: '0xc2c4c5c1', value: '0' }, gas: '100' }),
@@ -174,5 +174,32 @@ test('broadcast Activity survives a profile switch, late wallet response and pag
   await expect(page.locator('#not-deployed')).toBeVisible();
   await expect(page.locator('#activity-panel')).toBeVisible();
   await expect(page.locator('#activity-list a')).toHaveAttribute('href', `https://eth-sepolia.blockscout.com/tx/${hash}`);
+  await page.evaluate(() => window.squeek.destroy());
+});
+
+
+test('v6 settlement frontier follows live reads, clears on advancement/failure/switch, never hardcodes a round', async ({ page }) => {
+  await installRaceHarness(page);
+  await page.evaluate(async () => {
+    const h = window.races, original = h.network;
+    h.frontier = '4567'; h.ready = false;
+    h.network = () => ({ ...original(h.frontier), checkpoint: { canCheckpoint: h.ready, roundSettled: h.ready, nextRound: String(BigInt(h.frontier) + 1n), reason: 'Next round is not settled' } });
+    await window.squeek.refresh();
+  });
+  await expect(page.locator('#settlement-notice')).toBeVisible();
+  await expect(page.locator('#settlement-notice')).toContainText('Settlement frontier at round 4567');
+  await expect(page.locator('#settlement-notice')).toContainText('No new rewards are being issued on this deployment at this snapshot');
+  await page.setViewportSize({ width: 320, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.evaluate(async () => { window.races.frontier = '4568'; window.races.ready = true; await window.squeek.refresh(); });
+  await expect(page.locator('#settlement-notice')).toContainText('Settlement frontier at round 4568');
+  await expect(page.locator('#settlement-notice')).not.toContainText('No new rewards');
+  await page.evaluate(async () => { window.races.network = () => { throw new Error('RPC unavailable'); }; await window.squeek.refresh(); });
+  await expect(page.locator('#settlement-notice')).toBeHidden();
+  await expect(page.locator('#settlement-notice')).toHaveText('');
+  await page.selectOption('#profile-select', 'sepolia');
+  await expect(page.locator('#settlement-notice')).toBeHidden();
+  await page.selectOption('#profile-select', 'mainnet');
+  await expect(page.locator('#settlement-notice')).toHaveText('');
   await page.evaluate(() => window.squeek.destroy());
 });
