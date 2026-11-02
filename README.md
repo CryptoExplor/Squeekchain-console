@@ -9,7 +9,8 @@ sdk/            one isomorphic core: reads + unsigned tx builders + deployment p
 web/            the console (index.html, app.js, styles.css, bundle.js) + local static server
 mcp/            stdio MCP server (reads + prepare-only transactions)
 src/            keeper CLI (optional hot key, unattended checkpoint loop)
-test/web-smoke.mjs  18-check jsdom test against live Sepolia
+test/ui.mjs        deterministic UI + telemetry tests (no network)
+test/web-smoke.mjs  optional live Sepolia integration checks
 build.mjs       esbuild bundle + tools.json + dist/ static site
 ```
 
@@ -66,12 +67,33 @@ Also worth noting from that transaction: it was sent as a **legacy type-0 transa
 
 ---
 
+
+## Holder dashboard update
+
+- **Light-first frontend:** spacious Squeekchain-inspired typography, gold accents, dotted paper background, an original inline wheel illustration, mobile layout, and a saved dark-mode preference. This is an independent community console, not the official site.
+- **Official wheel telemetry:** `/v1/status` is polled every 15 seconds for RPM, speed and daily distance. Supports ETag/304, request timeouts and Retry-After backoff. Unsupported or malformed responses show unknown; stale measurements never masquerade as current activity. Device measurements are not settled work and never enter transaction builders.
+- **Holder workspace:** visible per-profile capability cards for claims, merges, staking and DotGrid art, alongside the position table, optional token-ID claim selection, a custom survivor/donor pair picker, simulated claim batches and irreversible merge confirmation. Claims reject unowned selections rather than silently dropping IDs, and re-read ownership before preparation.
+- **Honest mainnet view:** mainnet can now be selected to inspect launch availability. It has **no configured deployment and no enabled transactions**. Adding production support requires an official mainnet deployment record, published ABIs, verified identities and transaction-flow tests; changing the chain ID alone is not sufficient.
+- **Profile isolation:** changing deployment clears chain metrics, holdings, tools, output and art; late responses from the previous profile are discarded.
+- **Tests:** `npm test` runs offline with injected adapter and API responses. It does not prove current contract availability; `npm run test:live` retains the real-network integration checks.
+
+### Name suggestions
+
+| Dapp | Repository | Why |
+|---|---|---|
+| **Squeek Station** (recommended) | `squeek-station` | A home for holder actions, network activity and developer tools. |
+| The Wheel (current) | `squeekchain-wheel` | Short, memorable and native to the hamster-powered idea. |
+| Squeek Nest | `squeek-nest` | A friendly home for NFT collections and rewards. |
+
+These are suggestions, not availability or trademark checks. The existing app branding, package name and repository have not been renamed.
+
 ## Run The Wheel locally
 
 ```bash
 npm install
 npm run web     # builds bundle + dist, serves http://localhost:5173
-npm test        # 18 checks: both profiles, holdings, art, tools, postMessage (~25s, live reads)
+npm test        # offline UI + telemetry regression checks
+npm run test:live # optional: real Sepolia integration (requires RPC connectivity)
 ```
 
 Wallet note: the page needs an injected EIP-1193 wallet (MetaMask, Rabby, Frame). Inside a sandboxed preview iframe extensions often stay out — open `http://localhost:5173` in a normal tab. Read-only inspection always works.

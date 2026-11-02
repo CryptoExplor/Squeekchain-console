@@ -20,10 +20,12 @@ import {
   CHAIN,
 } from "./bundle.js";
 
+import { createTelemetry, telemetryView } from "./telemetry.js";
+
 const EXPLORER = "https://eth-sepolia.blockscout.com";
 const THEME_KEY = "squeekchain:theme";
 
-export function mount({ doc = document, win = window } = {}) {
+export function mount({ doc = document, win = window, adapterFactory, fetcher = globalThis.fetch } = {}) {
   const $ = (id) => doc.getElementById(id);
   const el = {
     profileSelect: $("profile-select"),
@@ -92,7 +94,7 @@ export function mount({ doc = document, win = window } = {}) {
   };
 
   const state = {
-    profileKey: store.get("squeekchain:profile") ?? DEFAULT_PROFILE,
+    profileKey: getProfile(store.get("squeekchain:profile") ?? DEFAULT_PROFILE).key,
     adapter: null,
     account: null,
     chainId: null,
@@ -139,9 +141,14 @@ export function mount({ doc = document, win = window } = {}) {
   el.theme.onclick = () => applyTheme(doc.documentElement.dataset.theme === "dark" ? "light" : "dark");
 
   // ── profile switching ──────────────────────────────────────────────────────
+  let generation = 0;
+  let destroyed = false;
+  const telemetry = createTelemetry({ fetcher });
+
   function buildAdapter(profileKey) {
     const profile = getProfile(profileKey);
     if (!profile.addresses) return null;
+    if (adapterFactory) return adapterFactory(profileKey);
     return profile.abiSet === "v9"
       ? createSqueek9({ profileKey, cache: store })
       : createSqueekchain({ addresses: profile.addresses, cache: store });
@@ -153,7 +160,7 @@ export function mount({ doc = document, win = window } = {}) {
         const option = doc.createElement("option");
         option.value = p.key;
         option.textContent = p.label;
-        option.disabled = !p.addresses;
+        // Mainnet remains selectable as an honest launch-status view.
         return option;
       }),
     );
@@ -161,14 +168,24 @@ export function mount({ doc = document, win = window } = {}) {
   }
 
   async function switchProfile(profileKey) {
+    generation++;
     state.profileKey = getProfile(profileKey).key;
     store.set("squeekchain:profile", state.profileKey);
     state.adapter = buildAdapter(state.profileKey);
     state.net = state.status = state.plan = null;
     state.art.clear();
     el.art.grid.replaceChildren();
+    el.art.status.textContent = "";
+    for (const id of ["claim-ids", "merge-survivor", "merge-donor"]) $(id).value = "";
+    el.cp.out.classList.add("hidden");
+    el.holder.claimOut.classList.add("hidden");
+    el.agent.out.classList.add("hidden");
     renderProfileOptions();
     renderNetworkPlaceholder();
+    renderHolder(null);
+    renderToolOptions();
+    hideBanner();
+    void refreshTelemetry();
     if (!state.adapter) {
       showBanner(getProfile(state.profileKey).notes, "warn");
       return;
@@ -180,11 +197,58 @@ export function mount({ doc = document, win = window } = {}) {
 
   function renderNetworkPlaceholder() {
     const profile = getProfile(state.profileKey);
-    el.net.chain.textContent = profile.chainId === CHAIN.id ? "Sepolia" : String(profile.chainId);
+    for (const key of ["round", "blocks", "lag", "issued", "squeeks", "paused"]) el.net[key].textContent = "—";
+    el.cp.button.disabled = true;
+    el.cp.reason.textContent = profile.addresses ? "Waiting for verified chain state." : "Unavailable until a mainnet deployment is published and verified.";
+    el.verified.textContent = profile.addresses ? "verifying…" : "not deployed";
+    el.verified.className = "chip";
+    $("network-context").textContent = profile.chainId === 1 ? "MAINNET · NOT DEPLOYED" : profile.kind === "legacy" ? "SEPOLIA · LEGACY V6" : "SEPOLIA TESTNET";
+    $("network-mode").textContent = profile.chainId === 1 ? "Waiting for an official deployment record." : "Read freely. Sign only what you understand.";
+    renderCapabilities(profile);
+    el.net.chain.textContent = profile.chainId === CHAIN.id ? "Sepolia" : "Ethereum";
     el.net.kind.textContent = profile.kind;
     el.net.release.textContent = profile.identities?.release ?? (profile.addresses ? "docs-pinned v6" : "no deployment");
     el.net.notice.textContent = profile.notes ?? "";
     el.net.notice.className = `notice ${profile.kind === "legacy" ? "warn" : profile.kind === "experimental" ? "" : "bad"}`;
+  }
+
+  function renderCapabilities(profile) {
+    const cards = [
+      ["Claim SQK", "claim", "Simulated claims in batches of up to 32 IDs."],
+      ["Merge Squeeks", "merge", "Keep one ID. Permanently burn the donor. Raise the level."],
+      ["Staking", "deposit", "Deposit and withdrawal flows need published deployment docs."],
+      ["DotGrid art", "art", "Read deterministic artwork and traits through tokenURI."],
+    ];
+    $("capability-grid").replaceChildren(...cards.map(([title, cap, description]) => {
+      const card = doc.createElement("div"); card.className = "capability";
+      const heading = doc.createElement("h3"); heading.textContent = title;
+      const badge = doc.createElement("span"); badge.className = `chip ${profile.capabilities[cap] ? "ok" : "warn"}`;
+      badge.textContent = profile.capabilities[cap] ? "Supported" : profile.addresses ? "Awaiting published docs" : "Not deployed";
+      const note = doc.createElement("p"); note.textContent = description;
+      card.append(heading, badge, note); return card;
+    }));
+  }
+
+  async function refreshTelemetry() {
+    const current = generation;
+    const enabled = state.profileKey === "sepolia";
+    for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
+    $("wheel-state").textContent = enabled ? "Loading" : "Unavailable";
+    $("wheel-note").textContent = enabled ? "Reading official device telemetry…" : "Device telemetry belongs to the live Sepolia deployment only.";
+    if (!enabled) return;
+    try {
+      const view = telemetryView(await telemetry.read());
+      if (destroyed || current !== generation) return;
+      $("wheel-state").textContent = view.state;
+      $("wheel-rpm").textContent = view.rpm;
+      $("wheel-speed").textContent = view.speed;
+      $("wheel-distance").textContent = view.distance;
+      $("wheel-note").textContent = view.note;
+    } catch (err) {
+      if (destroyed || current !== generation) return;
+      $("wheel-state").textContent = "Unknown";
+      $("wheel-note").textContent = `${err.message} No live reading to display.`;
+    }
   }
 
   // ── wallet ────────────────────────────────────────────────────────────────
@@ -213,6 +277,7 @@ export function mount({ doc = document, win = window } = {}) {
   }
 
   async function connect() {
+    if (!state.adapter) { showBanner("Mainnet is not deployed. Select Sepolia to connect and inspect.", "warn"); return null; }
     const p = provider();
     if (!p) {
       showBanner(
@@ -350,7 +415,7 @@ export function mount({ doc = document, win = window } = {}) {
     el.holder.owner.textContent = status ? status.owner : "—";
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
-    if (!status) return;
+    if (!status) { el.holder.claim.disabled = true; $("btn-custom-merge").disabled = true; return; }
 
     const has = status.totals.count > 0;
     const signerOwns = Boolean(state.account && status.owner.toLowerCase() === state.account.toLowerCase());
@@ -368,6 +433,8 @@ export function mount({ doc = document, win = window } = {}) {
             : ""
           : "read-only view: connect this wallet to claim or merge";
     el.holder.claim.disabled = state.busy || !has || !signerOwns || !caps.claim;
+    $("btn-custom-merge").disabled = state.busy || !has || !signerOwns || !caps.merge;
+    $("claim-ids").disabled = !caps.claim;
     el.holder.watchRow.classList.toggle("hidden", Boolean(state.account));
 
     // table
@@ -394,7 +461,7 @@ export function mount({ doc = document, win = window } = {}) {
           btn.className = "btn btn-ghost";
           btn.style.padding = "2px 8px";
           btn.textContent = "view";
-          btn.onclick = () => loadArt([s.tokenId]);
+          btn.onclick = () => { selectTab("art"); withBusy(() => loadArt([s.tokenId])); };
           td.appendChild(btn);
         } else td.textContent = s[c.key] ?? "—";
         tr.appendChild(td);
@@ -430,15 +497,19 @@ export function mount({ doc = document, win = window } = {}) {
   // ── refresh ───────────────────────────────────────────────────────────────
   async function refreshNetwork() {
     if (!state.adapter) return null;
+    const adapter = state.adapter, current = generation;
     try {
-      const net = await state.adapter.networkStatus();
+      const [net, v] = await Promise.all([adapter.networkStatus(), adapter.verify()]);
+      if (destroyed || current !== generation) return null;
       renderNetwork(net);
-      const v = await state.adapter.verify();
       el.verified.textContent = v.ok ? "verified ✓" : `${v.problems.length} problem(s)`;
       el.verified.className = `chip ${v.ok ? (v.trusted === false ? "warn" : "ok") : "bad"}`;
       el.verified.title = v.ok ? (v.trusted === false ? "identities from the official dApp bundle + API, not a published record" : "matches the docs record") : v.problems.join("; ");
       return net;
     } catch (err) {
+      if (destroyed || current !== generation) return null;
+      state.net = null;
+      renderNetworkPlaceholder();
       el.verified.textContent = "read failed";
       el.verified.className = "chip bad";
       showBanner(`Read failed: ${errorMessage(err)}. Nothing was signed.`, "bad");
@@ -452,13 +523,16 @@ export function mount({ doc = document, win = window } = {}) {
       renderHolder(null);
       return null;
     }
+    const adapter = state.adapter, current = generation;
     try {
-      const status = await state.adapter.walletStatus(owner);
+      const status = await adapter.walletStatus(owner);
+      if (destroyed || current !== generation || owner !== (state.inspected ?? state.account)) return null;
       renderWalletChipStats(status);
       let plan = null;
       if (capabilities().merge && status.totals.count > 1 && state.adapter.mergePlan) {
         plan = await state.adapter.mergePlan(owner, { status });
       }
+      if (destroyed || current !== generation || owner !== (state.inspected ?? state.account)) return null;
       renderHolder(status, plan);
       return status;
     } catch (err) {
@@ -468,8 +542,9 @@ export function mount({ doc = document, win = window } = {}) {
   }
 
   async function refreshAll() {
+    const current = generation;
     await refreshNetwork();
-    await refreshWallet();
+    if (current === generation && !destroyed) await refreshWallet();
   }
 
   const withBusy = async (fn) => {
@@ -507,11 +582,11 @@ export function mount({ doc = document, win = window } = {}) {
     return { ok: true, ...result, gas: preview.gas };
   }
 
-  async function requestClaim() {
+  async function requestClaim(tokenIds) {
     const caps = capabilities();
     if (!caps.claim) throw new Error("claims are read-only on this profile (v9 staking flows undocumented)");
     const owner = state.inspected ?? state.account;
-    const preview = await state.adapter.claimPreview(owner, undefined, {
+    const preview = await state.adapter.claimPreview(owner, tokenIds, {
       status: state.status?.owner === owner ? state.status : undefined,
     });
     showOut(el.holder.claimOut, preview);
@@ -536,6 +611,7 @@ export function mount({ doc = document, win = window } = {}) {
   }
 
   async function requestMerge(pair) {
+    if (!capabilities().merge) throw new Error("Merges are not supported on this profile.");
     const owner = state.account ?? state.inspected;
     const preview = await state.adapter.mergePreview(owner, pair.survivor, pair.donor);
     const confirmed = await confirmModal({
@@ -552,6 +628,7 @@ export function mount({ doc = document, win = window } = {}) {
 
   // ── art ───────────────────────────────────────────────────────────────────
   async function loadArt(tokenIds) {
+    const adapter = state.adapter, current = generation;
     if (!state.adapter?.art) {
       toast("this profile has no art adapter", "err");
       return [];
@@ -560,13 +637,15 @@ export function mount({ doc = document, win = window } = {}) {
     const loaded = [];
     for (const id of tokenIds) {
       try {
-        const art = state.art.get(String(id)) ?? (await state.adapter.art(id));
+        const art = state.art.get(String(id)) ?? (await adapter.art(id));
+        if (destroyed || current !== generation) return [];
         state.art.set(String(id), art);
         loaded.push(art);
       } catch (err) {
         toast(`art ${id}: ${errorMessage(err)}`, "err");
       }
     }
+    if (destroyed || current !== generation) return [];
     renderArt(loaded);
     el.art.status.textContent = `${state.art.size} rendered`;
     return loaded;
@@ -641,6 +720,7 @@ export function mount({ doc = document, win = window } = {}) {
   };
 
   function buildTools() {
+    if (!state.adapter) return {};
     const caps = capabilities();
     const tools = {
       squeek_network_status: {
@@ -674,7 +754,7 @@ export function mount({ doc = document, win = window } = {}) {
         description: "Simulated claim: total SQK and 32-ID batches with gas.",
         run: async (args) => state.adapter.claimPreview(requireOwner(args), args.tokenIds),
       };
-      tools.squeek_request_claim = { description: "Open the wallet popup to claim SQK.", run: async () => requestClaim() };
+      tools.squeek_request_claim = { description: "Open the wallet popup to claim SQK.", run: async (args) => requestClaim(args.tokenIds) };
     }
     if (caps.merge) {
       tools.squeek_merge_plan = { description: "Same-level merge pairs that satisfy every onchain precondition.", run: async (args) => state.adapter.mergePlan(requireOwner(args)) };
@@ -714,11 +794,13 @@ export function mount({ doc = document, win = window } = {}) {
 
   // ── tabs + wiring ─────────────────────────────────────────────────────────
   function selectTab(name) {
+    if (!el.panels.some(p => p.dataset.panel === name)) name = "overview";
     el.tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
     el.panels.forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== name));
     store.set("squeekchain:tab", name);
   }
   el.tabs.forEach((t) => (t.onclick = () => selectTab(t.dataset.tab)));
+  doc.querySelectorAll("[data-go]").forEach(button => { button.onclick = () => { selectTab(button.dataset.go); doc.querySelector(".tabs").scrollIntoView?.({ behavior: "smooth", block: "start" }); }; });
 
   el.profileSelect.onchange = () => withBusy(() => switchProfile(el.profileSelect.value));
   el.connect.onclick = async () => {
@@ -732,9 +814,22 @@ export function mount({ doc = document, win = window } = {}) {
     }
     await withBusy(connect);
   };
-  el.refresh.onclick = () => withBusy(refreshAll);
+  el.refresh.onclick = () => { void refreshTelemetry(); return withBusy(refreshAll); };
   el.cp.button.onclick = () => withBusy(requestCheckpoint);
-  el.holder.claim.onclick = () => withBusy(requestClaim);
+  el.holder.claim.onclick = () => withBusy(() => {
+    const raw = $("claim-ids").value.trim();
+    if (raw && !/^\d+(?:[\s,]+\d+)*$/.test(raw)) throw new Error("Use comma- or space-separated positive token IDs.");
+    const ids = raw ? raw.split(/[\s,]+/) : undefined;
+    if (ids?.some(id => BigInt(id) === 0n)) throw new Error("Token IDs must be positive.");
+    return requestClaim(ids);
+  });
+  $("btn-custom-merge").onclick = () => withBusy(() => {
+    const survivor = $("merge-survivor").value.trim(), donor = $("merge-donor").value.trim();
+    if (![survivor, donor].every(id => /^\d+$/.test(id) && BigInt(id) > 0n) || BigInt(survivor) === BigInt(donor)) throw new Error("Choose two different positive token IDs.");
+    const position = state.status?.squeeks.find(s => BigInt(s.tokenId) === BigInt(survivor));
+    if (!position) throw new Error("The survivor must be in the inspected wallet.");
+    return requestMerge({ survivor: String(BigInt(survivor)), donor: String(BigInt(donor)), nextLevel: Number(position.level) + 1 });
+  });
   el.holder.plan.onclick = () => withBusy(refreshWallet);
   el.holder.watch.onclick = async () => {
     const value = el.holder.watchInput.value.trim();
@@ -776,6 +871,8 @@ export function mount({ doc = document, win = window } = {}) {
   win.addEventListener("message", async (event) => {
     const msg = event.data;
     if (!msg || msg.type !== "squeek.tool" || typeof msg.name !== "string") return;
+    // Embedders can read, but may not trigger wallet requests across origins.
+    if (msg.name.startsWith("squeek_request_") && event.origin !== win.location.origin) return;
     const result = await callTool(msg.name, msg.args ?? {});
     const payload = { type: "squeek.result", id: msg.id ?? null, ok: !result?.error, result };
     (event.source ?? win).postMessage(payload, "*");
@@ -802,7 +899,9 @@ export function mount({ doc = document, win = window } = {}) {
   selectTab(store.get("squeekchain:tab") ?? "overview");
   if (!state.adapter) showBanner(getProfile(state.profileKey).notes, "warn");
   else refreshAll().then(renderToolOptions);
+  void refreshTelemetry();
 
+  const telemetryTimer = win.setInterval?.(() => { if (!destroyed) void refreshTelemetry(); }, 15_000);
   const timer = win.setInterval?.(() => {
     if (!state.busy && state.adapter) refreshAll();
   }, 45_000);
@@ -826,7 +925,7 @@ export function mount({ doc = document, win = window } = {}) {
     requestClaim,
     requestMerge,
     selectTab,
-    destroy: () => win.clearInterval?.(timer),
+    destroy: () => { destroyed = true; generation++; win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
   };
 }
 

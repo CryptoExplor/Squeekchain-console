@@ -487,11 +487,23 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
   }
 
   async function claimPreview(owner, tokenIds, { status: prefetched } = {}) {
+    await assertVerified();
     const address = getAddress(owner);
     const status = prefetched ?? (await walletStatus(address, { force: true }));
     const owned = status.squeeks.map((s) => BigInt(s.tokenId));
     const wanted = tokenIds?.length ? sortIds(tokenIds.map(BigInt)) : owned;
-    const ids = wanted.filter((id) => owned.includes(id));
+    const missing = wanted.find((id) => !owned.includes(id));
+    if (missing !== undefined) throw new SqueekchainError(`caller does not own token ${missing}; no IDs were dropped`, { code: "input" });
+    const ids = wanted;
+    if (ids.some(id => id <= 0n)) throw new SqueekchainError("token IDs must be positive", { code: "input" });
+    // A cached portfolio is display data, not proof of current ownership.
+    if (ids.length) {
+      const blockNumber = await client.getBlockNumber();
+      for (const id of ids) {
+        const holder = await client.readContract({ address: addr.nft, abi: nftAbi, functionName: "ownerOf", args: [id], blockNumber });
+        if (holder.toLowerCase() !== address.toLowerCase()) throw new SqueekchainError(`caller no longer owns token ${id}`, { code: "input" });
+      }
+    }
     if (ids.length === 0) return { ok: false, reason: "no live Squeeks owned by this address", batches: [] };
 
     const batches = [];
@@ -566,6 +578,7 @@ export function createSqueekchain({ rpcUrl = CHAIN.rpcUrls[0], addresses = {}, c
   }
 
   async function mergePreview(owner, survivorId, donorId) {
+    await assertVerified();
     const address = getAddress(owner);
     const [positions] = await Promise.all([positionsFor([BigInt(survivorId), BigInt(donorId)])]);
     if (positions.length !== 2) throw new SqueekchainError("both tokens need a live position", { code: "input" });

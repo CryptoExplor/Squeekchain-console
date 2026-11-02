@@ -28,7 +28,7 @@ fs.writeFileSync("web/tools.json", `${JSON.stringify(buildManifest(), null, 2)}\
 const OUT = "dist";
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
-for (const file of ["index.html", "styles.css", "app.js", "bundle.js", "tools.json"]) {
+for (const file of ["index.html", "styles.css", "app.js", "telemetry.js", "bundle.js", "tools.json"]) {
   fs.copyFileSync(path.join("web", file), path.join(OUT, file));
 }
 fs.mkdirSync(path.join(OUT, "fonts"), { recursive: true });
