@@ -1,0 +1,50 @@
+{
+  "name": "the-wheel",
+  "version": "1.0.0",
+  "private": false,
+  "description": "The Wheel \u2014 a Squeekchain console: wallet-signed checkpoint/claim/merge for Squeek holders, permissionless checkpoints for everyone, plus an SDK and MCP server for agents.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "web": "node build.mjs && node web/server.mjs",
+    "serve": "node build.mjs && node web/server.mjs",
+    "dev": "node web/server.mjs",
+    "mcp": "node mcp/server.js",
+    "test:web": "node test/web-smoke.mjs",
+    "verify": "node src/cli.js verify",
+    "status": "node src/cli.js status",
+    "checkpoint": "node src/cli.js checkpoint",
+    "claim": "node src/cli.js claim",
+    "merge": "node src/cli.js merge",
+    "mine": "node src/cli.js mine",
+    "test": "node test/web-smoke.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.57.14"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "jsdom": "^29.1.1"
+  },
+  "bin": {
+    "the-wheel-mcp": "mcp/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/<you>/the-wheel.git"
+  },
+  "keywords": [
+    "squeekchain",
+    "sqk",
+    "sepolia",
+    "nft",
+    "mining",
+    "mcp",
+    "viem"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/<you>/the-wheel"
+}

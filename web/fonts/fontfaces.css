@@ -1,0 +1,63 @@
+@font-face {
+  font-family: "Barlow Condensed";
+  font-style: normal;
+  font-weight: 200;
+  font-display: swap;
+  src: url("./fonts/barlow-condensed-200.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("./fonts/barlow-condensed-300.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/barlow-condensed-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/barlow-condensed-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/ibm-plex-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/ibm-plex-mono-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Quicksand";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/quicksand-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Quicksand";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/quicksand-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Quicksand";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/quicksand-700.woff2") format("woff2");
+}

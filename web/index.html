@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Wheel · Squeekchain console</title>
+    <meta name="description" content="The Wheel — checkpoint, claim, merge and inspect Squeeks on Squeekchain. Reads are permissionless; owner actions are signed in your own wallet." />
+    <meta name="theme-color" content="#f5f5f7" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='6' fill='%2316161c'/><g fill='none' stroke='%23ffc048' stroke-width='2.2'><circle cx='20' cy='20' r='11'/><circle cx='20' cy='20' r='3.4'/><path d='M20 9v3.6M20 27.4V31M9 20h3.6M27.4 20H31'/></g></svg>" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6">
+            <circle cx="12" cy="12" r="9" stroke="#ffc048" />
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+          </svg>
+        </div>
+        <div>
+          <h1>The Wheel</h1>
+          <span class="label">Squeekchain console</span>
+        </div>
+      </div>
+      <div class="toolbar">
+        <select id="profile-select" title="Deployment"></select>
+        <span class="chip" id="verified-chip">verifying…</span>
+        <span class="chip" id="wallet-chip">not connected</span>
+        <button class="btn btn-primary" id="btn-connect">Connect wallet</button>
+        <button class="btn icon" id="btn-theme" title="Toggle theme" aria-label="Toggle theme">☾</button>
+        <button class="btn icon" id="btn-refresh" title="Refresh" aria-label="Refresh">↻</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="banner" class="notice hidden"></div>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+        <button class="tab" role="tab" data-tab="holdings" aria-selected="false">Holdings</button>
+        <button class="tab" role="tab" data-tab="art" aria-selected="false">Art</button>
+        <button class="tab" role="tab" data-tab="agent" aria-selected="false">Agent</button>
+      </nav>
+
+      <!-- ── overview ──────────────────────────────────────────────────────── -->
+      <section data-panel="overview">
+        <div class="panel" id="profile-panel">
+          <div class="panel-head">
+            <h2>Deployment</h2>
+            <span class="panel-note" id="profile-release">—</span>
+          </div>
+          <div class="grid cols-4">
+            <div class="stat"><span class="label">Network</span><strong id="net-chain">—</strong></div>
+            <div class="stat"><span class="label">Kind</span><strong id="net-kind">—</strong></div>
+            <div class="stat"><span class="label">Settled round</span><strong id="net-round">—</strong></div>
+            <div class="stat"><span class="label">Squeek blocks</span><strong id="net-blocks">—</strong></div>
+            <div class="stat"><span class="label">Checkpoint lag</span><strong id="net-lag">—</strong></div>
+            <div class="stat"><span class="label">Issued / minted</span><strong id="net-issued">—</strong></div>
+            <div class="stat"><span class="label">Squeeks live</span><strong id="net-squeeks">—</strong></div>
+            <div class="stat"><span class="label">Core paused</span><strong id="net-paused">—</strong></div>
+          </div>
+          <div class="notice hidden" id="profile-notice"></div>
+        </div>
+
+        <div class="panel" id="checkpoint-panel">
+          <div class="panel-head">
+            <h2>Checkpoint <span class="label">anyone can run it</span></h2>
+            <span class="panel-note">permissionless · no caller reward · you pay gas</span>
+          </div>
+          <p class="muted small" id="cp-explain">
+            Turns settled rounds into issued SQK. Holders cannot claim until someone checkpoints, so this is the job
+            a wallet without Squeeks can do.
+          </p>
+          <div class="row">
+            <button class="btn btn-gold" id="btn-checkpoint" disabled>Simulate &amp; checkpoint</button>
+            <span class="mono small" id="cp-reason">—</span>
+          </div>
+          <pre class="out hidden" id="cp-result"></pre>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>How SQK is earned here</h2></div>
+          <div class="grid cols-2">
+            <div class="stat">
+              <span class="label">No Squeek?</span>
+              <strong style="font-family: var(--sqk-font-voice); font-size: 13px; font-weight: 500">
+                You can run checkpoints, but power — and therefore rewards — comes only from owning Squeeks.
+              </strong>
+            </div>
+            <div class="stat">
+              <span class="label">Holder?</span>
+              <strong style="font-family: var(--sqk-font-voice); font-size: 13px; font-weight: 500">
+                Claim your credit, merge pairs to raise level and power, and check cooldowns before every merge.
+              </strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── holdings ──────────────────────────────────────────────────────── -->
+      <section data-panel="holdings" class="hidden">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Holdings</h2>
+            <span class="panel-note" id="holder-owner">—</span>
+          </div>
+          <div class="row" id="watch-row">
+            <input id="watch-input" placeholder="0x… inspect any address read-only" spellcheck="false" />
+            <button class="btn" id="btn-watch">Inspect</button>
+          </div>
+
+          <div id="holder-body" class="hidden">
+            <div class="grid cols-4" style="margin: 12px 0">
+              <div class="stat"><span class="label">Squeeks</span><strong id="holder-count">—</strong></div>
+              <div class="stat"><span class="label">Power</span><strong id="holder-power">—</strong></div>
+              <div class="stat"><span class="label">Share</span><strong id="holder-share">—</strong></div>
+              <div class="stat accent"><span class="label">Claimable</span><strong id="holder-claimable">—</strong></div>
+            </div>
+            <div class="row">
+              <button class="btn btn-primary" id="btn-claim" disabled>Simulate &amp; claim</button>
+              <button class="btn" id="btn-plan">Refresh merge plan</button>
+              <span class="mono small muted" id="holder-hint"></span>
+            </div>
+            <pre class="out hidden" id="claim-result"></pre>
+
+            <div class="table-wrap" style="margin-top: 12px">
+              <table>
+                <thead id="squeeks-head"></thead>
+                <tbody id="squeeks-tbody"></tbody>
+              </table>
+            </div>
+
+            <h3 style="margin-top: 20px">Merge plan</h3>
+            <p class="mono small muted" id="merge-note">Merging burns the donor NFT permanently and raises the survivor one level.</p>
+            <ul class="plan" id="merge-list"></ul>
+          </div>
+          <p class="muted small" id="holder-empty">Connect a wallet, or inspect an address, to see positions.</p>
+        </div>
+      </section>
+
+      <!-- ── art ───────────────────────────────────────────────────────────── -->
+      <section data-panel="art" class="hidden">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Onchain art</h2>
+            <span class="panel-note">rendered by the DotGrid renderer · shown as an isolated image</span>
+          </div>
+          <p class="muted small">
+            Each Squeek's image and traits are derived onchain from the collection seed and token ID. Load art for a
+            token, or for everything in the connected wallet.
+          </p>
+          <div class="row">
+            <input id="art-token" placeholder="token id" inputmode="numeric" style="max-width: 140px" />
+            <button class="btn" id="btn-art-one">Load token</button>
+            <button class="btn" id="btn-art-mine">Load my Squeeks</button>
+            <span class="mono small muted" id="art-status"></span>
+          </div>
+          <div class="art-grid" id="art-grid" style="margin-top: 16px"></div>
+        </div>
+      </section>
+
+      <!-- ── agent ─────────────────────────────────────────────────────────── -->
+      <section data-panel="agent" class="hidden">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Agent / SDK console</h2>
+            <span class="panel-note">same registry as MCP + window.squeek + postMessage</span>
+          </div>
+          <p class="muted small">
+            Read tools return JSON. <code>request_*</code> tools open a wallet popup, so a human still approves every
+            signature. Agents never see a private key.
+          </p>
+          <div class="row">
+            <select id="tool-call"></select>
+            <button class="btn" id="btn-run-tool">Run</button>
+            <button class="btn" id="btn-copy-manifest">Copy manifest</button>
+            <a class="btn" href="./tools.json" target="_blank" rel="noreferrer">tools.json</a>
+          </div>
+          <textarea id="tool-args" rows="3" spellcheck="false">{}</textarea>
+          <pre class="out hidden" id="tool-result"></pre>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p class="label">
+        The Wheel · testnet software · addresses come from the published deployment record (v6) and the official dApp bundle +
+        public API (live v9) · the app refuses to act when identities change · nothing here holds a key
+      </p>
+    </footer>
+
+    <div class="modal hidden" id="modal">
+      <div class="modal-box">
+        <h3 id="modal-title">Confirm</h3>
+        <p id="modal-body"></p>
+        <input id="modal-input" placeholder="type to confirm" spellcheck="false" autocomplete="off" />
+        <div class="row end" style="margin-top: 12px">
+          <button class="btn" id="btn-modal-cancel">Cancel</button>
+          <button class="btn btn-danger" id="btn-modal-confirm" disabled>Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toasts" id="toasts"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
