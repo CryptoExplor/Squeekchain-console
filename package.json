@@ -20,7 +20,7 @@
     "claim": "node src/cli.js claim",
     "merge": "node src/cli.js merge",
     "mine": "node src/cli.js mine",
-    "test": "node test/ui.mjs && node test/audit-baseline.mjs",
+    "test": "node test/ui.mjs && node test/audit-baseline.mjs && node test/review-regressions.mjs",
     "test:live": "node test/web-smoke.mjs",
     "test:audit": "node test/audit-baseline.mjs"
   },

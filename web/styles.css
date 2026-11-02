@@ -350,7 +350,7 @@ body { background-size: 16px 16px; }
 .mark svg circle:first-child { stroke: currentColor; }
 .header-link { text-decoration: none; color: var(--sqk-gray-lit); font-size: 12px; margin-right: 12px; }
 .toolbar { gap: 9px; }
-#wallet-chip { display: none; }
+#wallet-chip { display: inline-flex; flex-shrink: 0; max-width: 100%; }
 #verified-chip { font-size: 9px; max-width: 130px; }
 .btn { min-height: 38px; letter-spacing: .03em; text-transform: none; font-size: 11px; }
 .btn-primary { background: var(--sqk-gold-bright); border-color: var(--sqk-gold-bright); color: #292516; }
@@ -431,7 +431,7 @@ footer > p.label { font-size: 7px; letter-spacing: .03em; }
 :focus-visible { outline: 2px solid var(--sqk-blue); outline-offset: 4px; }
 .skip-link { position: fixed; left: 16px; top: -100px; z-index: 100; padding: 12px; background: var(--sqk-panel); }
 .skip-link:focus { top: 12px; }
-@media (max-width: 1050px) { .header-link { display: none; } .toolbar { gap: 5px; } .topbar { padding: 16px 24px; } #verified-chip { display: none; } .hero { padding: 28px; } }
+@media (max-width: 1050px) { .header-link { display: none; } .toolbar { gap: 5px; } .topbar { padding: 16px 24px; } #verified-chip { display: inline-flex; } .hero { padding: 28px; } }
 @media (max-width: 760px) {
   .topbar { position: relative; gap: 16px; } .toolbar { width: 100%; } #profile-select { flex: 1; }
   main { padding: 20px 16px 35px; } .page-intro > .label { display: none; } .hero { padding: 26px; grid-template-columns: 1fr; } .hero h1 { font-size: 56px; } .hero-art { display: none; }

@@ -13,6 +13,14 @@ The old branch in the brief (`arena/13984554-squeekchain-console`) was merged in
 
 Branding remains **The Wheel**. “Wheelhouse” is a proposed product name in this plan, not a completed rename. Obtain explicit confirmation before changing app/package branding or renaming the GitHub repository to `squeek-wheelhouse`.
 
+## Review follow-up — browser-first scope
+
+The browser-first revision supersedes the backend architecture in the original brief. The implementation remains an in-place evolution of this static app, not a new service. The Phase 2 wallet-first transport, IndexedDB log cache and custom RPC setting are **planned, not implemented by this review patch**.
+
+All five inline findings were checked against current code and were still valid. This patch keeps telemetry visible while same-profile refreshes are pending (but clears it to Unknown on failure), adds shared confirmation/art-dialog focus entry/trapping/restoration, keeps the wallet and verification chips visible at responsive breakpoints, and accepts bounded Retry-After seconds or HTTP dates. No prior retry ceiling existed in the checked-in telemetry module: the explicit ceiling is now **300 seconds**, retaining the **30-second** default for past, invalid or over-ceiling values.
+
+`test/review-regressions.mjs` covers these changes offline, including delayed API responses, profile isolation, dialog keyboard/dismissal paths, responsive CSS declarations and fake-clock backoff boundaries. jsdom CSS checks are not a visual browser/layout qualification. No contract addresses, signing flows, branding or keeper settings changed in this follow-up.
+
 ## Sources read
 
 Official sources were retrievable through the page retrieval tool. The `llms-full.txt` resource was loaded as the allowed alternative to installing the skill; no skill installer was run. Relevant standalone guides were read as well. ABI URLs were inspected, but a complete byte-for-byte remote/local ABI comparison is still outstanding; do not interpret URL availability as ABI provenance verification.
@@ -94,13 +102,13 @@ Profile notes currently assert historical live counts, frozen frontiers and depl
 - Metadata is rendered in isolated images, which is good; validate URI scheme, metadata shape/size and all DotGrid identity evidence. Do not inject metadata into markup. The merge-plan renderer uses `innerHTML`; replace it with text nodes for a stronger data boundary.
 - Token enumeration uses full logs or owner sweeps. v9 sweeping up to current `totalSupply` is not equivalent to highest issued token ID after burns. Deposited NFTs must be included separately with published, verified custody semantics or API display projections.
 - Precision: financial formatting, ETH balance, power-share arithmetic and lag calculations contain `Number` conversions. Keep financial/ID/block arithmetic as bigint and convert only bounded visual quantities or preformatted strings.
-- Telemetry (`web/telemetry.js`) has ETag/304, a 10s timeout, version check and numeric Retry-After backoff, but no explicit HTML/challenge detection, general schema validation or RPC/KV fallback. RPC cannot reconstruct live wheel RPM or launch config that has not been published: these remain Unknown. Onchain state can have an independently labeled verified RPC fallback.
+- Telemetry (`web/telemetry.js`) has ETag/304, a 10s timeout, version check and numeric Retry-After backoff, but no explicit HTML/challenge detection, general schema validation or browser RPC fallback for chain-readable data. RPC cannot reconstruct live wheel RPM or launch config that has not been published: these remain Unknown. Onchain state can have an independently labeled verified RPC fallback.
 - No API client for account earnings/activity, settlement charts, events, economy or Genesis; no pagination, snapshot-consistency or cursor-reorganization handling for those views.
 - No `/squeek/:id` routing, token share page or OG image.
 - UI typography/fonts, colors, panel/control radii, dots, light default and stored dark toggle are present. Missing system-theme-following-before-user-choice behavior, skeleton components, standardized reusable component interfaces and the requested header/footer text. No WCAG/Lighthouse or visual matching claim is supported by jsdom tests.
 - Wallet provider is `window.ethereum`; no EIP-6963 discovery or WalletConnect.
 - No Vite/TypeScript layer yet. Preserve `build.mjs` as orchestration when migrating; do not replace the repo.
-- No CSP `_headers`, Playwright E2E, Cloudflare bindings/workers/functions, scheduled tasks, alert store/delivery, remote MCP, analytics or PR preview workflow. Ignore rules also need `.env`/local Worker secret files before adding backend secrets.
+- No CSP `_headers`, Playwright E2E, analytics or PR preview workflow yet. Browser Notifications and IndexedDB log caching are also pending. Backend bindings, scheduled jobs, remote MCP and closed-tab push delivery are **not required** under the revised static scope. Ignore rules still need local credential files excluded before any optional deployment tooling is configured.
 
 ## Existing tests and measurements
 
@@ -124,20 +132,33 @@ Local gzip measurements after build (Node `gzipSync`, not browser transfer measu
 
 This baseline is below the requested 200 KB gzipped JS ceiling by a local measurement only. Vite, wallet discovery, charts and future dependencies need a build-size gate; mobile Lighthouse 90+ has **not** been demonstrated.
 
-## Cloudflare deployment boundaries
+## Browser-first Cloudflare architecture (supersedes the original backend plan)
 
-Keep `wrangler.toml` for **Pages** static output (`dist/`) and same-origin Functions routes such as `/rpc`, `/snap/*` and `/og/squeek/:id` where appropriate. Existing config is only a Pages name/output/date; no resources are provisioned.
+**Fully static Cloudflare Pages. No backend, RPC proxy, private verifier endpoint, KV snapshots, D1, Cron, Durable Objects or remote MCP service is required or will be introduced for reads or transactions.** Keep `wrangler.toml` and `build.mjs` targeting `dist/`.
 
-Cron Triggers and Durable Object class ownership require **separate Worker deployment/configuration**, not just routes in a Pages project:
+### Browser RPC selection — Phase 2
 
-- Snapshot/alert scheduled Worker: cron every 1–5 min, KV/D1 bindings, verified read clients, idempotent deliveries and source/freshness metadata. Pages and Workers share bound resources.
-- Remote MCP Worker: Agents SDK `McpAgent` Durable Object and streamable HTTP `/mcp`; route via custom-domain routing or a Pages proxy/service binding. Shared SDK tool registry; no signing keys and no owner submit tools.
-- Optional keeper Worker: separate key boundary, checkpoint-only, default off; explicit operator approval before configuration or deployment.
-- RPC proxy: fixed upstream allowlist (never arbitrary client URLs), timeouts, payload/log-range limits, actual network checks, per-IP rate-limit binding and only approved methods. No raw or wallet transaction broadcasting.
+1. Prefer the connected wallet's EIP-1193 provider only when the user is connected and `eth_chainId` is 11155111. Handle wallet account/network changes; never read another chain as Sepolia.
+2. Otherwise use viem `fallback()` across at least three public CORS-enabled Sepolia RPCs, with bounded retries/backoff on 429 and multicall batching. Candidate endpoints from the revised brief include PublicNode, `sepolia.drpc.org` and `1rpc.io/sepolia`; their browser CORS/reliability still need validation.
+3. Provide a Settings “Use my own RPC URL” option saved in localStorage. Never ship a paid RPC key in the bundle or commit a user's URL. This field selects transport, never deployment addresses or expected identities; sanitize errors so credential-bearing URLs are not logged or reflected in the UI.
 
-**RPC allowlist conflict to resolve before Phase 2:** existing verification uses `eth_getStorageAt` and actual network verification requires `eth_chainId`; pinning/reorg checks use `eth_getBlockByNumber`. None is in the six-method public proxy allowlist in the brief. Do not silently broaden it or pretend `eth_call` can read EIP-1967 slots. Either explicitly approve those additional read-only methods, or keep the public six-method allowlist and run full verification in a private Worker RPC client, returning a constrained verified-snapshot endpoint. This choice must still preserve verifiable block/hash and identity evidence.
+Run graph/identity checks, ownership, balances, positions, policy, claimable, checkpoint status, core state, art decoding, simulations, cooldown math, merge planning and receipt verification **in the browser**. Pin each snapshot/multicall to one Ethereum block/hash. The old public-proxy method allowlist conflict no longer applies: direct RPC supports the read methods required by full verification.
 
-Web Push requires user opt-in, service worker lifecycle, VAPID secrets, deletion/unsubscribe and alert deduplication. Telegram requires explicit chat opt-in and a bot secret. Avoid storing endpoint secrets or personal subscription data in public KV snapshots. Never commit credentials. D1 and rate-limit binding usage, domain routing and analytics configuration need account access/approval; no resources were created here.
+Use browser `eth_getLogs` with an IndexedDB cache for wallet NFT discovery and recent settlements, checkpoints, claims and merges. Scope cache entries by chain, deployment identity and block hash; handle reorgs, pagination/chunking, transfers and burns. Discovery remains read data, not proof of live ownership for signing.
+
+### Official API exceptions — direct browser requests only
+
+- Wheel telemetry (`/v1/status`) and measurement runs/blocks/stats, which chain state cannot reconstruct.
+- Genesis launch data until matching official contract ABIs are published.
+- Account activity, seven-day earnings and the events feed are allowed API-first for speed, with browser `eth_getLogs` fallback.
+
+All other chain-readable state is browser-RPC-first, including economy/supply and settled histories. API data is display-only and must **never** enter transaction preparation. A 403 challenge, 429, invalid schema or `unavailable` response affects only its panel: show **Unknown**, keep other panels working, and use a labeled RPC/log fallback where equivalent data exists. Do not invent RPM, measurement history or unpublished launch state from RPC. Account history/log reconstruction may be incomplete; label coverage rather than filling gaps with zero.
+
+### Alerts and optional later services
+
+Current scope: user-opted-in browser Notifications while the tab is open. No closed-tab Web Push or Telegram delivery, no server-side keeper, and no always-on notification infrastructure.
+
+Phase 5 is optional and deferred: an OG image Worker and, only after a separate scope/approval decision, Cron/D1-backed Telegram or Web Push could be considered later. None is a prerequisite to this static platform. Local stdio MCP and the browser tool bridge remain; a hosted remote MCP would itself require a backend and is outside the revised scope. No Cloudflare resources were created in this audit or review patch.
 
 ## Phase PR sequence / exit criteria
 
@@ -145,11 +166,11 @@ Web Push requires user opt-in, service worker lifecycle, VAPID secrets, deletion
 |---|---|---|
 | 0 — Audit (this PR) | Status, dated evidence, offline characterization | Offline tests/build; browser + same-block RPC evidence still required before completion |
 | 1 — Design system | Existing web tokens/components/header/footer, local fonts, theme preference state; branding only after confirmation | Keyboard/dialog/focus tests, theme tests, contrast and mobile visual review |
-| 2 — Data layer | `sdk/profiles.ts`, verified single-block clients, schema-aware API, permitted RPC/verified-snapshot strategy, bigint states; retain JS/MCP compatibility through build orchestration | Mismatch/reorg/403/HTML/304/429/unavailable fixtures, profile isolation and full verification tests |
+| 2 — Data layer | `sdk/profiles.ts`, wallet-first/public-fallback browser clients, single-block verification, custom RPC setting, IndexedDB logs, scoped API exceptions, bigint states; retain JS/MCP compatibility through build orchestration | Mismatch/reorg/403/HTML/304/429/unavailable fixtures, profile isolation and full verification tests |
 | 3 — Holder workspace | Wallet/deposited portfolio, exact simulated payouts, EIP-5792, `BURN-<id>`, planner, route/share, activity/earnings | Mock-wallet tests proving no unconfirmed burn, no unsupported v9 builder, no duplicate sends; live Sepolia smoke |
 | 4 — Network and Genesis | Economy/queue/events/settlements and launch/wallet views with Unknown states | Unconfigured launch, pagination and partial-data tests; graph mismatch display |
-| 5 — Cloudflare backend | Pages Functions plus scheduled Worker, KV/D1, alerts, OG routes; optional keeper remains off | Local Worker tests for allowlist/rate limits/failover, schedules, idempotency, secret boundaries and opted-in alerts |
-| 6 — Agents | Remote MCP Worker/DO, shared generated manifest, client setup docs | Streamable-HTTP/MCP conformance and identical read/prepare semantics, no signer/submit exposure |
+| 5 — Optional later services (deferred) | No backend now; OG image Worker / closed-tab alert services require a separate approved scope | Not a static-platform acceptance gate; browser Notifications tested in current scope |
+| 6 — Agents | Keep browser tools/postMessage and local stdio MCP, generated manifest and client setup docs; no hosted MCP | Browser/stdio conformance, consistent read/prepare semantics, no signer/submit exposure |
 | 7 — Hardening | Offline fixtures, Playwright mock wallet, security headers, size/perf/accessibility CI, deployment docs and PR previews | Offline + live suites, mobile Lighthouse >=90, <200 KB initial gzip JS, reviewed CSP and preview deployment |
 
 No claim is made that later phases have been implemented or deployed in this audit PR.
@@ -158,5 +179,5 @@ No claim is made that later phases have been implemented or deployed in this aud
 
 1. Provide a browser-run identity comparison (or a browser-capable environment) and permitted Sepolia RPC connectivity for live smoke and same-block verification. No private key is needed or requested.
 2. Confirm whether branding may change to **Wheelhouse**. GitHub repo rename is a separate action requiring approval and is not part of this session's fixed branch handling.
-3. Choose the public-proxy verification strategy above before the data-layer PR. The private verifier endpoint option preserves the exact public method allowlist.
-4. Later, authorize Cloudflare account/project setup, preview deployment credentials through platform secrets, custom domain, analytics token and opt-in notification channels. Ask before paid services; do not place any credentials in chat.
+3. The RPC proxy/verification architecture decision is **resolved** by the browser-first revision: no proxy or private verifier. Phase 2 must validate wallet-first routing and public RPC CORS/failover in a real browser.
+4. Later, authorize static Pages/preview deployment setup, custom domain and optional analytics configuration through platform secrets. No backend bindings or notification-service secrets are needed for current scope. Ask before paid services; do not place any credentials in chat.

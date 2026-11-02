@@ -168,6 +168,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   async function switchProfile(profileKey) {
+    closeActiveModal?.();
     generation++;
     state.profileKey = getProfile(profileKey).key;
     store.set("squeekchain:profile", state.profileKey);
@@ -229,12 +230,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }));
   }
 
-  async function refreshTelemetry() {
+  async function refreshTelemetry({ reset = true } = {}) {
     const current = generation;
     const enabled = state.profileKey === "sepolia";
-    for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
-    $("wheel-state").textContent = enabled ? "Loading" : "Unavailable";
-    $("wheel-note").textContent = enabled ? "Reading official device telemetry…" : "Device telemetry belongs to the live Sepolia deployment only.";
+    if (reset || !enabled) {
+      for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
+      $("wheel-state").textContent = enabled ? "Loading" : "Unavailable";
+      $("wheel-note").textContent = enabled ? "Reading official device telemetry…" : "Device telemetry belongs to the live Sepolia deployment only.";
+    }
     if (!enabled) return;
     try {
       const view = telemetryView(await telemetry.read());
@@ -246,6 +249,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       $("wheel-note").textContent = view.note;
     } catch (err) {
       if (destroyed || current !== generation) return;
+      for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
       $("wheel-state").textContent = "Unknown";
       $("wheel-note").textContent = `${err.message} No live reading to display.`;
     }
@@ -332,7 +336,52 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   // ── modal ─────────────────────────────────────────────────────────────────
+  let closeActiveModal = null;
+
+  function openModal({ initialFocus = el.modal.cancel, onClose }) {
+    const previousFocus = doc.activeElement;
+    const box = el.modal.root.querySelector(".modal-box");
+    const focusable = () => [...box.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')]
+      .filter(node => node.tabIndex >= 0 && !node.matches(':disabled') && !node.closest('.hidden, [hidden], [inert]')
+        && win.getComputedStyle(node).display !== "none" && win.getComputedStyle(node).visibility !== "hidden");
+    const focusInside = () => {
+      const nodes = focusable();
+      (nodes.includes(initialFocus) ? initialFocus : nodes[0] ?? box).focus();
+    };
+    const close = (value = false) => {
+      if (closeActiveModal !== close) return;
+      closeActiveModal = null;
+      doc.removeEventListener("keydown", onKeyDown, true);
+      doc.removeEventListener("focusin", onFocusIn);
+      el.modal.root.classList.add("hidden");
+      onClose(value);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+    const onKeyDown = event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close(false);
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        const nodes = focusable();
+        const index = nodes.indexOf(doc.activeElement);
+        const next = index < 0 ? (event.shiftKey ? nodes.length - 1 : 0)
+          : (index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length;
+        (nodes[next] ?? box).focus();
+      }
+    };
+    const onFocusIn = event => { if (!box.contains(event.target)) focusInside(); };
+    closeActiveModal = close;
+    el.modal.root.classList.remove("hidden");
+    doc.addEventListener("keydown", onKeyDown, true);
+    doc.addEventListener("focusin", onFocusIn);
+    focusInside();
+    return close;
+  }
+
   function confirmModal({ title, body, requireText = null, confirmLabel = "Confirm" }) {
+    closeActiveModal?.();
     return new Promise((resolve) => {
       el.modal.title.textContent = title;
       el.modal.body.textContent = body;
@@ -341,19 +390,20 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       el.modal.input.placeholder = requireText ? `type ${requireText}` : "";
       el.modal.confirm.textContent = confirmLabel;
       el.modal.confirm.disabled = Boolean(requireText);
-      el.modal.root.classList.remove("hidden");
-      const cleanup = (value) => {
-        el.modal.root.classList.add("hidden");
-        el.modal.confirm.onclick = null;
-        el.modal.cancel.onclick = null;
-        el.modal.input.oninput = null;
-        resolve(value);
-      };
+      const close = openModal({
+        initialFocus: requireText ? el.modal.input : el.modal.cancel,
+        onClose: value => {
+          el.modal.confirm.onclick = null;
+          el.modal.cancel.onclick = null;
+          el.modal.input.oninput = null;
+          resolve(value);
+        },
+      });
       el.modal.input.oninput = () => {
         el.modal.confirm.disabled = requireText ? el.modal.input.value.trim() !== requireText : false;
       };
-      el.modal.cancel.onclick = () => cleanup(false);
-      el.modal.confirm.onclick = () => cleanup(true);
+      el.modal.cancel.onclick = () => close(false);
+      el.modal.confirm.onclick = () => close(true);
     });
   }
 
@@ -670,6 +720,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   function openArtDetail(item) {
+    closeActiveModal?.();
     el.modal.title.textContent = item.name ?? `Squeek #${item.tokenId}`;
     el.modal.body.replaceChildren();
     const wrap = doc.createElement("div");
@@ -700,15 +751,15 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.modal.confirm.textContent = "Close";
     el.modal.confirm.disabled = false;
     el.modal.confirm.className = "btn btn-primary";
-    el.modal.root.classList.remove("hidden");
-    const close = () => {
-      el.modal.root.classList.add("hidden");
-      el.modal.confirm.onclick = null;
-      el.modal.cancel.onclick = null;
-      el.modal.confirm.className = "btn btn-danger";
-    };
-    el.modal.confirm.onclick = close;
-    el.modal.cancel.onclick = close;
+    const close = openModal({
+      onClose: () => {
+        el.modal.confirm.onclick = null;
+        el.modal.cancel.onclick = null;
+        el.modal.confirm.className = "btn btn-danger";
+      },
+    });
+    el.modal.confirm.onclick = () => close();
+    el.modal.cancel.onclick = () => close();
   }
 
   // ── tool registry ─────────────────────────────────────────────────────────
@@ -814,7 +865,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     await withBusy(connect);
   };
-  el.refresh.onclick = () => { void refreshTelemetry(); return withBusy(refreshAll); };
+  el.refresh.onclick = () => { void refreshTelemetry({ reset: false }); return withBusy(refreshAll); };
   el.cp.button.onclick = () => withBusy(requestCheckpoint);
   el.holder.claim.onclick = () => withBusy(() => {
     const raw = $("claim-ids").value.trim();
@@ -901,7 +952,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   else refreshAll().then(renderToolOptions);
   void refreshTelemetry();
 
-  const telemetryTimer = win.setInterval?.(() => { if (!destroyed) void refreshTelemetry(); }, 15_000);
+  const telemetryTimer = win.setInterval?.(() => { if (!destroyed) void refreshTelemetry({ reset: false }); }, 15_000);
   const timer = win.setInterval?.(() => {
     if (!state.busy && state.adapter) refreshAll();
   }, 45_000);
@@ -925,7 +976,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim,
     requestMerge,
     selectTab,
-    destroy: () => { destroyed = true; generation++; win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
+    destroy: () => { closeActiveModal?.(); destroyed = true; generation++; win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
   };
 }
 

@@ -1,4 +1,15 @@
 // Display-only device telemetry. Never used as input to an unsigned transaction.
+const DEFAULT_RETRY_SECONDS = 30;
+const MAX_RETRY_SECONDS = 300;
+
+// Accept seconds or an HTTP date; never let a bad header suspend polling indefinitely.
+function retryDelaySeconds(header, timestamp) {
+  const value = header?.trim();
+  const seconds = value ? Number(value) : NaN;
+  const delay = Number.isFinite(seconds) ? seconds : value ? (Date.parse(value) - timestamp) / 1000 : NaN;
+  return Number.isFinite(delay) && delay > 0 && delay <= MAX_RETRY_SECONDS ? delay : DEFAULT_RETRY_SECONDS;
+}
+
 export function createTelemetry({ fetcher = globalThis.fetch, now = Date.now } = {}) {
   let etag = null;
   let cached = null;
@@ -12,8 +23,10 @@ export function createTelemetry({ fetcher = globalThis.fetch, now = Date.now } =
       });
       if (response.status === 304 && cached) return cached;
       if (!response.ok) {
-        const delay = Number(response.headers.get('Retry-After'));
-        if (response.status === 429 || response.status === 503) retryAt = now() + (Number.isFinite(delay) && delay > 0 ? delay : 30) * 1000;
+        if (response.status === 429 || response.status === 503) {
+          const timestamp = now();
+          retryAt = timestamp + retryDelaySeconds(response.headers.get('Retry-After'), timestamp) * 1000;
+        }
         throw new Error(`Official API unavailable (HTTP ${response.status}).`);
       }
       const data = await response.json();
