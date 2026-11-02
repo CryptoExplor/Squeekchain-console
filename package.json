@@ -20,8 +20,9 @@
     "claim": "node src/cli.js claim",
     "merge": "node src/cli.js merge",
     "mine": "node src/cli.js mine",
-    "test": "node test/ui.mjs",
-    "test:live": "node test/web-smoke.mjs"
+    "test": "node test/ui.mjs && node test/audit-baseline.mjs",
+    "test:live": "node test/web-smoke.mjs",
+    "test:audit": "node test/audit-baseline.mjs"
   },
   "dependencies": {
     "viem": "^2.57.14"

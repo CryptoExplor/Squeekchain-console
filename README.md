@@ -1,5 +1,7 @@
 # The Wheel
 
+> **Evolution audit:** see [docs/STATUS.md](docs/STATUS.md) for the Wheelhouse phase plan, current safety gaps, deployment-record/API mismatch and incomplete live qualification. Existing feature descriptions below describe implemented paths, not production approval. Branding and repository naming remain unchanged pending confirmation.
+
 **The Wheel** is a wallet-first console for [Squeekchain](https://squeekchain.com) — a wheel you spin for SQK: **anyone can checkpoint**, **Squeek holders can claim, merge and inspect**, and **agents can drive the whole thing** over MCP or `postMessage` — with every signature happening in the user's own wallet.
 
 Built light-first in Squeekchain's own design language (Barlow Condensed / IBM Plex Mono / Quicksand, gold `#d9a017` + blue `#4460cf`, 10px panels, 4px controls, dotted grid), with a dark theme one click away. The three typefaces are **vendored as woff2 in `web/fonts`** — no CDN, no third-party request at runtime.
