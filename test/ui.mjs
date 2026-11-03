@@ -29,7 +29,10 @@ win.ethereum = { request: async ({ method }) => method === 'eth_chainId' ? '0xaa
 const api = mount({ doc: win.document, win, adapterFactory: () => adapter, fetcher: async () => response() });
 await api.refresh();
 assert.equal(win.document.documentElement.dataset.theme, 'light');
+assert.equal($('btn-theme').getAttribute('aria-pressed'), 'false');
 $('btn-theme').click(); assert.equal(win.document.documentElement.dataset.theme, 'dark');
+assert.equal($('btn-theme').getAttribute('aria-pressed'), 'true');
+assert.equal($('btn-theme').title, 'Switch to light theme');
 $('btn-theme').click(); assert.equal(win.localStorage.getItem('squeekchain:theme'), 'light');
 assert.equal($('net-round').textContent, '1000');
 assert.equal($('settlement-notice').classList.contains('hidden'), true, 'v9 must not show the v6 settlement notice');

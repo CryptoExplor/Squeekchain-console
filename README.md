@@ -4,6 +4,8 @@ A static, browser-first Squeekchain holder console. The app is branded **Wheelho
 
 **Phase 1 WIP — Phase 0 offline audit complete; live qualification deferred to the pre-merge gate, not passed.** Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
 
+The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
+
 ## Deployments and safety
 
 | Profile | Status |

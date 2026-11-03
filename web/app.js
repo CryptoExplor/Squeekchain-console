@@ -143,7 +143,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     theme = theme === "dark" ? "dark" : "light";
     doc.documentElement.dataset.theme = theme;
     el.theme.textContent = theme === "dark" ? "☀" : "☾";
-    doc.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#0b0b0d" : "#f5f5f7");
+    el.theme.setAttribute("aria-pressed", String(theme === "dark"));
+    el.theme.title = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+    const surface = win.getComputedStyle?.(doc.documentElement)?.getPropertyValue("--sqk-bg").trim();
+    doc.querySelector('meta[name="theme-color"]')?.setAttribute("content", surface || (theme === "dark" ? "#10120f" : "#fafaf7"));
     store.set(THEME_KEY, theme);
   }
   el.theme.onclick = () => applyTheme(doc.documentElement.dataset.theme === "dark" ? "light" : "dark");

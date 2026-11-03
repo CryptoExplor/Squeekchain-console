@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Wheelhouse · Squeekchain console</title>
     <meta name="description" content="Wheelhouse — checkpoint, claim, merge and inspect Squeeks on Squeekchain. Reads are permissionless; owner actions are signed in your own wallet." />
-    <meta name="theme-color" content="#f5f5f7" />
-    <script>try { document.documentElement.dataset.theme = localStorage.getItem('squeekchain:theme') === 'dark' ? 'dark' : 'light'; } catch { /* light default */ }</script>
+    <meta name="theme-color" content="#fafaf7" />
+    <script>try { const theme = localStorage.getItem('squeekchain:theme') === 'dark' ? 'dark' : 'light'; document.documentElement.dataset.theme = theme; document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#10120f' : '#fafaf7'; } catch { /* light default */ }</script>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='6' fill='%2316161c'/><g fill='none' stroke='%23ffc048' stroke-width='2.2'><circle cx='20' cy='20' r='11'/><circle cx='20' cy='20' r='3.4'/><path d='M20 9v3.6M20 27.4V31M9 20h3.6M27.4 20H31'/></g></svg>" />
   </head>
@@ -23,7 +23,7 @@
         </div>
         <div>
           <span class="brand-name">WHEELHOUSE<span class="brand-dot">.</span></span>
-          <span class="label">A Squeekchain holder console</span>
+          <span class="label">Independent Squeekchain console</span>
         </div>
       </div>
       <div class="toolbar">
@@ -33,7 +33,7 @@
         <span class="chip" id="verified-chip" role="status" aria-live="polite">verifying…</span>
         <span class="chip" id="wallet-chip">not connected</span>
         <button class="btn btn-primary" id="btn-connect">Connect wallet</button>
-        <button class="btn icon" id="btn-theme" title="Toggle theme" aria-label="Toggle theme">☾</button>
+        <button class="btn icon" id="btn-theme" type="button" title="Switch to dark theme" aria-label="Toggle theme" aria-pressed="false">☾</button>
         <button class="btn icon" id="btn-refresh" title="Refresh" aria-label="Refresh">↻</button>
       </div>
     </header>

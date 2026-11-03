@@ -237,3 +237,57 @@ test('offline browser wire: state TypeError/cooldown fail over through bundled t
   expect(result.failures.some(record => record.availability && record.method === 'eth_getStorageAt' && record.causeChain.some(cause => cause.name === 'TypeError'))).toBe(true);
   expect(result.cooldownFailures.some(record => record.causeChain.some(cause => cause.kind === 'cooldown'))).toBe(true);
 });
+
+test('offline design system: light/dark contrast, readable labels, theme state and focus', async ({ page }) => {
+  await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await page.goto('/');
+  await page.waitForFunction(() => window.squeek);
+  await page.evaluate(() => {
+    window.squeek.destroy();
+    const fixture = document.createElement('section');
+    fixture.id = 'design-fixture'; fixture.className = 'panel';
+    fixture.innerHTML = '<span class="muted">Secondary text</span> <span class="label">Onchain reads</span> <span class="chip ok">Verified</span> <span class="chip warn">Unknown</span> <span class="chip bad">Unavailable</span> <button class="btn btn-primary">Primary</button> <button class="btn btn-danger">Confirm burn</button>';
+    document.querySelector('main').prepend(fixture);
+  });
+  const theme = page.getByRole('button', { name: 'Toggle theme' });
+  const luminance = color => {
+    const channels = color.match(/[\d.]+/g).slice(0, 3).map(value => {
+      const channel = Number(value) / 255;
+      return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+    });
+    return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+  };
+  const expectContrast = record => {
+    const values = [luminance(record.color), luminance(record.background)].sort((a, b) => b - a);
+    expect((values[0] + .05) / (values[1] + .05), `${record.label}: ${record.color} on ${record.background}`).toBeGreaterThanOrEqual(4.5);
+  };
+  for (const mode of ['light', 'dark']) {
+    await expect(page.locator('html')).toHaveAttribute('data-theme', mode);
+    await expect(theme).toHaveAttribute('aria-pressed', String(mode === 'dark'));
+    const records = await page.evaluate(() => {
+      const fixture = document.querySelector('#design-fixture');
+      return [...fixture.children].map(node => {
+        const style = getComputedStyle(node);
+        return { label: node.className, color: style.color, background: style.backgroundColor === 'rgba(0, 0, 0, 0)' ? getComputedStyle(fixture).backgroundColor : style.backgroundColor };
+      });
+    });
+    records.forEach(expectContrast);
+    expect(await page.locator('#design-fixture .label').evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(11);
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', mode === 'light' ? '#fafaf7' : '#10120f');
+    for (const selector of ['.btn-primary', '.btn-danger']) {
+      const button = page.locator(`#design-fixture ${selector}`);
+      await button.hover();
+      expectContrast(await button.evaluate(node => ({ label: `${node.className}:hover`, color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor })));
+    }
+    await theme.focus();
+    await expect(theme).toBeFocused();
+    expect(await theme.evaluate(node => parseFloat(getComputedStyle(node).outlineWidth))).toBeGreaterThanOrEqual(3);
+    await theme.press('Enter');
+  }
+  await expect(theme).toHaveAttribute('aria-pressed', 'false');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page.getByRole('button', { name: 'Toggle theme' })).toHaveAttribute('aria-pressed', 'false');
+  await page.evaluate(() => window.squeek.destroy());
+});
