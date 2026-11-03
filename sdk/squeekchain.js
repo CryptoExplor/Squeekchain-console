@@ -396,6 +396,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
     addresses: addr, rpcUrl, client, invalidateChain: context.invalidateChain,
     verify: () => run(async () => verification),
     assertVerified: () => run(async () => verification),
+    rpcDiagnostics: () => context.rpcDiagnostics?.() ?? [],
     networkStatus: () => run(networkStatus),
     walletStatus: owner => run(() => walletStatus(owner)),
     discoverTokenIds: owner => run(() => discoverTokenIds(owner)),

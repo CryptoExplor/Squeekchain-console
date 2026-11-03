@@ -38,7 +38,7 @@ export default class LiveQualificationReporter {
   onTestEnd(test, result) {
     const evidence = {};
     for (const attachment of result.attachments ?? []) {
-      if (!['public-rpc-evidence.json', 'verified-network-snapshot.json'].includes(attachment.name)) continue;
+      if (!['public-rpc-evidence.json', 'verified-network-snapshot.json', 'rpc-network-diagnostics.json', 'rpc-tool-diagnostics.json'].includes(attachment.name)) continue;
       try {
         const body = attachment.body ?? fs.readFileSync(attachment.path);
         evidence[attachment.name] = JSON.parse(body.toString());

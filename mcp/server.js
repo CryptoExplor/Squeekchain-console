@@ -1,9 +1,10 @@
 #!/usr/bin/env node
+import { rpcToolError } from '../sdk/rpc-errors.js';
 /** Wheelhouse MCP: stdio public reads and unsigned preparations only.
  * No key configuration, signing or submission. Keeper is isolated in keeper/.
  */
 import readline from "node:readline";
-import { createSqueekchain, SqueekchainError } from "../sdk/squeekchain.js";
+import { createSqueekchain } from "../sdk/squeekchain.js";
 import { createSqueek9 } from "../sdk/v9.js";
 import { getProfile, PROFILES, DEFAULT_PROFILE } from "../sdk/deployments.js";
 import { TOOL_SPECS, buildManifest } from "../sdk/tools.js";
@@ -119,9 +120,10 @@ async function handleToolCall(id, params) {
       isError: Boolean(result && result.ok === false && (result.error || result.reason)),
     });
   } catch (err) {
-    log(`tool ${name} failed: ${err.message}`);
+    const failure = rpcToolError(err, adapter.rpcDiagnostics?.() ?? []);
+    log(`tool ${name} failed: ${failure.error}`);
     return reply(id, {
-      content: [{ type: "text", text: JSON.stringify({ error: err.message, revert: err instanceof SqueekchainError ? err.revert : null }, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(failure, null, 2) }],
       isError: true,
     });
   }

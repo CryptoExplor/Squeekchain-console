@@ -9,3 +9,5 @@ export { abortable } from "./cancellation.js";
 export { createDiscoveryStore } from "./discovery.js";
 
 export { createRpcContext } from "./rpc.js";
+
+export { rpcToolError } from './rpc-errors.js';

@@ -1,7 +1,7 @@
 import { createPublicClient, custom, fallback, http, shouldThrow as shouldStop } from 'viem';
 import { abortable, throwIfAborted } from './cancellation.js';
 import { sepolia } from 'viem/chains';
-import { isLogRangeError, isRpcAvailabilityError, isTrustError, RpcTrustError } from './rpc-errors.js';
+import { isLogRangeError, isRpcAvailabilityError, isTrustError, RpcTrustError, RpcAvailabilityError, rpcCauses, rpcErrorDiagnostics, withRpcContext } from './rpc-errors.js';
 export { RpcTrustError } from './rpc-errors.js';
 import { retryAfterMs } from './retry-after.js';
 const sessionCooldowns = new Map();
@@ -64,11 +64,14 @@ export function createSnapshotGuard(client, peers, { signal } = {}) {
 }
 
 // A shared map is in-memory/session-only. Concurrent requests share one chain-ID probe.
-export function chainCheckedRequest(request, { key, chainCache = new Map(), signal } = {}) {
+export function chainCheckedRequest(request, { key, chainCache = new Map(), signal, endpoint } = {}) {
   async function chainId() {
     throwIfAborted(signal);
     if (!chainCache.has(key)) {
-      const probe = abortable(() => request({ method: 'eth_chainId' }), signal).then(id => { requireSepolia(id); return id; });
+      const probe = abortable(() => request({ method: 'eth_chainId' }), signal).then(id => {
+        try { requireSepolia(id); } catch (error) { throw withRpcContext(error, { endpoint, method: 'eth_chainId', kind: 'chain-identity' }); }
+        return id;
+      });
       chainCache.set(key, probe);
       probe.catch(() => { if (chainCache.get(key) === probe) chainCache.delete(key); });
     }
@@ -81,14 +84,36 @@ export function chainCheckedRequest(request, { key, chainCache = new Map(), sign
     catch (error) {
       chainCache.delete(key);
       throwIfAborted(signal);
+      if (isTrustError(error)) throw error;
       // Recheck identity on errors, but never retry a reverted call with changed inputs.
-      await chainId();
+      try { await chainId(); }
+      catch (recheckError) {
+        if (isTrustError(recheckError)) throw withRpcContext(recheckError, { endpoint, method: 'eth_chainId', kind: 'chain-identity', priorError: error });
+        // Preserve the original endpoint/method failure instead of replacing it
+        // with a generic re-probe error. Neither error causes changed-input retries.
+        throw withRpcContext(error, { endpoint, method: args.method, recheckError });
+      }
       throw error;
     }
   };
 }
 
 export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Map(), rpcCooldowns = sessionCooldowns, now = Date.now } = {}) {
+  const failures = [];
+  const recordFailure = error => {
+    failures.push({ ...rpcErrorDiagnostics(error), occurredAtMs: now() });
+    if (failures.length > 32) failures.shift();
+    return error;
+  };
+  const contextualRequest = (request, endpoint) => async args => {
+    try { return await request(args); }
+    catch (error) {
+      throwIfAborted(signal);
+      const info = rpcErrorDiagnostics(error);
+      throw recordFailure(withRpcContext(error, { endpoint, method: args.method,
+        kind: info.httpStatus !== null ? 'http' : info.rpcCode !== null ? 'json-rpc' : 'transport' }));
+    }
+  };
   const uniqueUrls = urls => [...new Set(urls.map(url => new URL(url).href))];
   const urls = uniqueUrls([...(rpcUrl ? [rpcUrl] : []), ...PUBLIC_RPCS]);
   const checked = new Map(urls.map(url => {
@@ -101,13 +126,13 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
         }
       },
     }) });
-    const request = chainCheckedRequest(args => {
+    const request = chainCheckedRequest(contextualRequest(args => {
       // Skip a rate-limited endpoint, including identity re-probes. Do not sleep or
       // block healthy fallbacks. Shared across contexts/profile refreshes in this tab.
-      if (now() < (rpcCooldowns.get(url) ?? 0)) throw new Error('RPC rate limited; waiting for Retry-After backoff');
+      if (now() < (rpcCooldowns.get(url) ?? 0)) throw new RpcAvailabilityError(new Error('RPC rate limited; waiting for Retry-After backoff'), { endpoint: url, method: args.method, kind: 'cooldown' });
       return raw.request(args);
-    }, { key: url, chainCache, signal });
-    return [url, custom({ request }, { retryCount: 0 })];
+    }, url), { key: url, chainCache, signal, endpoint: url });
+    return [url, custom({ request: contextualRequest(request, url) }, { retryCount: 0 })];
   }));
   // A custom endpoint joins the peer set and is tried first for state/log reads.
   // Wallet reads remain preferred, but never replace the two independent peers.
@@ -125,7 +150,7 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     return true;
   }).map(url => createPublicClient({ chain: sepolia, transport: checked.get(url) }));
   // Identity/hash failures always stop, even if a wrapped message mentions limits.
-  const shouldThrow = error => signal?.aborted || isTrustError(error) || (!isRpcAvailabilityError(error) && shouldStop(error));
+  const shouldThrow = error => signal?.aborted || isTrustError(error) || (!isRpcAvailabilityError(error) && rpcCauses(error).some(item => shouldStop(item.error)));
   const stateClient = createPublicClient({ chain: sepolia, transport: fallback(roleUrls('state').map(url => checked.get(url)), {
     rank: false, retryCount: 0, shouldThrow,
   }) });
@@ -152,7 +177,7 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     const wallet = provider?.();
     if (wallet) {
       if (!walletRequests.has(wallet)) {
-        const request = chainCheckedRequest(args => wallet.request(args), { key: wallet, chainCache, signal });
+        const request = chainCheckedRequest(contextualRequest(args => wallet.request(args), 'wallet'), { key: wallet, chainCache, signal, endpoint: 'wallet' });
         walletRequests.set(wallet, request);
         const changed = () => chainCache.delete(wallet);
         wallet.on?.('chainChanged', changed);
@@ -161,7 +186,14 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
       const request = walletRequests.get(wallet);
       let id;
       try { id = await request({ method: 'eth_chainId' }); }
-      catch (error) { if (error instanceof RpcTrustError) chainCache.delete(wallet); }
+      catch (error) {
+        if (isTrustError(error)) {
+          chainCache.delete(wallet);
+          // An initially non-Sepolia wallet is not a read candidate. Do not
+          // swallow other nested identity/hash failures during its probe.
+          if (error.kind !== 'chain-identity') throw error;
+        }
+      }
       if (id && BigInt(id) === BigInt(SEPOLIA_ID)) {
         try { return await request(args); }
         catch (error) {
@@ -173,5 +205,5 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     }
     return abortable(() => (args.method === 'eth_getLogs' ? logsClient : stateClient).request(args), signal);
   } }, { retryCount: 0 }) });
-  return { client, invalidateChain, ...createSnapshotGuard(client, peers, { signal }) };
+  return { client, invalidateChain, rpcDiagnostics: () => failures.slice(), ...createSnapshotGuard(client, peers, { signal }) };
 }

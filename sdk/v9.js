@@ -240,6 +240,7 @@ export function createSqueek9({ profileKey = "sepolia", rpcUrl, cache = null, pr
   return {
     profile, addresses: addr, client, invalidateChain: context.invalidateChain, capabilities: profile.capabilities,
     verify: () => run(verify),
+    rpcDiagnostics: () => context.rpcDiagnostics?.() ?? [],
     networkStatus: () => run(networkStatus),
     walletStatus: owner => run(() => walletStatus(owner)),
     idsOwned: owner => run(() => idsOwned(owner)),

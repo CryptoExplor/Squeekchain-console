@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { rpcToolError } from '../sdk/rpc-errors.js';
 // Wheelhouse owner CLI: public reads, simulations and unsigned calls ONLY.
 import { createSqueekchain } from '../sdk/squeekchain.js';
 
@@ -44,6 +45,6 @@ try {
     if (result?.ok === false) process.exitCode = 1;
   }
 } catch (error) {
-  console.error(`Stopped: ${error.message}`);
+  console.error(`Stopped: ${rpcToolError(error).error}`);
   process.exitCode = 1;
 }

@@ -21,6 +21,7 @@ import {
   abortable,
   createDiscoveryStore,
   createRpcContext,
+  rpcToolError,
 } from "./bundle.js";
 
 import { createActivity } from "./activity.js";
@@ -1001,7 +1002,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       return await viewAwait(load, () => tool.run(args ?? {}));
     } catch (err) {
       if (!isCurrent(load)) return { error: "Profile changed; tool result discarded", cancelled: true };
-      return { error: errorMessage(err), revert: err?.revert ?? null };
+      return rpcToolError(err, state.adapter?.rpcDiagnostics?.() ?? []);
     }
   }
 

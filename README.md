@@ -57,6 +57,10 @@ Dispatch from the Actions tab still requires the workflow on the default branch;
 
 **Phase 0 remains incomplete until the opted-in live job for the intended source SHA actually passes.** A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
 
+### Live failure diagnostics
+
+The live gate retains `verified-network-snapshot.json` and the Playwright failure trace, and also attaches **`rpc-network-diagnostics.json`**, plus **`rpc-tool-diagnostics.json`** when a tool returns error diagnostics. The network attachment passively records endpoint origin, method, HTTP status and JSON-RPC failure codes, plus explicit browser CORS-policy signals. A browser `TypeError`/`ERR_FAILED` alone is not proof of CORS. Tool diagnostics preserve the cause chain, original errors when chain-ID availability rechecks fail, and a bounded history of endpoint failures. Endpoint URL credentials, paths/query strings, request parameters/headers and arbitrary provider messages are deliberately omitted. Trust mismatches and reverts still fail closed; availability fallback does not retry changed transaction inputs.
+
 ### Chromium downloads and local Chrome
 
 Some **linux-arm64** environments return **403** from the Playwright Chromium CDN. For `test:live`, use an **x64 machine** with the standard Chromium install above, or an already-installed local Chrome on a supported platform. The config accepts `PLAYWRIGHT_CHROMIUM_CHANNEL=chrome` and passes it as Playwright's `channel: 'chrome'`:
