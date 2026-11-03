@@ -492,3 +492,33 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 .toasts { max-width: min(380px, calc(100vw - 32px)); }
 .toast { overflow-wrap: anywhere; }
 .modal-box [for="modal-input"] { display: block; margin-top: var(--sqk-s2); }
+
+/* Review polish: deterministic control rows, compact task views, readable token cards. */
+.header-links, .header-badges, .wallet-controls, .wallet-control { display: flex; align-items: center; gap: 8px; }
+.header-badges { min-width: 0; }
+.wallet-control { min-width: 0; }
+.hero p { max-width: 50ch; }
+@media (max-width: 760px) {
+  .topbar { gap: 12px; }
+  .toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; width: 100%; }
+  .header-links { display: none; }
+  #profile-select { width: 100%; max-width: none; }
+  .header-badges { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: stretch; gap: 6px; }
+  .header-badges .chip { min-width: 0; max-width: 100%; display: flex; align-items: center; }
+  .wallet-controls { display: grid; grid-template-columns: minmax(0, 1fr) 44px 44px; align-items: end; gap: 8px; }
+  .wallet-controls:has(#btn-refresh.hidden) { grid-template-columns: minmax(0, 1fr) 44px; }
+  .wallet-control { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+  #wallet-chip { white-space: normal; overflow-wrap: anywhere; }
+  #btn-connect { justify-content: center; }
+  .wallet-controls > .btn.icon { width: 44px; height: 44px; padding: 0; }
+}
+@media (max-width: 599px) {
+  .table-wrap:has(table[data-component="Table"]) { overflow: visible; border: 0; }
+  table[data-component="Table"], table[data-component="Table"] tbody { display: block; width: 100%; }
+  table[data-component="Table"] thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table[data-component="Table"] tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--sqk-line); border-radius: var(--sqk-r-panel); margin-bottom: 12px; overflow: hidden; background: var(--sqk-panel-alt); }
+  table[data-component="Table"] td { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: left; padding: 10px 12px; }
+  table[data-component="Table"] td::before { content: attr(data-label); color: var(--sqk-gray-lit); font-size: var(--sqk-caption-size); text-transform: uppercase; letter-spacing: .04em; }
+  table[data-component="Table"] td:first-child { grid-column: 1 / -1; font-size: 20px; background: var(--sqk-bg-raised); }
+  table[data-component="Table"] tbody tr:hover { background: var(--sqk-panel-alt); }
+}

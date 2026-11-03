@@ -27,15 +27,16 @@
         </div>
       </div>
       <div class="toolbar">
-        <a class="header-link" href="https://squeekchain.com" target="_blank" rel="noreferrer">Squeekchain ↗</a>
-        <a class="header-link" href="https://docs.squeekchain.com" target="_blank" rel="noreferrer">Docs ↗</a>
+        <div class="header-links"><a class="header-link" href="https://squeekchain.com" target="_blank" rel="noreferrer">Squeekchain ↗</a>
+        <a class="header-link" href="https://docs.squeekchain.com" target="_blank" rel="noreferrer">Docs ↗</a></div>
         <select aria-label="Network deployment" id="profile-select" title="Deployment"></select>
-        <span class="chip ok" id="profile-status" role="status" aria-live="polite">Supported</span>
+        <div class="header-badges"><span class="chip ok" id="profile-status" role="status" aria-live="polite">Supported</span>
         <span class="chip" id="verified-chip" role="status" aria-live="polite">verifying…</span>
-        <span class="chip" id="wallet-chip">not connected</span>
-        <button class="btn btn-primary" id="btn-connect">Connect wallet</button>
+        <span class="chip" id="wallet-chip">not connected</span></div>
+        <div class="wallet-controls"><div class="wallet-control">
+        <button class="btn btn-primary" id="btn-connect">Connect wallet</button></div>
         <button class="btn icon" id="btn-theme" type="button" title="Switch to dark theme" aria-label="Toggle theme" aria-pressed="false">☾</button>
-        <button class="btn icon" id="btn-refresh" title="Refresh" aria-label="Refresh">↻</button>
+        <button class="btn icon" id="btn-refresh" type="button" title="Refresh" aria-label="Refresh">↻</button></div>
       </div>
     </header>
 
@@ -45,7 +46,7 @@
         <div class="hero-copy">
           <span class="eyebrow">YOUR SQUEEKS. YOUR CONTROLS.</span>
           <h1 id="hero-title">A little wheel.<br>A whole <em>ecosystem.</em></h1>
-          <p>The hamster does the work. You take it from here.<br>Explore the network, manage your Squeeks, and make<br class="desktop-break"> every turn count.</p>
+          <p>The hamster does the work. You take it from here. Explore the network, manage your Squeeks, and make every turn count.</p>
           <div class="row hero-actions"><button class="btn btn-primary" data-go="holdings">Explore my Squeeks <span>↗</span></button><a class="text-link" href="https://squeekchain.com/genesis" target="_blank" rel="noreferrer">Discover Genesis ↗</a></div>
           <span class="hero-footnote"><span class="tiny-wheel">◎</span> Hamster-powered. Wallet-signed. Always yours.</span>
         </div>

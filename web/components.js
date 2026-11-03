@@ -44,19 +44,19 @@ export function Stat(node) {
 }
 export function Table({ head, body, columns, rows, cell, caption = 'Squeek holdings at the verified snapshot' }) {
   const doc = body.ownerDocument, table = body.closest('table');
-  table.dataset.component = 'Table';
+  table.dataset.component = 'Table'; table.setAttribute('role', 'table'); body.setAttribute('role', 'rowgroup');
   if (!table.caption) { const node = table.createCaption(); node.className = 'sr-only'; node.textContent = caption; }
-  const heading = doc.createElement('tr');
+  const heading = doc.createElement('tr'); heading.setAttribute('role', 'row');
   for (const column of columns) {
-    const node = doc.createElement('th'); node.scope = 'col'; node.textContent = column.label;
+    const node = doc.createElement('th'); node.setAttribute('role', 'columnheader'); node.scope = 'col'; node.textContent = column.label;
     if (column.num) node.className = 'num';
     heading.append(node);
   }
   head.replaceChildren(heading);
   body.replaceChildren(...rows.map(row => {
-    const node = doc.createElement('tr');
+    const node = doc.createElement('tr'); node.setAttribute('role', 'row');
     for (const column of columns) {
-      const td = doc.createElement('td');
+      const td = doc.createElement('td'); td.dataset.label = column.label; td.setAttribute('role', 'cell');
       if (column.num) td.className = 'num';
       const content = cell(row, column);
       if (content?.nodeType) td.append(content); else td.textContent = valueText(content);

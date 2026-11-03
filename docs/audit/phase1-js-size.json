@@ -8,8 +8,8 @@
     },
     {
       "file": "app.js",
-      "rawBytes": 53122,
-      "gzipBytes": 14605
+      "rawBytes": 53469,
+      "gzipBytes": 14712
     },
     {
       "file": "bundle.js",
@@ -18,8 +18,8 @@
     },
     {
       "file": "components.js",
-      "rawBytes": 7610,
-      "gzipBytes": 2574
+      "rawBytes": 7866,
+      "gzipBytes": 2629
     },
     {
       "file": "telemetry.js",
@@ -27,6 +27,6 @@
       "gzipBytes": 1314
     }
   ],
-  "totalGzipBytes": 146820,
+  "totalGzipBytes": 146982,
   "budgetBytes": 200000
 }

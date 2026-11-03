@@ -22,7 +22,7 @@ The [official homepage](https://squeekchain.com/) was re-read on 2026-11-03. Its
 |---|---|
 | Panel | Enhances existing panels with labelled regions and explicit busy state; retains known readings while refreshing. |
 | Stat | Centralizes display formatting; null, absent, invalid or unavailable values become **Unknown**, while a genuine zero remains zero. |
-| Table | Wallet holdings with an accessible caption, scoped headers and a scroll container on narrow screens. Missing cells show Unknown. |
+| Table | Wallet holdings with an accessible caption, scoped headers and labelled per-token cards below 600px, with every cell visible; desktop retains the table. Missing cells show Unknown. |
 | TokenCard | Native button/keyboard interaction for gallery items; isolated `<img>`, never parsed SVG/metadata markup. |
 | ConfirmDialog | Shared confirmation/art focus trap and restoration. Merge requires exact typed BURN-<id> acknowledgement before building/simulating; subsequent simulation review/fresh verification/wallet-only signing remain unchanged. |
 | Toast | Text-only status/error notifications with status/alert semantics; long hashes wrap inside the mobile viewport. |
@@ -40,8 +40,12 @@ The header keeps live verification separate from the profile's support badge. Bo
 
 ## Distribution budget
 
-`npm run build` checks static parity (including the components module) and writes ignored `dist/js-size.json`. It independently gzips every dist JS response with Node's default gzip level and sums the result: **146,820 bytes**, under the **200,000-byte** budget. The build fails if this budget is reached/exceeded. Fonts/CSS are not counted as JavaScript. See the committed [per-file report](audit/phase1-js-size.json).
+`npm run build` checks static parity (including the components module) and writes ignored `dist/js-size.json`. It independently gzips every dist JS response with Node's default gzip level and sums the result: **146,982 bytes**, under the **200,000-byte** budget. The build fails if this budget is reached/exceeded. Fonts/CSS are not counted as JavaScript. See the committed [per-file report](audit/phase1-js-size.json).
 
-## Pre-merge review (deferred)
+## Pre-merge review (polish-head rerun pending)
 
-At the end of Phase 1, the user will review the actual app in their browser and re-trigger **run-live** on the intended final PR head. Keep PR #2 open/draft until review and pre-merge live qualification. No sandbox live retry or automatic gate trigger is part of design work.
+Phase 0 qualification passed in run 41618128325 on dd0afff. After screenshot polish, the user will review the actual app in their browser and re-trigger **run-live** on the intended final PR head. Keep PR #2 open/draft until review and pre-merge live qualification. No sandbox live retry or automatic gate trigger is part of design work.
+
+## Screenshot-review layout refinements
+
+The profile select occupies a full mobile row; badges share the next row, then wallet/theme/refresh controls align on a single row. Only Overview shows the full hero; body copy wraps naturally. Mainnet keeps one support badge and one status panel, without repeating the hero or deployment message. Mobile holdings below 600px use labelled token cards derived from the same table cells, not a second data/action source. Screenshot-only review ribbons sit below the header. These are presentation changes only; transaction/cancellation/verification rules remain intact.

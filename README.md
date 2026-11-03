@@ -2,11 +2,11 @@
 
 A static, browser-first Squeekchain holder console. The app is branded **Wheelhouse**; the GitHub repository remains **CryptoExplor/Squeekchain-console**.
 
-**Phase 1 ready for review — Phase 0 offline audit complete; live qualification deferred to the pre-merge gate, not passed.** Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
+**Phase 1 screenshot polish ready for review — Phase 0 complete.** [Live run 41618128325](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41618128325) passed on `dd0afff`; the new polish head awaits the user-triggered pre-merge rerun. PR #2 remains draft. Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
 
 The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
 
-[Review the 16 mocked screenshots](docs/screenshots/README.md): Overview, Wallet, Merge dialog and not-deployed Mainnet, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **146,820 bytes gzipped**, below the build-enforced 200,000-byte budget ([breakdown](docs/audit/phase1-js-size.json)).
+[Review the 16 mocked screenshots](docs/screenshots/README.md): Overview, Wallet, Merge dialog and not-deployed Mainnet, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **146,982 bytes gzipped**, below the build-enforced 200,000-byte budget ([breakdown](docs/audit/phase1-js-size.json)).
 
 ## Deployments and safety
 
@@ -42,7 +42,7 @@ npm run test:browser            # real Chromium, injected/offline data: componen
 npm run test:live               # real Chromium + public Sepolia RPCs; no RPC mocks or signatures
 ```
 
-The live test records public CORS RPC availability, two-peer block agreement and the published v6 graph/network snapshot. A failure must not be reported as a pass. The earlier sandbox attempt failed on the old three-endpoint list. That list has now been replaced following the user's real-network findings; the new list is **not yet live-qualified**. Run `npm run rpc:probe` and `npm run test:live` locally. The Node probe checks chain ID, a head-minus-12 block, the pinned mining implementation slot at that block, and a 10k-block NFT Transfer log query per endpoint. It does not establish browser CORS, two-peer agreement or full deployment verification. The normal CI workflow installs Chromium **and OS libraries** and runs offline/browser checks only. Live qualification is isolated in the explicit-opt-in **thewheel** workflow; a failed live check fails that manual gate.
+The live test records public CORS RPC availability, two-peer block agreement and the published v6 graph/network snapshot. A failure must not be reported as a pass. The earlier sandbox attempt failed on the old three-endpoint list. That list was replaced following the user's real-network findings; the real-browser gate **passed on dd0afff in run 41618128325**. That pass does not qualify later commits automatically. Run `npm run rpc:probe` and `npm run test:live` locally. The Node probe checks chain ID, a head-minus-12 block, the pinned mining implementation slot at that block, and a 10k-block NFT Transfer log query per endpoint. It does not establish browser CORS, two-peer agreement or full deployment verification. The normal CI workflow installs Chromium **and OS libraries** and runs offline/browser checks only. Live qualification is isolated in the explicit-opt-in **thewheel** workflow; a failed live check fails that manual gate.
 
 ### Opt-in CI qualification gate: thewheel
 
@@ -59,7 +59,7 @@ It uses read-only repository permissions and no configured secrets, wallet, keep
 
 Dispatch from the Actions tab still requires the workflow on the default branch; the label trigger avoids that bootstrap requirement. I.e. no merge of this WIP PR is needed to run the label gate. Adding subsequent commits does not rerun live RPC tests automatically: remove and re-add `run-live` to qualify a newer head.
 
-**Phase 0: Offline audit complete. Live qualification deferred to the pre-merge gate.** Phase 0 is not fully complete; the deferred live check does not block Phase 1. Before merge, the opted-in live job must pass for the intended final source SHA. A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
+**Phase 0 is complete**, supported by the offline audit and [successful live run 41618128325 on dd0afff](docs/audit/live-qualification-run-41618128325.json). The screenshot-polish head needs a new user-triggered live pass. Before merge, the opted-in live job must pass for the intended final source SHA. A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
 
 ### Live failure diagnostics
 

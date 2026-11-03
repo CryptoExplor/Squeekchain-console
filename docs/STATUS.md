@@ -4,7 +4,9 @@
 
 ## Phase plan and pre-merge qualification gate
 
-**Phase 0: Offline audit complete. Live qualification deferred to the pre-merge gate.** Phase 0 is **not fully complete** and no live pass is claimed. Per the updated plan, live qualification does not block Phase 1.
+**Phase 0: complete.** The opted-in **thewheel** live gate [run **41618128325**](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41618128325) passed on **`dd0afff7a88250d5d8aca88427ffe449c9e387c4`**. GitHub metadata independently confirms the exact head SHA, successful live-read step, public RPC probe, Chromium setup and artifact upload. [Qualification evidence](audit/live-qualification-run-41618128325.json) records the run, job and artifact IDs. Artifact contents were not downloaded; no specific block/hash/latency metrics are claimed.
+
+This qualifies **dd0afff**, not the subsequent screenshot-polish head. The user will rerun `run-live` on the new head before merge. **PR #2 remains open/draft**; manual browser review and final-head qualification are not waived.
 
 **Phase 1 implementation is ready for review on the same branch and PR #2**: Wheelhouse branding, the light design system and safety fixes. Preserve the existing architecture and every approved safety rule; do not restart or create another phase PR.
 
@@ -14,13 +16,21 @@
 | Wheelhouse branding and light design system | Continued with a consolidated neutral/gold/blue token palette, independent-console wordmark subtitle, readable 11px operational captions, semantic primary/danger controls, accessible theme state and matching browser chrome colors. Twenty-five mocked Chromium checks pass, including the 16-state review gallery, light/dark component contrast and focus; final human browser review is pending. See [design contract](DESIGN.md). |
 | Approved safety fixes | Existing capability gates, same-block graph/two-peer verification, explicit BURN confirmation, fresh simulation and wallet-only signing, profile cancellation/isolation, persistent Activity, API hint validation and key isolation remain unchanged. |
 
-**At the end of Phase 1**, the user will re-trigger `run-live` for the intended final PR head and manually check the app in their browser before merge. The pre-merge live gate must pass; offline tests, SDK probes and manual review do not substitute for that gate. The agent will not retry `test:live` in the sandbox or apply the label. PR #2 remains open/draft/WIP. After each push, report the commit, changes and offline results.
+**After this review polish**, the user will re-trigger `run-live` for the intended final PR head and manually check the app in their browser before merge. The pre-merge live gate must pass; offline tests, SDK probes and manual review do not substitute for that gate. The agent will not retry `test:live` in the sandbox or apply the label. PR #2 remains open/draft/WIP. After each push, report the commit, changes and offline results.
 
 ### Historical live evidence (not qualification)
 
 The historical real-browser `npm run test:live` check was attempted once after the RPC/discovery load fixes and failed before contract verification: all three public RPC probes in the **old** endpoint list returned `Failed to fetch`. This is not proof of rate limiting, CORS rejection, TLS failure, current identity mismatch, a frozen frontier, or transaction failure. No live reads qualified in that sandbox attempt and no transactions were submitted. The subsequent user-reported SDK successes below are partial live evidence, not a completed Playwright qualification.
 
-Evidence: [`audit/live-qualification-2026-11-02.json`](audit/live-qualification-2026-11-02.json). The earlier local-run plan is now superseded by the explicit-opt-in **thewheel** CI gate below. Retain successful artifacts from the opted-in live job for the intended final source SHA at the pre-merge gate; do not mark Phase 0 fully complete before live qualification. The historical jsdom smoke failure is not retried here. Public RPC availability is not a Phase 1 blocker.
+Evidence: [`audit/live-qualification-2026-11-02.json`](audit/live-qualification-2026-11-02.json). The earlier local-run plan is now superseded by the explicit-opt-in **thewheel** CI gate below. The successful dd0afff CI run above now completes Phase 0. Retain its qualification artifacts; a later head requires its own pre-merge rerun. The historical jsdom smoke failure is not retried here. Public RPC availability is not a Phase 1 blocker.
+
+## Screenshot review polish
+
+- At 390px the profile select is full width, the badges share one row, and wallet/theme/refresh controls share an aligned row; theme/refresh retain 44px icon buttons and accessible labels. The layout also passes the existing 320px overflow checks.
+- The hero and introductory eyebrow appear only on Overview. Task tabs and the not-deployed Mainnet view do not repeat the hero. Hero paragraph copy wraps naturally, without hard `<br>` elements.
+- Below 600px, each holdings row becomes a labelled token card: all seven cells remain visible without horizontal clipping. Desktop keeps the table with scoped headers and explicit table/row/cell semantics.
+- Mainnet has one Not deployed badge and one deployment-status panel; the redundant verification badge, network strip, hero and repeated banner are hidden. The separate prior-wallet-request warning is retained when applicable; no action capability changes.
+- The screenshot-only MOCKED REVIEW ribbon is placed below the header, not over the wordmark. All 16 light/dark desktop/mobile screenshots are regenerated with geometry, card-cell visibility, one-badge/one-panel and hero-visibility assertions.
 
 ## Phase 1 finish checklist
 
@@ -28,10 +38,10 @@ Evidence: [`audit/live-qualification-2026-11-02.json`](audit/live-qualification-
 - **Unknown, never invented zero:** absent/nonfinite/unavailable values display literal **Unknown** in network, wallet, table and telemetry views. Known zero is still a valid reading. A missing paused flag is not shown as “no.” v6 Power and v9 Deposited are distinct fields, not a fallback pretending an absent power value is zero. Failed wallet refresh clears stale holdings/actions.
 - **Shell:** Wheelhouse wordmark in header/footer, profile select with separate Supported / Read-only · unverified / Not deployed badge, light-default saved theme toggle, and explicit **independent community console · not affiliated with Squeekchain** footer. Live verification status remains separate from profile support status.
 - **Review gallery:** [16 committed mocked Chromium screenshots](screenshots/README.md): light/dark × 1280px/390px × Overview/Wallet/Merge dialog/Mainnet-not-deployed. Every capture uses synthetic fixtures; no live qualification, contract simulation, signing or real wallet submission. The PR description links the gallery and individual images. Regenerate only with explicit `UPDATE_SCREENSHOTS=1 npm run test:browser`; ordinary CI saves captures to ignored test output.
-- **JavaScript size:** **146,820 gzip bytes (146.8 kB / 143.4 KiB)**, summed across all five independently gzipped dist JS files using Node's default gzip level. Under the **200,000-byte** budget, now checked at build time. [Per-file report](audit/phase1-js-size.json); `dist/` remains ignored.
+- **JavaScript size:** **146,982 gzip bytes (147.0 kB / 143.5 KiB)**, summed across all five independently gzipped dist JS files using Node's default gzip level. Under the **200,000-byte** budget, now checked at build time. [Per-file report](audit/phase1-js-size.json); `dist/` remains ignored.
 - **Final offline validation:** all **11** `npm test` scripts, build/static parity/size budget, all **25** mocked Chromium tests, and `git diff --check` pass. Wire request budgets remain **22 cold / 12 warm / 15 wallet**.
 
-**Phase 1 ready for review**, not approval to merge. PR #2 remains open/draft. All approved safety rules and the opt-in live workflow are unchanged. No sandbox `test:live`, label operation, keeper activation or transaction submission was performed. User-triggered live qualification at the intended final head and manual browser review are still required before merge; Phase 0 is not fully complete.
+**Phase 1 ready for review**, not approval to merge. PR #2 remains open/draft. All approved safety rules and the opt-in live workflow are unchanged. No sandbox `test:live`, label operation, keeper activation or transaction submission was performed. User-triggered live qualification at the intended final head and manual browser review are still required before merge; Phase 0 is complete based on the qualified dd0afff head.
 
 ## Public RPC availability follow-up
 
@@ -43,7 +53,7 @@ Public endpoints change often; configured roles are availability preferences, no
 - Run **`npm run rpc:probe`** locally for a per-endpoint table: chain ID, a head-minus-12 block/hash, the mining EIP-1967 implementation slot at that block, and an inclusive 10k-block NFT Transfer log query. Requests time out after 15 seconds. Each capability reports independently; a log failure does not disqualify an otherwise healthy snapshot/state peer. This Node diagnostic does not test browser CORS, peer agreement or the full graph and is **not Phase 0 qualification**.
 - Offline regression coverage uses the reported `4444: pruned history unavailable`, `historical state unavailable`, `range too large`, `35: chain is not available on free plan` and `forbidden` payloads; asserts unchanged-range endpoint failover before chunk shrinking, custom/wallet behavior and trust-stop behavior.
 
-**Live qualification is deferred to the pre-merge gate**, not a Phase 1 blocker. The replacement list still awaits a green opted-in **thewheel** live job. The old failed evidence is retained, not relabeled as a pass.
+**The replacement RPC list passed the real-browser gate on dd0afff in run 41618128325.** The screenshot-polish head still needs the user-triggered rerun before merge. The old failed evidence is retained, not relabeled as a pass.
 
 ## User-reported partial live results and follow-ups
 
@@ -62,21 +72,21 @@ The v6 panel now displays its live settlement frontier and a snapshot-scoped no-
 
 README documents the linux-arm64 Chromium CDN 403 workaround: use x64 or an already-installed supported local Chrome via **`PLAYWRIGHT_CHROMIUM_CHANNEL=chrome npm run test:live`** (`channel: 'chrome'`), or the existing executable-path override. The Chrome-channel config is provided; local Chrome itself was not available/tested in this sandbox.
 
-**Phase 0 offline audit is complete; live qualification remains deferred to the pre-merge gate.** PR #2 stays open/draft/WIP while Phase 1 proceeds.
+**Phase 0 is complete: offline audit plus live qualification on dd0afff in run 41618128325.** PR #2 stays open/draft during screenshot-review polish and the new-head rerun.
 
-## Opt-in CI live gate (user re-triggers at the end of Phase 1)
+## Opt-in CI live gate (passed on dd0afff; user re-triggers for the polish head)
 
 Added **thewheel** (`.github/workflows/live.yml`), triggered by **`workflow_dispatch` or `pull_request: types: [labeled]`**, with the live job gated on explicit dispatch or the event's **`run-live`** label. Other labels skip the job; pushes/PR synchronization never run the live tests automatically. It uses `ubuntu-latest`, Node 22 from `.nvmrc`, a **15-minute** timeout and read-only repository permissions; runs `npm ci`, Chromium install with OS dependencies, `rpc:probe`, then `test:live`; and always attempts to upload Playwright HTML/report data plus fresh `live-qualification/live-qualification.json` evidence. No configured secrets or keeper/signing variables are used. Empty/skipped/incomplete suites cannot qualify; failures are not marked continue-on-error. The old non-blocking live option was removed from ordinary offline CI to leave one clearly named manual live gate.
 
-No sandbox `test:live` retry was performed for this change. Its last blocked attempt is preserved in [`audit/live-qualification-2026-11-03.json`](audit/live-qualification-2026-11-03.json); the latest user-reported SDK verification passed at block **12050470** in **1.6 seconds**, frontier **1973**, but did not include a full Playwright live-suite pass.
+No sandbox `test:live` retry was performed for this change. Its last blocked attempt is preserved in [`audit/live-qualification-2026-11-03.json`](audit/live-qualification-2026-11-03.json); the earlier user-reported SDK verification passed at block **12050470** in **1.6 seconds**, frontier **1973**, but did not include a full Playwright live-suite pass. The later successful CI run 41618128325 supplies that qualification.
 
 The workflow can now run directly from **PR #2 by adding `run-live`**; no default-branch bootstrap or WIP merge is required for that trigger. `actions/checkout` pins `github.event.pull_request.head.sha` on PR events (selected event SHA on dispatch). Both the initial JSON and live reporter use **`LIVE_SOURCE_COMMIT`** set to that exact head SHA, not the PR merge-commit `GITHUB_SHA`. If the explicit source variable is absent, the reporter uses checked-out HEAD (or unknown if Git is unavailable), never the synthetic merge-commit `GITHUB_SHA`. Read-only permissions and concurrency group **`thewheel-live-sepolia`** are unchanged; **no `pull_request_target`** or secrets are used.
 
-The user will remove/re-add the label at the end of Phase 1; the agent has not labeled/dispatched or rerun live tests. Qualify the intended final PR head before merge. **Live qualification remains deferred, not passed**; a skipped job is not qualification. No automatic phase transition is performed by the workflow. Actions-tab `workflow_dispatch` remains available only once the workflow exists on the default branch.
+The user triggered the successful dd0afff run and will remove/re-add the label for the polish head; the agent has not labeled/dispatched or rerun live tests. **Qualification passed for dd0afff, and the intended final PR head must be requalified before merge**; a skipped job is not qualification. No automatic phase transition is performed by the workflow. Actions-tab `workflow_dispatch` remains available only once the workflow exists on the default branch.
 
 ## Failed live gate 41606508624: diagnostics hardening
 
-The [run on `be43b9d`](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41606508624) failed at the live step; GitHub run metadata confirms build/setup/probe steps succeeded and artifacts uploaded. The user reports browser CORS/block agreement passed, then `squeek_network_status` returned an unknown RPC error; the same SDK call passed 3/3 in Node. **No live qualification is claimed; the gate is deferred until pre-merge.**
+The [run on `be43b9d`](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41606508624) failed at the live step; GitHub run metadata confirms build/setup/probe steps succeeded and artifacts uploaded. The user reports browser CORS/block agreement passed, then `squeek_network_status` returned an unknown RPC error; the same SDK call passed 3/3 in Node. **That failed run did not qualify; the later run 41618128325 passed on dd0afff.**
 
 Artifact **`thewheel-live-41606508624-1`** exists (ID `13217570445`), but this sandbox cannot download it: GitHub redirects artifact bytes to an unallowed Azure Blob host, and run logs to an unallowed results-receiver host; both requests ended in EOF. Therefore **`verified-network-snapshot.json` and `trace.zip` were not inspected**. The exact failing endpoint, RPC method, HTTP status, and CORS/429/JSON-RPC category remain **unknown**. An uploaded ZIP or the next gate's new diagnostic attachments is needed; do not claim a verified CI root cause.
 
@@ -90,7 +100,7 @@ The live assertions remain unchanged; the unmocked test now passively attaches *
 
 Only known fetch-failure TypeError messages (`Failed to fetch`, `Load failed`, `NetworkError when attempting to fetch resource.`, Node `fetch failed`, or `Network request failed`) qualify as transport availability. Other TypeErrors, including `Cannot read properties of undefined`, stop immediately through nested viem/HTTP/availability wrappers; they cannot trigger peer fallback, chain-ID re-probes or log-range shrinking. Snapshot peer selection and wallet probes also preserve this stop. Diagnostics label these as possible programming errors, not CORS failures, without serializing arbitrary provider messages.
 
-The offline first-endpoint regression injects the exact programming TypeError through the real viem HTTP transport, verifies the original cause survives, and asserts no next endpoint or identity re-probe is called. Existing cooldown and recognized fetch-failure fallback tests remain in place. Live qualification and manual review remain deferred until the end of Phase 1.
+The offline first-endpoint regression injects the exact programming TypeError through the real viem HTTP transport, verifies the original cause survives, and asserts no next endpoint or identity re-probe is called. Existing cooldown and recognized fetch-failure fallback tests remain in place. Live qualification subsequently passed on dd0afff; manual review and a live rerun for the new polish head remain pre-merge requirements.
 
 ## Implemented in place
 
@@ -112,7 +122,7 @@ The offline first-endpoint regression injects the exact programming TypeError th
 - `npm run test:browser`: **25 passing mocked Chromium tests**: light/saved theme and responsive layout; pending-RPC switch; three rapid switches; pending-simulation switch; late broadcast persistence/receipt tracking across a switch and reload; live-derived v6 frontier messaging/advancement/failure/switch/mobile behavior; bundled browser-wire state cooldown/TypeError failover; light/dark component contrast, readable captions, theme metadata/state and focus; 16 screenshot states; TokenCard keyboard/isolated-image/dialog focus behavior. RPC/adapters are mocked in this suite; it is not live qualification.
 - `npm run build`: passes; `dist/` output parity is a build check, not tracked generated content.
 - CI includes `npx playwright install --with-deps chromium`. The sandbox used an npm-distributed Chromium with bundled system libraries because browser download hosts are restricted; that temporary package/binary is not a project dependency or committed artifact.
-- `npm run test:live`: the **historical sandbox attempt failed / was unavailable**; the updated full suite is **pending opted-in CI qualification**. The user-reported SDK checks above do not mark it passed.
+- `npm run test:live`: the **historical sandbox attempt failed / was unavailable**; the full suite subsequently **passed opted-in CI run 41618128325 on dd0afff**. That is the Phase 0 evidence; the new polish head awaits its own rerun.
 
 ## Sources and historical evidence
 
@@ -129,4 +139,4 @@ Complete remote/local ABI byte-for-byte parity and a browser comparison with the
 
 ## Deferred / not claimed
 
-No mainnet deployment or v9 owner integration; no real signed transaction test; no closed-tab alerts, remote MCP, OG/alert Worker/D1, EIP-6963/WalletConnect integration or paid service provisioning. Official API/Genesis unavailability remains Unknown, including `launch_unconfigured`. No repository rename or PR closure. PR #2 stays WIP pending review and local live qualification.
+No mainnet deployment or v9 owner integration; no real signed transaction test; no closed-tab alerts, remote MCP, OG/alert Worker/D1, EIP-6963/WalletConnect integration or paid service provisioning. Official API/Genesis unavailability remains Unknown, including `launch_unconfigured`. No repository rename or PR closure. PR #2 stays WIP pending manual review and opted-in live qualification of the new polish head.

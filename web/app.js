@@ -268,7 +268,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     renderToolOptions();
     void refreshTelemetry();
     if (!state.adapter) {
-      showBanner(getProfile(state.profileKey).notes + (state.busy ? " A prior wallet request may still complete; check that wallet before retrying." : ""), "warn");
+      if (state.busy) showBanner("A prior wallet request may still complete; check that wallet before retrying.", "warn");
       return;
     }
     await refreshAll();
@@ -280,7 +280,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $("not-deployed").classList.toggle("hidden", deployed);
     $("not-deployed-note").textContent = deployed ? "" : getProfile(state.profileKey).notes;
     for (const node of [el.connect, el.refresh, ...doc.querySelectorAll('[data-go], .rpc-settings')]) node.classList.toggle("hidden", !deployed);
-    if (!deployed) el.panels.forEach(panel => panel.classList.add("hidden"));
+    el.verified.classList.toggle('hidden', !deployed);
+    doc.querySelector('.network-strip').classList.toggle('hidden', !deployed);
+    if (!deployed) {
+      el.panels.forEach(panel => panel.classList.add("hidden"));
+      updateHeroVisibility(null);
+    }
     else selectTab(store.get("squeekchain:tab") ?? "overview");
   }
 
@@ -921,9 +926,15 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
   }
 
+  function updateHeroVisibility(tab) {
+    const show = tab === 'overview' && Boolean(getProfile(state.profileKey).addresses);
+    for (const node of doc.querySelectorAll('.hero, .page-intro')) node.classList.toggle('hidden', !show);
+  }
+
   // ── tabs + wiring ─────────────────────────────────────────────────────────
   function selectTab(name) {
     if (!el.panels.some(p => p.dataset.panel === name)) name = "overview";
+    updateHeroVisibility(name);
     el.tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
     el.panels.forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== name));
     store.set("squeekchain:tab", name);
@@ -1041,8 +1052,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   state.adapter = buildAdapter(state.profileKey);
   renderNetworkPlaceholder();
   renderDeploymentVisibility();
-  if (!state.adapter) showBanner(getProfile(state.profileKey).notes, "warn");
-  else refreshAll().then(() => { if (!destroyed) renderToolOptions(); });
+  if (state.adapter) refreshAll().then(() => { if (!destroyed) renderToolOptions(); });
   void refreshTelemetry();
   renderActivity(activity.list());
   void activity.refresh();
