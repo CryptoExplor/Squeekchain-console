@@ -31,8 +31,8 @@ export async function profileBalances(owner,{signal,rpcContext,context=rpcContex
     {address:PROFILES['sepolia-v9'].addresses.staking,abi:staking9Abi,functionName:'accountPower',args:[owner]},
   ],allowFailure:true,blockNumber:snapshot.blockNumber});
   const power=values[2].status==='success'?values[2].result[0]:null;
-  let staked=null;
-  try {staked=String((await depositedIds({client:context.client,snapshot,profile:PROFILES['sepolia-v9'],owner,store:discoveryCache,signal,accountSource})).length);}
+  let staked=power===0n?'0':null;
+  if(power!==0n)try {staked=String((await depositedIds({client:context.client,snapshot,profile:PROFILES['sepolia-v9'],owner,store:discoveryCache,signal,accountSource})).length);}
   catch(error){if(signal?.aborted||isTrustError(error)||!isRpcAvailabilityError(error))throw error; /* Unknown count, but positive power still proves held. */}
   if(power>0n && staked==='0')staked=null;
   await context.check(snapshot);throwIfAborted(signal);

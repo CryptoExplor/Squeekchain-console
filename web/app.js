@@ -24,8 +24,8 @@ import {
   rpcToolError,
   ACTION_REASONS,
   PUBLIC_RPC_ENDPOINTS,
-  runReadTool, toolProfile, settlementStatus, requireBurn,
-  profileBalances, chooseProfile, profileFromHash, profileInput, parseEther, formatEther, profileHeld, profileCountLabel, feeLimitExceeded,
+  runReadTool, runPublicReadTool, toolProfile, settlementStatus, requireBurn,
+  profileBalances, chooseProfile, profileFromHash, profileInput, parseEther, formatEther, profileHeld, profileCountLabel, unstakeQuoteError,
 } from "./bundle.js";
 
 import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
@@ -257,6 +257,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   async function switchProfile(profileKey, { preserveWallet = false } = {}) {
     $('fee-rose').classList.add('hidden');
+    $('claim-update').classList.add('hidden');
     preserveWallet = preserveWallet && Boolean(getProfile(profileKey).addresses);
     const account = preserveWallet ? state.account : null;
     const chainId = preserveWallet ? state.chainId : null;
@@ -798,7 +799,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     return { ok: true, ...result, gas: preview.gas };
   }
 
+  const recipientOf=(preview,owner)=>String(preview.recipient??owner).toLowerCase();
+  const recipientDetails=(preview,owner)=>preview.recipient?[['Recipient',preview.recipient,{warning:recipientOf(preview,owner)!==owner.toLowerCase()}]]:[];
+  function showClaimIncrease(before,after) {
+    $('claim-update').textContent=`Claim amount updated: ${after.sqk} SQK (reviewed ${before.sqk} SQK).`;
+    $('claim-update').classList.remove('hidden');
+  }
   async function requestClaim(tokenIds) {
+    $('claim-update').classList.add('hidden');
     const load = captureLoad();
     const caps = capabilities();
     if (!caps.claim) throw new Error(capabilities().reasons.unavailable);
@@ -815,7 +823,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     const confirmed = await confirmModal({
       title: "Claim SQK",
-      body: `Claim ${preview.total.sqk} SQK across ${preview.batches.length} transaction(s)? Simulated successfully; your wallet asks next.${preview.recipient?` Recipient: ${preview.recipient}.`:""}`,
+      body: `Claim ${preview.total.sqk} SQK across ${preview.batches.length} transaction(s)? Simulated successfully; your wallet asks next.${recipientOf(preview,owner)!==owner.toLowerCase()?" Recipient differs from the owner. Verify the full address before signing.":""}`,
+      details:recipientDetails(preview,owner),
       confirmLabel: "Sign claim",
     });
     if (!confirmed) return { ok: false, reason: "cancelled" };
@@ -824,7 +833,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for (const batch of preview.batches) {
       if (!isCurrent(load) || state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet or profile changed. Stopped.");
       const fresh = await readFor(load, "claimPreview", owner, batch.tokenIds);
-      if (!fresh.ok || fresh.batches.length !== 1 || fresh.batches[0].amount.base !== batch.amount.base || fresh.recipient?.toLowerCase()!==preview.recipient?.toLowerCase()) throw new Error("Claim outcome changed. Review a fresh preview; no automatic retry.");
+      const v9=getProfile(load.profileKey).abiSet==='v9';
+      if (!fresh.ok || fresh.batches.length!==1 || (v9?BigInt(fresh.batches[0].amount.base)<BigInt(batch.amount.base):fresh.batches[0].amount.base!==batch.amount.base) || recipientOf(fresh,owner)!==recipientOf(preview,owner))throw new Error('Claim outcome changed. Review a fresh preview; no automatic retry.');
+      if(v9&&BigInt(fresh.batches[0].amount.base)>BigInt(batch.amount.base)){showClaimIncrease(batch.amount,fresh.batches[0].amount);showOut(el.holder.claimOut,fresh);}
       receipts.push(await sendTransaction(fresh.batches[0].tx, `claim(${batch.tokenIds.length} ids)`, owner, load));
     }
     await refreshAll();
@@ -858,24 +869,27 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     return { ok: true, ...result };
   }
 
-  async function showFeeRose(action,input,load) {
+  async function showFeeRose(action,input,load,reason='Fee rose') {
     assertCurrent(load);
     const quote=await readFor(load,'actionPreview',state.account,action,{amount:input.amount});
     assertCurrent(load);
     $('v9-result').classList.add('hidden');
+    $('quote-reason').textContent=reason;
     const fee=quote.fee?.sqk;
     $('fee-quote').textContent=fee==null?'New quote unavailable. Re-quote before continuing.':`New quote: ${fee} SQK fee${quote.net?.sqk!=null?` · ${quote.net.sqk} SQK received`:''}.`;
     $('fee-rose').classList.remove('hidden');
-    $('fee-requote').onclick=()=>viewTask(()=>{assertCurrent(load);return requestAction(action,input);});
+    const {maxFee,deadline,...newInput}=input;
+    $('fee-requote').onclick=()=>viewTask(()=>{assertCurrent(load);return requestAction(action,newInput);});
     $('fee-requote').focus();
-    showBanner('Fee rose','warn');
-    return {ok:false,reasonCode:'feeRose',reason:'Fee rose',quote};
+    showBanner(reason,'warn');
+    return {ok:false,reasonCode:reason==='Quote expired'?'quoteExpired':'feeRose',reason,quote};
   }
   async function requestAction(action,input={}) {
     $('fee-rose').classList.add('hidden');
+    $('claim-update').classList.add('hidden');
     const load=captureLoad();
     try{return await requestActionInner(action,input);}
-    catch(error){if(action==='unstake'&&feeLimitExceeded(error))return showFeeRose(action,input,load);throw error;}
+    catch(error){const quoteError=action==='unstake'?unstakeQuoteError(error):null;if(quoteError)return showFeeRose(action,input,load,quoteError.reason);throw error;}
   }
   async function requestActionInner(action, input = {}) {
     if (!capabilities().deposit) throw new Error(capabilities().reasons.unavailable);
@@ -883,20 +897,22 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!owner || owner.toLowerCase() !== state.inspected?.toLowerCase()) throw new Error('Connect the inspected owner wallet');
     if (action === 'mergeDeposited') {
       const burn = `BURN-${BigInt(input.donor)}`;
-      if (!await confirmModal({ title: 'Merge staked Squeeks', body: "Merging burns the donor NFT permanently and raises the survivor one level.", requireText: burn, confirmLabel: 'Acknowledge burn & simulate' })) return {ok:false,reason:'cancelled'};
+      if (!await confirmModal({ title: `Keep #${input.survivor} · burn #${input.donor}`, body: `Keep #${input.survivor} · burn #${input.donor}. #${input.donor} is BURNED permanently and cannot be restored. #${input.survivor} survives. Type ${burn} before we build or simulate this call. You will review the simulation before your wallet opens.`, requireText: burn, confirmLabel: 'Acknowledge burn & simulate' })) return {ok:false,reason:'cancelled'};
       input = {...input,confirm:burn};
     }
     const preview = await readFor(load,'actionPreview',owner,action,input);
     showOut($('v9-result'),preview);
-    if (!preview.ok) {if(preview.reasonCode==='feeRose')return showFeeRose(action,input,load); showBanner(preview.reason,'warn'); return preview; }
-    const body=action==='unstake'?'The quoted exit fee is burned.':`${preview.warning??action}. ${preview.amount?.sqk?'Rewards: '+preview.amount.sqk+' SQK.':''}`;
-    const details=action==='unstake'?[['Amount',`${formatEther(BigInt(preview.amount))} SQK`],['Fee / maxFee',`${preview.fee.sqk} SQK`],['You receive',`${preview.net.sqk} SQK`],['Deadline',new Date(Number(preview.deadline)*1000).toUTCString()],['Gas estimate',preview.gas]]:[['Gas estimate',preview.gas]];
-    if (!await confirmModal({title:action==='unstake'?'Review unstake fee':`Review ${action}`,body,details,confirmLabel:'Review in wallet'})) return {ok:false,reason:'cancelled'};
+    if (!preview.ok) {if(['feeRose','quoteExpired'].includes(preview.reasonCode))return showFeeRose(action,input,load,preview.reason); showBanner(preview.reason,'warn'); return preview; }
+    const mergeLabel=action==='mergeDeposited'?`Keep #${input.survivor} · burn #${input.donor}`:null;
+    const body=mergeLabel?`${mergeLabel}. #${input.donor} is BURNED permanently and cannot be restored. #${input.survivor} survives at level ${preview.nextLevel}.`:action==='unstake'?'The quoted exit fee is burned.':`${preview.warning??action}. ${preview.amount?.sqk?'Rewards: '+preview.amount.sqk+' SQK.':''}`;
+    const details=action==='unstake'?[['Amount',`${formatEther(BigInt(preview.amount))} SQK`],['Fee / maxFee',`${preview.fee.sqk} SQK`],['You receive',`${preview.net.sqk} SQK`],['Deadline',new Date(Number(preview.deadline)*1000).toLocaleString(undefined,{timeZoneName:'short'})],['Gas estimate',preview.gas]]:[['Gas estimate',preview.gas],...recipientDetails(preview,owner)];
+    if (!await confirmModal({title:mergeLabel??(action==='unstake'?'Review unstake fee':`Review ${action}`),body,details,confirmLabel:'Review in wallet'})) return {ok:false,reason:'cancelled'};
     assertCurrent(load);
     if (state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error('Wallet changed');
     const fresh = await readFor(load,'actionPreview',owner,action,{...input,...(action==='unstake'?{maxFee:preview.maxFee,deadline:preview.deadline}:{})});
-    if(action==='unstake'&&fresh.reasonCode==='feeRose')return showFeeRose(action,input,load);
-    if (!fresh.ok || (action==='mergeDeposited' && fresh.nextLevel!==preview.nextLevel) || (preview.amount?.base != null && fresh.amount?.base !== preview.amount.base) || (action==='unstake' && (fresh.maxFee!==preview.maxFee || fresh.net.base!==preview.net.base))) throw new Error('Outcome or fee changed. Review a fresh preview; no automatic retry.');
+    if(action==='unstake'&&['feeRose','quoteExpired'].includes(fresh.reasonCode))return showFeeRose(action,input,load,fresh.reason);
+    if (!fresh.ok || (action==='mergeDeposited' && fresh.nextLevel!==preview.nextLevel) || (preview.amount?.base!=null && (action==='claimAndStake'?BigInt(fresh.amount?.base)<BigInt(preview.amount.base):fresh.amount?.base!==preview.amount.base)) || (action==='claimAndStake'&&recipientOf(fresh,owner)!==recipientOf(preview,owner)) || (action==='unstake' && (fresh.maxFee!==preview.maxFee || fresh.net.base!==preview.net.base))) throw new Error('Outcome or fee changed. Review a fresh preview; no automatic retry.');
+    if(action==='claimAndStake'&&BigInt(fresh.amount.base)>BigInt(preview.amount.base)){showClaimIncrease(preview.amount,fresh.amount);showOut($('v9-result'),fresh);}
     const result=await sendTransaction(fresh.tx,action,owner,load);await refreshAll();return result;
   }
   function renderActionFields() {
@@ -1181,11 +1197,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const onToolMessage = async (event) => {
     const msg = event.data;
     if (!msg || msg.type !== "squeek.tool" || typeof msg.name !== "string") return;
-    // Embedders can read, but may not trigger wallet requests across origins.
-    if (msg.name.startsWith("squeek_request_") && event.origin !== win.location.origin) return;
-    const result = await callTool(msg.name, msg.args ?? {});
+    // Opaque origins cannot receive an origin-bound reply. Never broadcast one.
+    if(!event.source?.postMessage || !event.origin || event.origin==='null')return;
+    const result=event.origin===win.location.origin
+      ? await callTool(msg.name,msg.args??{})
+      : await runPublicReadTool(msg.name,msg.args??{});
     const payload = { type: "squeek.result", id: msg.id ?? null, ok: !result?.error, result };
-    (event.source ?? win).postMessage(payload, event.origin && event.origin !== "null" ? event.origin : "*");
+    event.source.postMessage(payload,event.origin);
   };
   win.addEventListener("message", onToolMessage);
 

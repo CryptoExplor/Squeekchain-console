@@ -8,18 +8,18 @@
     },
     {
       "file": "app.js",
-      "rawBytes": 43181,
-      "gzipBytes": 14757
+      "rawBytes": 44698,
+      "gzipBytes": 15149
     },
     {
       "file": "bundle.js",
-      "rawBytes": 487183,
-      "gzipBytes": 134915
+      "rawBytes": 488356,
+      "gzipBytes": 135344
     },
     {
       "file": "components.js",
-      "rawBytes": 5097,
-      "gzipBytes": 2215
+      "rawBytes": 5157,
+      "gzipBytes": 2244
     },
     {
       "file": "developers.js",
@@ -35,8 +35,13 @@
       "file": "telemetry.js",
       "rawBytes": 1948,
       "gzipBytes": 1020
+    },
+    {
+      "file": "theme.js",
+      "rawBytes": 287,
+      "gzipBytes": 224
     }
   ],
-  "totalGzipBytes": 156083,
+  "totalGzipBytes": 157157,
   "budgetBytes": 250000
 }

@@ -1,5 +1,5 @@
 import { accountTokenIds } from './account-discovery.js';
-import { feeLimitExceeded } from './fee-error.js';
+import { unstakeQuoteError } from './fee-error.js';
 import { ACTION_REASONS, blocked } from './capabilities.js';
 /** Equal-profile v9 adapter. Expected identities are dated pins, never API authority. */
 import { getAddress, formatEther, encodeFunctionData } from 'viem';
@@ -197,11 +197,12 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
       const value=positive(amount), [fee,net]=await read('staking',staking9Abi,'quoteUnstake',[owner,value]);
       const block=await client.getBlock({blockNumber:activeSnapshot.blockNumber});
       const deadline=input.deadline == null ? BigInt(block.timestamp)+600n : positive(input.deadline);
-      if(deadline<=BigInt(block.timestamp) || deadline>=2n**64n) throw new Error('Unstake deadline expired or invalid');
+      if(deadline>=2n**64n)throw new Error('Invalid unstake deadline');
+      if(deadline<=BigInt(block.timestamp))return {ok:false,reasonCode:'quoteExpired',reason:'Quote expired',deadline:String(deadline)};
       const quote={amount:String(value),fee:sqkAmount(fee),net:sqkAmount(net),maxFee:String(fee),deadline:String(deadline)};
       if(input.maxFee!=null && fee>BigInt(input.maxFee))return {ok:false,reasonCode:'feeRose',reason:'Fee rose',...quote};
       try {return await simulate(owner,'staking',staking9Abi,'unstake',[value,fee,deadline],{...quote,warning:'Unstake burns the quoted exit fee; net is what you receive'});}
-      catch(error) {const rose=feeLimitExceeded(error);if(!rose)throw error;return {ok:false,...rose,fee:sqkAmount(BigInt(rose.fee))};}
+      catch(error) {const quoteError=unstakeQuoteError(error);if(!quoteError)throw error;return {ok:false,...quoteError,...(quoteError.fee?{fee:sqkAmount(BigInt(quoteError.fee))}:{})};}
     }
     throw new Error('Unsupported v9 action');
   }

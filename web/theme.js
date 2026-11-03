@@ -1,0 +1,2 @@
+// Apply the saved theme before first paint without an inline-script CSP exception.
+try { const choice = localStorage.getItem('squeekchain:theme'); const theme = choice === 'dark' || (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; document.documentElement.dataset.theme = theme; document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#10120f' : '#fafaf7'; } catch { /* light default */ }

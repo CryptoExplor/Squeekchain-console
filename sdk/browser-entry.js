@@ -25,4 +25,6 @@ export { ACTION_REASONS } from './capabilities.js';
 
 export { settlementStatus } from "./reward-status.js";
 
-export { feeLimitExceeded } from './fee-error.js';
+export { feeLimitExceeded, unstakeQuoteError } from './fee-error.js';
+
+export { runPublicReadTool } from './public-tools.js';

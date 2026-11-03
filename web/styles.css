@@ -641,3 +641,11 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 @media (min-width: 761px) and (max-width: 1050px) {
   .profile-control { width: 128px; flex-basis: 128px; }
 }
+
+/* CSP-compatible equivalents of the historical inline layout attributes. */
+.my-12 { margin: 12px 0; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mt-20 { margin-top: 20px; }
+.max-w-140 { max-width: 140px; }
+.confirm-details .recipient-warning { color: var(--sqk-gold); background: var(--sqk-gold-soft); padding: 8px; border-block: 1px solid var(--sqk-gold); }

@@ -90,7 +90,7 @@ f.flags.approved=true;assert.equal((await sdk.actionPreview(owner,'deposit',{tok
 assert.equal((await sdk.actionPreview(owner,'stake',{amount:'10'})).approvalRequired,true);f.flags.allowance=10n;assert.equal((await sdk.actionPreview(owner,'stake',{amount:'10'})).ok,true);
 const quote=await sdk.actionPreview(owner,'unstake',{amount:'10'});assert.equal(quote.maxFee,'2');assert.equal(quote.net.base,'8');assert.equal(quote.deadline,'1600');const noPadding=await sdk.actionPreview(owner,'unstake',{amount:'10',maxFee:'999'});assert.deepEqual(decodeFunctionData({abi:staking9Abi,data:noPadding.tx.data}).args,[10n,2n,1600n],'even a supplied larger limit never pads the quoted fee');assert.deepEqual(decodeFunctionData({abi:staking9Abi,data:quote.tx.data}).args,[10n,2n,1600n]);
 f.flags.fee=3n;assert.equal((await sdk.actionPreview(owner,'unstake',{amount:'10',maxFee:quote.maxFee,deadline:quote.deadline})).ok,false);
-await assert.rejects(sdk.actionPreview(owner,'unstake',{amount:'10',deadline:'999'}),/expired/);
+assert.equal((await sdk.actionPreview(owner,'unstake',{amount:'10',deadline:'999'})).reasonCode,'quoteExpired');
 f.flags.mergesOpen=false;assert.equal((await sdk.actionPreview(owner,'merge',{survivor:'1',donor:'2',confirm:'BURN-2'})).reasonCode,'mergesClosed');
 f.flags.paused=true;assert.equal((await sdk.checkpointPreview(owner)).reasonCode,'paused');assert.equal((await sdk.claimPreview(owner)).total.base,'9','pause does not block funded claims');
 f.flags.paused=false;f.flags.settled=false;assert.equal((await sdk.checkpointPreview(owner)).reasonCode,'unsettled');
@@ -133,6 +133,12 @@ for(const [survivor,donor] of [['1','3'],['3','1']])for(const action of ['merge'
  const {f:t,sdk:x}=make();const data=encodeErrorResult({abi:staking9Abi,errorName:'FeeLimitExceeded',args:[3n,2n]});
  t.client.simulateContract=async()=>{throw Object.assign(new Error('Execution reverted'),{cause:{data}});};
  const result=await x.actionPreview(owner,'unstake',{amount:'10'});assert.equal(result.ok,false);assert.equal(result.reason,'Fee rose');assert.equal(result.fee.base,'3');assert.equal(result.tx,undefined);
+ assert.equal(t.calls.some(call=>call.name==='estimateGas'),false);
+}
+{
+ const {f:t,sdk:x}=make();const data=encodeErrorResult({abi:staking9Abi,errorName:'DeadlineExpired',args:[]});
+ t.client.simulateContract=async()=>{throw Object.assign(new Error('Execution reverted'),{cause:{data:{originalError:{data}}}});};
+ const result=await x.actionPreview(owner,'unstake',{amount:'10'});assert.equal(result.ok,false);assert.equal(result.reason,'Quote expired');assert.equal(result.tx,undefined);
  assert.equal(t.calls.some(call=>call.name==='estimateGas'),false);
 }
 console.log('PASS v9 cache-hit mutable wiring/slots/layout/version rejection, cross-profile code reuse, fresh paused reads, mixed custody guidance and simulation FeeLimitExceeded');

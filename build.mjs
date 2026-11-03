@@ -25,11 +25,11 @@ const result = await build({
 const bytes = fs.statSync("web/bundle.js").size;
 fs.writeFileSync("web/tools.json", `${JSON.stringify(buildManifest(), null, 2)}\n`);
 
-// ── static output for Vercel / Cloudflare Pages / GitHub Pages ───────────────
+// ── static output for Cloudflare Pages ───────────────
 const OUT = "dist";
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
-for (const file of ["index.html", "styles.css", "app.js", "telemetry.js", "activity.js", "components.js", "developers.js", "settings.js", "bundle.js", "tools.json"]) {
+for (const file of ["_headers", "theme.js", "index.html", "styles.css", "app.js", "telemetry.js", "activity.js", "components.js", "developers.js", "settings.js", "bundle.js", "tools.json"]) {
   if(file.endsWith(".js") && file!=="bundle.js") fs.writeFileSync(path.join(OUT,file),(await transform(fs.readFileSync(path.join("web",file),"utf8"),{minify:true,format:"esm",target:"es2022",legalComments:"none"})).code);
   else fs.copyFileSync(path.join("web", file), path.join(OUT, file));
 }
@@ -39,7 +39,7 @@ for (const file of fs.readdirSync(path.join("web", "fonts")).filter((f) => f.end
 }
 
 // Build-time parity, never a reason to check generated dist/ into Git.
-for (const file of ["index.html", "styles.css", "app.js", "telemetry.js", "activity.js", "components.js", "developers.js", "settings.js", "bundle.js", "tools.json"]) {
+for (const file of ["_headers", "theme.js", "index.html", "styles.css", "app.js", "telemetry.js", "activity.js", "components.js", "developers.js", "settings.js", "bundle.js", "tools.json"]) {
   if (!file.endsWith(".js") && !fs.readFileSync(path.join("web", file)).equals(fs.readFileSync(path.join(OUT, file)))) throw new Error(`Static output mismatch: ${file}`);
 }
 const manifest = buildManifest();

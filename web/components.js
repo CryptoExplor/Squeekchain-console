@@ -138,7 +138,7 @@ export function ConfirmDialog({ doc, win, elements }) {
       elements.body.textContent = body;
       if(details.length) {
         const list=doc.createElement('dl');list.className='confirm-details';list.dataset.testid='confirm-details';
-        for(const [label,value] of details) {const term=doc.createElement('dt'),definition=doc.createElement('dd');term.textContent=label;definition.textContent=value;list.append(term,definition);}elements.body.append(list);
+        for(const [label,value,options] of details) {const term=doc.createElement('dt'),definition=doc.createElement('dd');term.textContent=label;definition.textContent=value;if(options?.warning){term.className=definition.className='recipient-warning';}list.append(term,definition);}elements.body.append(list);
       }
       elements.input.value = "";
       elements.input.classList.toggle("hidden", !requireText);

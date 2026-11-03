@@ -4,7 +4,7 @@
     <title>Wheelhouse · Squeekchain console</title>
     <meta name="description" content="Wheelhouse — checkpoint, claim, merge and inspect Squeeks on Squeekchain. Reads are permissionless; owner actions are signed in your own wallet.">
     <meta name="theme-color" content="#fafaf7">
-    <script>try { const choice = localStorage.getItem('squeekchain:theme'); const theme = choice === 'dark' || (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; document.documentElement.dataset.theme = theme; document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#10120f' : '#fafaf7'; } catch { /* light default */ }</script>
+    <script src="./theme.js"></script>
     <link rel="stylesheet" href="./styles.css">
     <link rel="icon" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'&gt;&lt;rect width='40' height='40' rx='6' fill='%2316161c'/&gt;&lt;g fill='none' stroke='%23ffc048' stroke-width='2.2'&gt;&lt;circle cx='20' cy='20' r='11'/&gt;&lt;circle cx='20' cy='20' r='3.4'/&gt;&lt;path d='M20 9v3.6M20 27.4V31M9 20h3.6M27.4 20H31'/&gt;&lt;/g&gt;&lt;/svg&gt;">
   </head>
@@ -126,7 +126,7 @@
 
 <div id="watch-mode" data-testid="watch-mode" class="row hidden" role="status"><span id="watch-chip" data-testid="watch-chip" class="chip"></span><button id="btn-exit-watch" data-testid="btn-exit-watch" class="btn" type="button">Exit</button></div>
           <div id="holder-body" class="hidden" data-testid="holder-body">
-            <div class="grid cols-4" style="margin: 12px 0">
+            <div class="my-12 grid cols-4">
               <div class="stat"><span class="label">Squeeks</span><strong id="holder-count" data-testid="holder-count">Unknown</strong></div>
               <div class="stat"><span class="label">Power</span><strong id="holder-power" data-testid="holder-power">Unknown</strong></div>
               <div class="stat"><span class="label">Share</span><strong id="holder-share" data-testid="holder-share">Unknown</strong></div>
@@ -138,20 +138,20 @@
               <button class="btn" id="btn-plan" data-testid="btn-plan">Refresh merge plan</button>
               <span class="mono small muted" id="holder-hint" data-testid="holder-hint"></span>
             </div>
-            <pre class="out hidden" id="claim-result" data-testid="claim-result"></pre>
+            <p id="claim-update" data-testid="claim-update" class="notice hidden" role="status" aria-live="polite"></p><pre class="out hidden" id="claim-result" data-testid="claim-result"></pre>
 
-            <div class="table-wrap" style="margin-top: 12px">
+            <div class="mt-12 table-wrap">
               <table>
                 <thead id="squeeks-head" data-testid="squeeks-head"></thead>
                 <tbody id="squeeks-tbody" data-testid="squeeks-tbody"></tbody>
               </table>
             </div>
 
-            <section id="v9-actions" data-testid="v9-actions" class="panel hidden" aria-label="v9 staking actions"><h3>Staking and custody</h3><label for="v9-action">Action</label><select id="v9-action" data-testid="v9-action"><option value="deposit">Deposit NFTs</option><option value="withdraw">Withdraw NFTs</option><option value="mergeDeposited">Merge staked NFTs</option><option value="claimAndStake">Claim and stake rewards</option><option value="stake">Stake SQK</option><option value="unstake">Unstake SQK</option><option value="approveNft">Approve one NFT</option><option value="approveAll">Approve ALL NFTs (broad permission)</option><option value="approveSqk">Approve exact SQK amount</option></select><p id="approval-scope" data-testid="approval-scope" role="status" class="notice hidden"></p><div class="row"><label>NFT IDs<input id="v9-ids" data-testid="v9-ids" aria-label="NFT IDs to deposit or withdraw" placeholder="1, 2"></label><label>NFT ID<input id="v9-token" data-testid="v9-token" aria-label="One NFT to approve" placeholder="1"></label><label>SQK amount<input id="v9-amount" data-testid="v9-amount" aria-label="SQK amount" placeholder="0" inputmode="decimal"></label><label>Survivor ID<input id="v9-survivor" data-testid="v9-survivor" aria-label="Survivor ID" inputmode="numeric"></label><label>Donor ID<input id="v9-donor" data-testid="v9-donor" aria-label="Donor ID" inputmode="numeric"></label><button class="btn" id="v9-review" data-testid="v9-review">Preview action</button></div><div id="fee-rose" data-testid="fee-rose" class="notice hidden" role="status"><strong>Fee rose</strong><p id="fee-quote" data-testid="fee-quote"></p><button class="btn" id="fee-requote" data-testid="fee-requote">Re-quote</button></div><pre class="out hidden" id="v9-result" data-testid="v9-result"></pre></section>
-            <h3 style="margin-top: 20px">Merge plan</h3>
+            <section id="v9-actions" data-testid="v9-actions" class="panel hidden" aria-label="v9 staking actions"><h3>Staking and custody</h3><label for="v9-action">Action</label><select id="v9-action" data-testid="v9-action"><option value="deposit">Deposit NFTs</option><option value="withdraw">Withdraw NFTs</option><option value="mergeDeposited">Merge staked NFTs</option><option value="claimAndStake">Claim and stake rewards</option><option value="stake">Stake SQK</option><option value="unstake">Unstake SQK</option><option value="approveNft">Approve one NFT</option><option value="approveAll">Approve ALL NFTs (broad permission)</option><option value="approveSqk">Approve exact SQK amount</option></select><p id="approval-scope" data-testid="approval-scope" role="status" class="notice hidden"></p><div class="row"><label>NFT IDs<input id="v9-ids" data-testid="v9-ids" aria-label="NFT IDs to deposit or withdraw" placeholder="1, 2"></label><label>NFT ID<input id="v9-token" data-testid="v9-token" aria-label="One NFT to approve" placeholder="1"></label><label>SQK amount<input id="v9-amount" data-testid="v9-amount" aria-label="SQK amount" placeholder="0" inputmode="decimal"></label><label>Survivor ID<input id="v9-survivor" data-testid="v9-survivor" aria-label="Survivor ID" inputmode="numeric"></label><label>Donor ID<input id="v9-donor" data-testid="v9-donor" aria-label="Donor ID" inputmode="numeric"></label><button class="btn" id="v9-review" data-testid="v9-review">Preview action</button></div><div id="fee-rose" data-testid="fee-rose" class="notice hidden" role="status"><strong id="quote-reason" data-testid="quote-reason">Fee rose</strong><p id="fee-quote" data-testid="fee-quote"></p><button class="btn" id="fee-requote" data-testid="fee-requote">Re-quote</button></div><pre class="out hidden" id="v9-result" data-testid="v9-result"></pre></section>
+            <h3 class="mt-20">Merge plan</h3>
             <p class="mono small muted" id="merge-note" data-testid="merge-note">Merging burns the donor NFT permanently and raises the survivor one level.</p>
             <ul class="plan" id="merge-list" data-testid="merge-list"></ul>
-            <div class="row" style="margin-top: 16px">
+            <div class="mt-16 row">
               <input id="merge-survivor" aria-label="Survivor token ID" placeholder="Keep token ID" inputmode="numeric" data-testid="merge-survivor">
               <input id="merge-donor" aria-label="Donor token ID to burn" placeholder="Burn token ID" inputmode="numeric" data-testid="merge-donor">
               <button class="btn" id="btn-custom-merge" disabled="" data-testid="btn-custom-merge">Review my pair</button>
@@ -175,12 +175,12 @@
             token, or for everything in the connected wallet.
           </p>
           <div class="row">
-            <input aria-label="Squeek token ID" id="art-token" placeholder="token id" inputmode="numeric" style="max-width: 140px" data-testid="art-token">
+            <input aria-label="Squeek token ID" id="art-token" placeholder="token id" inputmode="numeric" data-testid="art-token" class="max-w-140">
             <button class="btn" id="btn-art-one" data-testid="btn-art-one">Load token</button>
             <button class="btn" id="btn-art-mine" data-testid="btn-art-mine">Load my Squeeks</button>
             <span class="mono small muted" id="art-status" data-testid="art-status"></span>
           </div>
-          <div class="art-grid" id="art-grid" style="margin-top: 16px" data-testid="art-grid"></div>
+          <div class="mt-16 art-grid" id="art-grid" data-testid="art-grid"></div>
         </div>
       </section>
 
@@ -234,7 +234,7 @@
         <p id="modal-body" data-testid="modal-body"></p>
         <label for="modal-input" class="label">Burn confirmation</label>
         <input id="modal-input" placeholder="type to confirm" spellcheck="false" autocomplete="off" data-testid="modal-input">
-        <div class="row end" style="margin-top: 12px">
+        <div class="mt-12 row end">
           <button class="btn" id="btn-modal-cancel" data-testid="btn-modal-cancel">Cancel</button>
           <button class="btn btn-danger" id="btn-modal-confirm" disabled="" data-testid="btn-modal-confirm">Confirm</button>
         </div>

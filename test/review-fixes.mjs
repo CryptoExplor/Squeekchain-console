@@ -53,9 +53,13 @@ const both=await inventory({v6:3n,wallet:3n});assert.equal(chooseProfile('sepoli
 assert.equal(profileCountLabel(both.counts['sepolia-v9']),'3 in wallet · 2 staked');
 for(const power of [987654n,0n,null]) {
   const {counts}=await inventory({power,historyFail:true});
-  assert.equal(counts['sepolia-v9'].staked,null);assert.match(profileCountLabel(counts['sepolia-v9']),/Staked \(Unknown\)/);
+  assert.equal(counts['sepolia-v9'].staked,power===0n?'0':null);
+  if(power!==0n)assert.match(profileCountLabel(counts['sepolia-v9']),/Staked \(Unknown\)/);
   assert.equal(chooseProfile('sepolia-v6',counts),power>0n?'sepolia-v9':'sepolia-v6');
 }
+const empty=await inventory({power:0n,historyFail:true,accountSource:async()=>{throw new Error('Zero power must skip the API too');}});
+assert.equal(empty.counts['sepolia-v9'].staked,'0');assert.equal(empty.calls.length,1,'zero power skips history, API and depositor/custody calls');
+await assert.rejects(inventory({power:0n,badFinal:true}),/hash mismatch/,'zero-power fast path still checks the final snapshot');
 const unconfirmed=await inventory({wrongDepositor:true});assert.equal(unconfirmed.counts['sepolia-v9'].staked,null);
 assert.equal(profileHeld({wallet:'0',nftPower:'0',staked:'99'}),false,'hint count must not decide auto-pick');
 await assert.rejects(inventory({badFinal:true}),/hash mismatch/);
