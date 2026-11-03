@@ -40,7 +40,7 @@ The header keeps live verification separate from the profile's support badge. Bo
 
 ## Distribution budget
 
-`npm run build` checks static parity (including the components module) and writes ignored `dist/js-size.json`. It independently gzips every dist JS response with Node's default gzip level and sums the result: **147,359 bytes**, under the **200,000-byte** budget. The build fails if this budget is reached/exceeded. Fonts/CSS are not counted as JavaScript. See the committed [per-file report](audit/phase1-js-size.json).
+`npm run build` checks static parity (including the components module) and writes ignored `dist/js-size.json`. It independently gzips every dist JS response with Node's default gzip level and sums the result: **147,354 bytes**, under the **200,000-byte** budget. The build fails if this budget is reached/exceeded. Fonts/CSS are not counted as JavaScript. See the committed [per-file report](audit/phase1-js-size.json).
 
 ## Pre-merge review (polish-head rerun pending)
 

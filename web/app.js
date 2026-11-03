@@ -231,7 +231,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     );
     el.profileSelect.value = state.profileKey;
     const profile = getProfile(state.profileKey), badge = $("profile-status");
-    badge.textContent = profile.kind === 'supported' ? 'Supported' : profile.addresses ? 'Read-only · unverified' : 'Not deployed';
+    badge.textContent = profile.kind === 'supported' ? 'Supported' : profile.addresses ? 'Read-only' : 'Not deployed';
     badge.className = `chip ${profile.kind === 'supported' ? 'ok' : 'warn'}`;
   }
 
@@ -610,7 +610,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── refresh ───────────────────────────────────────────────────────────────
   function renderVerification(v) {
-      el.verified.textContent = v.trusted === false ? "read-only (unverified)" : v.ok ? "verified ✓" : `${v.problems?.length ?? 1} problem(s)`;
+      el.verified.textContent = v.trusted === false ? "Unverified" : v.ok ? "verified ✓" : `${v.problems?.length ?? 1} problem(s)`;
       el.verified.className = `chip ${v.trusted === false ? "warn" : v.ok ? "ok" : "bad"}`;
       el.verified.title = v.trusted === false ? "Read-only (unverified): observed identities are not published trust pins. All transactions disabled." : v.ok ? `Published identities fully verified at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; proxy slots checked at ${v.blockNumber ?? "unknown"}. Two public RPC block hashes agree for this snapshot.` : (v.problems ?? []).join("; ");
   }

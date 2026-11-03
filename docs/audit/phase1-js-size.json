@@ -8,8 +8,8 @@
     },
     {
       "file": "app.js",
-      "rawBytes": 54209,
-      "gzipBytes": 15089
+      "rawBytes": 54183,
+      "gzipBytes": 15084
     },
     {
       "file": "bundle.js",
@@ -27,6 +27,6 @@
       "gzipBytes": 1314
     }
   ],
-  "totalGzipBytes": 147359,
+  "totalGzipBytes": 147354,
   "budgetBytes": 200000
 }

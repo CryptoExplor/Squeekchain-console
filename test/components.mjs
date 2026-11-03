@@ -10,7 +10,7 @@ const { window: win } = dom, doc = win.document, $ = id => doc.getElementById(id
 try {
   const referral = doc.querySelector('.hero-actions a');
   assert.equal(referral.href, 'https://squeekchain.com/genesis/i/kbxh52st');
-  assert.match(referral.textContent, /referral/i);
+  assert.equal(referral.textContent, 'Discover Genesis ↗');
   assert.equal(referral.target, '_blank');
   assert.ok(referral.relList.contains('noopener'));
   assert.ok(referral.relList.contains('noreferrer'));
@@ -72,7 +72,7 @@ try {
     failed = true; await app.refresh();
     assert.equal($('holder-count').textContent, UNKNOWN); assert.equal(app.state.status, null);
     assert.equal($('btn-custom-merge').disabled, true);
-    await app.switchProfile('sepolia'); assert.equal($('profile-status').textContent, 'Read-only · unverified');
+    await app.switchProfile('sepolia'); assert.equal($('profile-status').textContent, 'Read-only');
     await app.switchProfile('mainnet'); assert.equal($('profile-status').textContent, 'Not deployed');
     assert.equal($('deployment-content').classList.contains('hidden'), true);
   } finally { app.destroy(); }

@@ -129,7 +129,7 @@ test('three rapid switches: only the final generation may render', async ({ page
   await page.evaluate(() => { window.races.reads[2].resolve(window.races.network('300')); });
   await expect(page.locator('#net-round')).toHaveText('300');
   await expect(page.locator('#net-kind')).toHaveText('read-only (unverified)');
-  await expect(page.locator('#verified-chip')).toHaveText('read-only (unverified)');
+  await expect(page.locator('#verified-chip')).toHaveText('Unverified');
   await page.evaluate(() => window.squeek.destroy());
 });
 

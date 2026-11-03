@@ -172,7 +172,9 @@ for (const width of [900, 1024]) test(`header: single desktop row at ${width}px,
   await page.evaluate(() => window.squeek.connect());
   await assertCompactHeader(page, width, true);
   await page.selectOption('#profile-select', 'sepolia');
-  await expect(page.locator('#verified-chip')).toContainText('unverified');
+  await expect(page.locator('#profile-status')).toHaveText('Read-only');
+  await expect(page.locator('#verified-chip')).toHaveText('Unverified');
+  await expect(page.locator('#verified-chip')).toHaveAttribute('title', /All transactions disabled/);
   await assertCompactHeader(page, width, false);
   await page.evaluate(() => window.squeek.destroy());
 });
