@@ -1,5 +1,5 @@
 {
-  "name": "squeekchain",
+  "name": "wheelhouse",
   "version": "1.0.0",
   "description": "Squeekchain SqueekMining v6 on Sepolia: reads, checkpoints, claims and merges. Reads are permissionless; owner actions are prepared as unsigned transactions for the owner's wallet to sign. Testnet only.",
   "chainId": 11155111,
@@ -10,10 +10,10 @@
     "nft": "0x0eAF3E0d40A0a8E5a6Ac030b2459E9FB0B7905c6"
   },
   "safety": [
-    "verify the deployment graph before acting (squeek_verify)",
+    "all v6 operations fail closed on same-block chain, identity, runtime hash or wiring mismatch; two RPC block hashes must agree",
     "simulate before proposing a signature",
     "read ownership live, immediately before an owner action",
-    "a merge burns the donor NFT permanently — require an explicit human confirmation",
+    "type BURN-<donor> before constructing merge calldata; donor is permanently destroyed",
     "this server never holds or requests a private key"
   ],
   "transports": {
@@ -51,7 +51,7 @@
     },
     {
       "name": "squeek_verify",
-      "description": "Verify both upgradeable proxies (implementation address, layout digest, proxy admin, implementation version) and the wiring between SqueekCore, SqueekMining, SqueekToken and SqueekNFT. Run this before trusting any other result.",
+      "description": "At one cross-checked Sepolia snapshot block, verify both proxies (chain ID, implementation address, runtime hash, layout digest, proxy admin/owner, implementation version, configuration) and the wiring between SqueekCore, SqueekMining, SqueekToken and SqueekNFT. Run this before trusting any other result.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -87,7 +87,12 @@
       "description": "Whether checkpoint() can advance now (corePaused / roundSettled), with the reason when it cannot, the unsigned transaction and a gas estimate. checkpoint() is permissionless: no Squeek needed, no caller reward.",
       "inputSchema": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "0x caller address for same-block checkpoint simulation (optional only for connected browser wallet)"
+          }
+        },
         "required": []
       },
       "sideEffects": "read-only",
@@ -158,11 +163,16 @@
           "donor": {
             "type": "string",
             "description": "token ID that gets burned"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "must equal BURN-<donor> before building calldata"
           }
         },
         "required": [
           "survivor",
-          "donor"
+          "donor",
+          "confirm"
         ]
       },
       "sideEffects": "read-only",
@@ -197,7 +207,12 @@
       "description": "Return an unsigned checkpoint() transaction (to/data/value/chainId) that the caller's wallet can sign. Use this from MCP; the web app can submit it directly.",
       "inputSchema": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "0x caller address for same-block checkpoint simulation (optional only for connected browser wallet)"
+          }
+        },
         "required": []
       },
       "sideEffects": "prepare-only",
@@ -303,7 +318,7 @@
     },
     {
       "name": "squeek_request_merge",
-      "description": "Open the user's wallet popup to merge a pair. Requires confirm: 'BURN-<donor>' so an agent cannot burn an NFT by accident, and the UI still asks the human to type the donor ID.",
+      "description": "Open the user's wallet popup to merge a pair. Requires confirm: 'BURN-<donor>' so an agent cannot burn an NFT by accident, and the UI still asks the human to type BURN-<donor> before call construction.",
       "inputSchema": {
         "type": "object",
         "properties": {

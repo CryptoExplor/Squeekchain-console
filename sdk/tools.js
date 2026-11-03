@@ -24,7 +24,7 @@ export const TOOL_SPECS = [
   {
     name: "squeek_verify",
     description:
-      "Verify both upgradeable proxies (implementation address, layout digest, proxy admin, implementation version) and the wiring between SqueekCore, SqueekMining, SqueekToken and SqueekNFT. Run this before trusting any other result.",
+      "At one cross-checked Sepolia snapshot block, verify both proxies (chain ID, implementation address, runtime hash, layout digest, proxy admin/owner, implementation version, configuration) and the wiring between SqueekCore, SqueekMining, SqueekToken and SqueekNFT. Run this before trusting any other result.",
     inputSchema: obj(),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
@@ -41,7 +41,7 @@ export const TOOL_SPECS = [
     name: "squeek_checkpoint_preview",
     description:
       "Whether checkpoint() can advance now (corePaused / roundSettled), with the reason when it cannot, the unsigned transaction and a gas estimate. checkpoint() is permissionless: no Squeek needed, no caller reward.",
-    inputSchema: obj(),
+    inputSchema: obj({ from: str("0x caller address for same-block checkpoint simulation (optional only for connected browser wallet)") }),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
   },
@@ -68,7 +68,7 @@ export const TOOL_SPECS = [
     name: "squeek_merge_preview",
     description:
       "Simulate one merge for a survivor/donor pair: gas estimate, resulting level, and an explicit irreversibility warning. Signs nothing.",
-    inputSchema: obj({ owner: str("0x address (optional)"), survivor: str("token ID that keeps its identity"), donor: str("token ID that gets burned") }, ["survivor", "donor"]),
+    inputSchema: obj({ owner: str("0x address (optional)"), survivor: str("token ID that keeps its identity"), donor: str("token ID that gets burned"), confirm: str("must equal BURN-<donor> before building calldata") }, ["survivor", "donor", "confirm"]),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
   },
@@ -84,7 +84,7 @@ export const TOOL_SPECS = [
     name: "squeek_prepare_checkpoint",
     description:
       "Return an unsigned checkpoint() transaction (to/data/value/chainId) that the caller's wallet can sign. Use this from MCP; the web app can submit it directly.",
-    inputSchema: obj(),
+    inputSchema: obj({ from: str("0x caller address for same-block checkpoint simulation (optional only for connected browser wallet)") }),
     surfaces: ["mcp"],
     sideEffects: "prepare-only",
   },
@@ -130,7 +130,7 @@ export const TOOL_SPECS = [
   {
     name: "squeek_request_merge",
     description:
-      "Open the user's wallet popup to merge a pair. Requires confirm: 'BURN-<donor>' so an agent cannot burn an NFT by accident, and the UI still asks the human to type the donor ID.",
+      "Open the user's wallet popup to merge a pair. Requires confirm: 'BURN-<donor>' so an agent cannot burn an NFT by accident, and the UI still asks the human to type BURN-<donor> before call construction.",
     inputSchema: obj(
       {
         survivor: str("token ID that survives"),
@@ -155,17 +155,17 @@ const DEPLOYMENT_FOR_MANIFEST = {
 export function buildManifest({ surface } = {}) {
   const tools = TOOL_SPECS.filter((t) => !surface || t.surfaces.includes(surface));
   return {
-    name: "squeekchain",
+    name: "wheelhouse",
     version: "1.0.0",
     description:
       "Squeekchain SqueekMining v6 on Sepolia: reads, checkpoints, claims and merges. Reads are permissionless; owner actions are prepared as unsigned transactions for the owner's wallet to sign. Testnet only.",
     chainId: 11155111,
     addresses: DEPLOYMENT_FOR_MANIFEST,
     safety: [
-      "verify the deployment graph before acting (squeek_verify)",
+      "all v6 operations fail closed on same-block chain, identity, runtime hash or wiring mismatch; two RPC block hashes must agree",
       "simulate before proposing a signature",
       "read ownership live, immediately before an owner action",
-      "a merge burns the donor NFT permanently — require an explicit human confirmation",
+      "type BURN-<donor> before constructing merge calldata; donor is permanently destroyed",
       "this server never holds or requests a private key",
     ],
     transports: {

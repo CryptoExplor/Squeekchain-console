@@ -1,4 +1,4 @@
 # Cloudflare Pages config. `npx wrangler pages deploy dist` or connect the repo in the dashboard.
-name = "the-wheel"
+name = "thewheel"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-01-01"

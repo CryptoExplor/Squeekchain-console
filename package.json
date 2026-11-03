@@ -1,8 +1,8 @@
 {
-  "name": "the-wheel",
+  "name": "wheelhouse",
   "version": "1.0.0",
   "private": false,
-  "description": "The Wheel \u2014 a Squeekchain console: wallet-signed checkpoint/claim/merge for Squeek holders, permissionless checkpoints for everyone, plus an SDK and MCP server for agents.",
+  "description": "Wheelhouse \u2014 static, browser-first Squeekchain holder console. Supported docs-pinned Sepolia v6, unverified read-only v9, unsigned CLI/MCP.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -19,23 +19,27 @@
     "checkpoint": "node src/cli.js checkpoint",
     "claim": "node src/cli.js claim",
     "merge": "node src/cli.js merge",
-    "mine": "node src/cli.js mine",
-    "test": "node test/ui.mjs",
-    "test:live": "node test/web-smoke.mjs"
+    "test": "node test/ui.mjs && node test/audit-baseline.mjs && node test/review-regressions.mjs && node test/phase1-safety.mjs && node test/discovery.mjs && node test/activity.mjs && node test/rpc-failover.mjs && node test/account-discovery.mjs && node test/live-ci.mjs && node test/rpc-diagnostics.mjs && node test/components.mjs",
+    "test:live": "npm run build && playwright test --config playwright.live.config.mjs test/live.spec.mjs",
+    "test:audit": "node test/audit-baseline.mjs",
+    "test:browser": "npm run build && playwright test --config playwright.config.mjs test/browser.spec.mjs test/screenshots.spec.mjs",
+    "rpc:probe": "node src/rpc-probe.mjs"
   },
   "dependencies": {
     "viem": "^2.57.14"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "esbuild": "^0.28.2",
+    "fake-indexeddb": "^6.2.7",
     "jsdom": "^29.1.1"
   },
   "bin": {
-    "the-wheel-mcp": "mcp/server.js"
+    "wheelhouse-mcp": "mcp/server.js"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/<you>/the-wheel.git"
+    "url": "https://github.com/CryptoExplor/Squeekchain-console.git"
   },
   "keywords": [
     "squeekchain",
@@ -47,5 +51,5 @@
     "viem"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/<you>/the-wheel"
+  "homepage": "https://github.com/CryptoExplor/Squeekchain-console"
 }

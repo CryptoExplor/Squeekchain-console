@@ -1,31 +1,14 @@
-/**
- * Deployment profiles.
- *
- * Squeekchain's Sepolia graph has moved on from the published docs: the deployment the docs pin
- * (SqueekMining v6) stopped receiving settlements at round 1973, and the live testnet the official
- * dApp (sepolia.squeekchain.com) talks to is a newer graph — issuance v9 + staking + vault + a new
- * SqueekNFT — whose docs are not published yet.
- *
- * So this file describes BOTH, honestly labelled:
- *
- *  - `sepolia`     live testnet, mining v9 / new NFT. Addresses come from the official dApp bundle
- *                  and api.squeekchain.com/v1. NOT from a published deployment record, so the app
- *                  treats it as experimental: reads verified at runtime, owner actions disabled
- *                  until the docs publish the v9 flows.
- *  - `sepolia-v6`  the docs-pinned deployment this repo was built against (SqueekMining v6).
- *                  Fully supported, fully verified — but its settlement frontier is frozen, so
- *                  checkpoint() reverts RoundNotSettled and no new SQK is issued there.
- *  - `mainnet`     no deployment exists. Kept so the UI can say so instead of guessing.
+/** Published v6 is supported. Observed v9 is read-only and unverified.
+ * Historical API observations are not deployment records or transaction configuration.
  */
-
 export const PROFILES = {
   sepolia: {
     key: "sepolia",
-    label: "Sepolia (live)",
+    label: "Sepolia · v9 read-only (unverified)",
     short: "sepolia",
     chainId: 11155111,
     hexChainId: "0xaa36a7",
-    kind: "experimental",
+    kind: "read-only (unverified)",
     abiSet: "v9",
     addresses: {
       core: "0x980B4424c007CAf7a1f3670B48c8EaEf7EbC3d44",
@@ -49,22 +32,22 @@ export const PROFILES = {
       merge: false, // lives on SqueekNFT (merge(survivor, donor)) — docs pending
       deposit: false,
       art: true,
-      transfer: true,
+      transfer: false,
       reads: true,
     },
     notes:
-      "Live testnet graph (issuance v9 + staking + vault + new SqueekNFT, 9,972 minted). Docs for v9 are not published yet, so this build exposes reads (holdings, levels, cooldowns, onchain art, claimable) and blocks owner actions instead of guessing.",
+      "Observed v9 graph: read-only (unverified). No published deployment record or ABIs. All transactions, including transfer and checkpoint, are disabled. Observed identities are not trust pins.",
     apiBase: "https://api.squeekchain.com",
     startBlock: 11998937n,
   },
 
   "sepolia-v6": {
     key: "sepolia-v6",
-    label: "Sepolia · docs v6",
+    label: "Sepolia · v6 supported",
     short: "v6",
     chainId: 11155111,
     hexChainId: "0xaa36a7",
-    kind: "legacy",
+    kind: "supported",
     abiSet: "v6",
     addresses: {
       core: "0x74665dAecA35A2303e767E76a2FF1FB6F93e119f",
@@ -88,9 +71,9 @@ export const PROFILES = {
       },
       timelock: "0x6B35AB6E96EF292E4fdD3f15a4E812f3CA291844",
     },
-    capabilities: { checkpoint: true, claim: true, merge: true, deposit: false, art: true, transfer: true, reads: true },
+    capabilities: { checkpoint: true, claim: true, merge: true, deposit: false, art: true, transfer: false, reads: true },
     notes:
-      "The deployment the published docs describe (SqueekMining v6). Everything here is verified against the docs record, but the settlement frontier has not advanced since round 1973, so checkpoint() reverts RoundNotSettled and claims are frozen.",
+      "Supported docs-pinned v6. Each read or simulation requires the published identities at one cross-checked Sepolia block. Availability, checkpoint readiness and claimability are read at runtime; no frozen-frontier assumption.",
     apiBase: null,
     startBlock: 11902282n,
   },
@@ -113,7 +96,7 @@ export const PROFILES = {
   },
 };
 
-export const DEFAULT_PROFILE = "sepolia";
+export const DEFAULT_PROFILE = "sepolia-v6";
 
 export const listProfiles = () => Object.values(PROFILES);
 export const getProfile = (key) => PROFILES[key] ?? PROFILES[DEFAULT_PROFILE];

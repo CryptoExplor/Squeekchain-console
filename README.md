@@ -1,171 +1,125 @@
-# The Wheel
+# Wheelhouse
 
-**The Wheel** is a wallet-first console for [Squeekchain](https://squeekchain.com) — a wheel you spin for SQK: **anyone can checkpoint**, **Squeek holders can claim, merge and inspect**, and **agents can drive the whole thing** over MCP or `postMessage` — with every signature happening in the user's own wallet.
+A static, browser-first Squeekchain holder console. The app is branded **Wheelhouse**; the GitHub repository remains **CryptoExplor/Squeekchain-console**.
 
-Built light-first in Squeekchain's own design language (Barlow Condensed / IBM Plex Mono / Quicksand, gold `#d9a017` + blue `#4460cf`, 10px panels, 4px controls, dotted grid), with a dark theme one click away. The three typefaces are **vendored as woff2 in `web/fonts`** — no CDN, no third-party request at runtime.
+**Phase 1 screenshot polish ready for review — Phase 0 complete.** [Live run 41618128325](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41618128325) passed on `dd0afff`; the new polish head awaits the user-triggered pre-merge rerun. PR #2 remains draft. Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
 
-```
-sdk/            one isomorphic core: reads + unsigned tx builders + deployment profiles
-web/            the console (index.html, app.js, styles.css, bundle.js) + local static server
-mcp/            stdio MCP server (reads + prepare-only transactions)
-src/            keeper CLI (optional hot key, unattended checkpoint loop)
-test/ui.mjs        deterministic UI + telemetry tests (no network)
-test/web-smoke.mjs  optional live Sepolia integration checks
-build.mjs       esbuild bundle + tools.json + dist/ static site
-```
+The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
 
----
+[Review the 16 mocked screenshots](docs/screenshots/README.md): Overview, Wallet, Merge dialog and not-deployed Mainnet, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **146,982 bytes gzipped**, below the build-enforced 200,000-byte budget ([breakdown](docs/audit/phase1-js-size.json)).
 
-## Read this first: two deployments
+## Deployments and safety
 
-Squeekchain's Sepolia graph has moved on from the published docs, and the console is honest about it.
+| Profile | Status |
+|---|---|
+| `sepolia-v6` (default) | **Supported**, docs-pinned v6. Transactions require verified identities, live ownership/eligibility and successful simulation. No hardcoded settlement frontier or claimability. |
+| `sepolia` | Observed v9, **read-only (unverified)**. No published record/ABIs for supported actions. All transaction paths, including transfer and checkpoint, are absent/disabled. |
+| `mainnet` | **Not deployed**. No chain data/action panels. Saved Sepolia transaction Activity remains visible. |
 
-| Profile | What it is | Status in this build |
-|---|---|---|
-| **Sepolia (live)** | The graph the official dApp (`sepolia.squeekchain.com`) talks to: core `0x980B…3d44`, issuance **v9** `0xcd46…dc62`, staking v2 `0x4b67…ea4F`, new SqueekNFT `0xCB98…B70F`, token `0x5501…Db60`, launch/dispenser `0x1ff6…E04Dd`. 9,972 Squeeks live, `mergesOpen = true`. | **Reads + art + verification.** Owner actions are gated: v9's flows (staking deposits, `SqueekNFT.merge`, issuance checkpoint) are **not documented**, so this build shows state and refuses to guess. |
-| **Sepolia · docs v6** | The deployment the docs pin: SqueekMining v6 `0x3beE…7EC4`, core `0x7466…119f`, token `0x6872…cc76`, NFT `0x0eAF…05c6`. | **Fully supported**: checkpoint, claim, merge, merge planning. But its settlement frontier is **frozen at round 1973**, so `checkpoint()` reverts `RoundNotSettled`. |
-| **Mainnet** | — | **No deployment exists.** Shown explicitly instead of pretending. |
+- Sepolia is `11155111` / `0xaa36a7`. A connected Sepolia EIP-1193 wallet is preferred; otherwise reads go browser-direct to five role-aware public RPCs or a browser-local custom HTTPS RPC in Settings. No server proxy, paid RPC key or backend.
+- Every snapshot requires block-hash agreement with two independent RPC peers (public endpoints plus any supplied RPC), checked again after the reads. Any disagreement makes the result unavailable.
+- Full v6 verification checks the published implementations, runtime hashes, layout digests, admins/owners, versions, configuration and wiring at one block. The result is cached **in memory for the session/profile, keyed by implementation addresses and proxy admins**. Each later snapshot re-reads all four EIP-1967 slots; changed slots trigger full verification and fail closed if they do not match the published record. Output distinguishes the full-verification block from the current slot-check block. Cached verification is committed only after the final block-hash check succeeds.
+- Chain ID is probed once per transport, with concurrent probes shared; errors and wallet `chainChanged` invalidate it. Verification/status/art contract reads use multicall at the snapshot block. Several artwork IDs share one run/snapshot, in batches of up to 24.
+- Public peers: Tenderly, PublicNode, Nodies, OnFinality and 0xRPC. State reads try Tenderly/PublicNode/Nodies first; history scans try **Tenderly → 0xRPC → OnFinality** before reducing the block range. Nodies is snapshot/state-only (its log range is capped at 50 blocks). HTTP 429/503 triggers a shared per-endpoint cooldown honoring `Retry-After` (positive seconds or HTTP date up to 300s; otherwise 30s), without delaying healthy fallbacks. Pruned/history/range/plan errors are availability failures; identity/hash mismatches still stop immediately. A custom RPC is tried first for state/log reads and joins the peers; a Sepolia wallet remains preferred. Public endpoints change often: use `npm run rpc:probe` for current capabilities.
+- NFT discovery uses **owner-filtered incoming and outgoing Transfer events**. IndexedDB stores `{lastScannedBlock, lastScannedHash, ids}` per chain/release/NFT/owner. Subsequent reads scan only new blocks, detect reorged checkpoints, and confirm the final set using `balanceOf` and multicall `ownerOf` at the snapshot. Storage is never an ownership oracle. Node/private mode has an in-memory fallback. Tenderly is currently the only consistently reliable full-range log source in the user's checks, so preserving the incremental cache is especially important. When all log endpoints fail, the official account API can provide paginated **candidate wallet IDs only**. Candidates must match the configured NFT/account/chain context, their unique count must equal snapshot `balanceOf`, and every ID must pass multicall `ownerOf` at that same block before use or caching. Invalid/unavailable hints never become an empty balance; smaller-range logs are still tried where applicable.
+- Claims deduplicate/sort IDs, batch at 32, verify every owner and show the simulated payout. Each batch is re-previewed after human review; changed amounts stop the flow.
+- Merges require **`BURN-<donorId>` before call construction**, then simulation, human review, a fresh verified simulation, and the owner's wallet signature. No automatic donor selection/submission. Address comparisons are case-insensitive.
+- CLI/MCP hold **no owner keys** and never sign/submit transactions. The optional keeper is isolated in `keeper/`, off by default, and can only call `checkpoint()` after explicit dual opt-in.
 
-The console labels each profile in the UI (`legacy` / `experimental` / `not-deployed`), explains it in-page, and — for the live profile — marks verification as *untrusted-but-checked*, because those addresses come from the official dApp bundle and `api.squeekchain.com/v1`, not from a published deployment record.
+The official API supplies display-only telemetry and untrusted discovery hints; it never supplies authoritative transaction inputs, ownership, payout, deployment addresses or capabilities. Unavailable data is Unknown, not zero. DotGrid metadata is isolated in `<img>`; immutable renderer/page runtime hashes are not published, so artwork integrity is not claimed verified.
 
-### Why your checkpoint reverted
+## Run and test
 
-```
-tx 0xf5f460f1…f583a6 → SqueekMining 0x3beE…7EC4, data 0xc2c4c5c1 (checkpoint())
-status: reverted · gasUsed 65,689 of 2,000,000 · no logs
-revert data: 0x3db78c7c 0000…07b6  →  RoundNotSettled(1974)
-```
-
-Two facts stack up:
-
-1. `checkpoint()` processes rounds that `SqueekCore` has **certified**. At that block `processedThroughRound = 1973` and round 1974 was not settled, so it reverted with `RoundNotSettled(1974)`. This is not "not enough gas" and not a broken contract — it is the documented "wait for the settlement relayer" case. The console checks `checkpointStatus()` first and disables the button with the same reason.
-2. It could not have worked anyway: the **v6 graph is no longer fed.** Settlements now land on the newer core (`0x980B…`, settled round 1013 growing), so `settledThroughRound` on the old core never advances past 1973. Any `checkpoint()` against the old address will keep reverting `RoundNotSettled`, no matter when you send it.
-
-Also worth noting from that transaction: it was sent as a **legacy type-0 transaction with `gasPrice = 20 wei`** (Sepolia base fee was gwei-scale). Bump the fee or let the wallet manage EIP-1559 fees — underpriced-submission habits are how "I clicked at the right moment" transactions end up in a weird state.
-
----
-
-## Features
-
-**Everyone (no Squeek needed)**
-- See settled round, block height, checkpoint lag, issuance, supply, live Squeek count
-- Run `checkpoint()` when the chain allows it — simulated first, signed in the wallet
-- Inspect any address read-only, no wallet required
-
-**Holders**
-- Positions with level, power, pending activation, merge cooldown, per-token claimable SQK
-- **Claim** in 32-ID batches (simulated, then one wallet popup per batch)
-- **Merge plan**: same-level pairs that already satisfy every onchain precondition, with power before → after
-- **Merge guard**: the dialog names both IDs, states the donor is burned permanently, and requires typing the donor ID
-- **Onchain art**: `tokenURI` decoded into name, 11 traits and the DotGrid SVG, rendered as an isolated `<img>` (never inline markup)
-
-**Agents**
-- `window.squeek.callTool(name, args)` in the page
-- `postMessage` bridge: `{type:"squeek.tool"}` → `{type:"squeek.result"}`
-- MCP stdio server with the same tool names and JSON Schemas (`web/tools.json` is generated from `sdk/tools.js`, so they cannot drift)
-- Merge tools require `confirm: "BURN-<donor>"`; there is no MCP claim/merge submit path at all
-
----
-
-
-## Holder dashboard update
-
-- **Light-first frontend:** spacious Squeekchain-inspired typography, gold accents, dotted paper background, an original inline wheel illustration, mobile layout, and a saved dark-mode preference. This is an independent community console, not the official site.
-- **Official wheel telemetry:** `/v1/status` is polled every 15 seconds for RPM, speed and daily distance. Supports ETag/304, request timeouts and Retry-After backoff. Unsupported or malformed responses show unknown; stale measurements never masquerade as current activity. Device measurements are not settled work and never enter transaction builders.
-- **Holder workspace:** visible per-profile capability cards for claims, merges, staking and DotGrid art, alongside the position table, optional token-ID claim selection, a custom survivor/donor pair picker, simulated claim batches and irreversible merge confirmation. Claims reject unowned selections rather than silently dropping IDs, and re-read ownership before preparation.
-- **Honest mainnet view:** mainnet can now be selected to inspect launch availability. It has **no configured deployment and no enabled transactions**. Adding production support requires an official mainnet deployment record, published ABIs, verified identities and transaction-flow tests; changing the chain ID alone is not sufficient.
-- **Profile isolation:** changing deployment clears chain metrics, holdings, tools, output and art; late responses from the previous profile are discarded.
-- **Tests:** `npm test` runs offline with injected adapter and API responses. It does not prove current contract availability; `npm run test:live` retains the real-network integration checks.
-
-### Name suggestions
-
-| Dapp | Repository | Why |
-|---|---|---|
-| **Squeek Station** (recommended) | `squeek-station` | A home for holder actions, network activity and developer tools. |
-| The Wheel (current) | `squeekchain-wheel` | Short, memorable and native to the hamster-powered idea. |
-| Squeek Nest | `squeek-nest` | A friendly home for NFT collections and rewards. |
-
-These are suggestions, not availability or trademark checks. The existing app branding, package name and repository have not been renamed.
-
-## Run The Wheel locally
+Node 22 is pinned in `.nvmrc` and used in CI (within the package engine range).
 
 ```bash
-npm install
-npm run web     # builds bundle + dist, serves http://localhost:5173
-npm test        # offline UI + telemetry regression checks
-npm run test:live # optional: real Sepolia integration (requires RPC connectivity)
+npm ci
+npm run web                    # build + local static file server, port 5173
+npm run rpc:probe              # endpoint capability table; diagnostic, not live qualification
+npm test                       # deterministic offline regressions, safety, RPC budget, discovery and Activity
+npx playwright install --with-deps chromium
+npm run test:browser            # real Chromium, injected/offline data: components, profile races, persistence, and the 16 mocked screenshot states
+npm run test:live               # real Chromium + public Sepolia RPCs; no RPC mocks or signatures
 ```
 
-Wallet note: the page needs an injected EIP-1193 wallet (MetaMask, Rabby, Frame). Inside a sandboxed preview iframe extensions often stay out — open `http://localhost:5173` in a normal tab. Read-only inspection always works.
+The live test records public CORS RPC availability, two-peer block agreement and the published v6 graph/network snapshot. A failure must not be reported as a pass. The earlier sandbox attempt failed on the old three-endpoint list. That list was replaced following the user's real-network findings; the real-browser gate **passed on dd0afff in run 41618128325**. That pass does not qualify later commits automatically. Run `npm run rpc:probe` and `npm run test:live` locally. The Node probe checks chain ID, a head-minus-12 block, the pinned mining implementation slot at that block, and a 10k-block NFT Transfer log query per endpoint. It does not establish browser CORS, two-peer agreement or full deployment verification. The normal CI workflow installs Chromium **and OS libraries** and runs offline/browser checks only. Live qualification is isolated in the explicit-opt-in **thewheel** workflow; a failed live check fails that manual gate.
 
-## Deploy
+### Opt-in CI qualification gate: thewheel
 
-`npm run build` emits a fully static `dist/` (no server, no env vars, no build-time secrets).
+`.github/workflows/live.yml` is named **thewheel**. It accepts `workflow_dispatch` or `pull_request` **`labeled` only**, with the live job gated on explicit dispatch or the newly added **`run-live`** label. No push, PR-open/synchronize, or scheduled live runs occur; other labels skip the job. On `ubuntu-latest`, with Node from `.nvmrc` and a 15-minute job timeout, it runs:
 
-| Target | How |
+1. `npm ci`
+2. `npx playwright install --with-deps chromium`
+3. `npm run rpc:probe`
+4. `npm run test:live`
+
+It uses read-only repository permissions and no configured secrets, wallet, keeper or signing variables. Opted-in runs are serialized under the same concurrency group to avoid hammering public RPCs. Test failures are not ignored. An always-run artifact upload retains the HTML Playwright report, screenshots/traces/test attachments and **`live-qualification/live-qualification.json`**, including failure evidence. A not-run JSON is seeded before dependency/browser setup so a later setup or probe failure is not mistaken for a pass. The dedicated live reporter rejects empty/skipped/incomplete suites as qualification passes; ordinary browser tests remain separate.
+
+**At the end of Phase 1, the user re-triggers the pre-merge gate from PR #2:** remove/re-add the **`run-live`** label and manually review the app in their browser before merge. The job checks out the event's exact **PR head SHA**, not GitHub's synthetic merge commit. `LIVE_SOURCE_COMMIT` carries that same SHA into both the initial and final qualification JSON. For `workflow_dispatch`, the checkout/evidence use the selected ref's event SHA. No `pull_request_target`, configured secrets or write permissions are used.
+
+Dispatch from the Actions tab still requires the workflow on the default branch; the label trigger avoids that bootstrap requirement. I.e. no merge of this WIP PR is needed to run the label gate. Adding subsequent commits does not rerun live RPC tests automatically: remove and re-add `run-live` to qualify a newer head.
+
+**Phase 0 is complete**, supported by the offline audit and [successful live run 41618128325 on dd0afff](docs/audit/live-qualification-run-41618128325.json). The screenshot-polish head needs a new user-triggered live pass. Before merge, the opted-in live job must pass for the intended final source SHA. A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
+
+### Live failure diagnostics
+
+The live gate retains `verified-network-snapshot.json` and the Playwright failure trace, and also attaches **`rpc-network-diagnostics.json`**, plus **`rpc-tool-diagnostics.json`** when a tool returns error diagnostics. The network attachment passively records endpoint origin, method, HTTP status and JSON-RPC failure codes, plus explicit browser CORS-policy signals. A browser `TypeError`/`ERR_FAILED` alone is not proof of CORS. Tool diagnostics preserve the cause chain, original errors when chain-ID availability rechecks fail, and a bounded history of endpoint failures. Endpoint URL credentials, paths/query strings, request parameters/headers and arbitrary provider messages are deliberately omitted. Only recognized fetch-failure TypeErrors qualify as availability; other TypeErrors stop immediately, including through viem HTTP wrappers. Trust mismatches and reverts still fail closed; availability fallback does not retry changed transaction inputs.
+
+### Chromium downloads and local Chrome
+
+Some **linux-arm64** environments return **403** from the Playwright Chromium CDN. For `test:live`, use an **x64 machine** with the standard Chromium install above, or an already-installed local Chrome on a supported platform. The config accepts `PLAYWRIGHT_CHROMIUM_CHANNEL=chrome` and passes it as Playwright's `channel: 'chrome'`:
+
+```bash
+PLAYWRIGHT_CHROMIUM_CHANNEL=chrome npm run test:live
+# Alternatively, point directly at an existing compatible local Chrome/Chromium:
+PLAYWRIGHT_CHROMIUM_EXECUTABLE=/absolute/path/to/chrome npm run test:live
+```
+
+Choose one override. These options do not install Chrome or make an unsupported browser/platform combination work; Chrome must already be installed. This bypasses the bundled Chromium download, not RPC/CORS or verification checks. CI still installs Chromium with `npx playwright install --with-deps chromium`.
+
+The v6 Chain pulse panel shows the **live settlement frontier**, not a hardcoded round. If the live next round is unsettled and mining has no settlement backlog, it says no new rewards are being issued **at that snapshot**, while existing rewards may still be claimable. The notice updates when checkpoint readiness/frontier changes and clears on read failure or profile switch; it does not infer a permanent freeze from one read.
+
+Switching profiles always wins: reads abort, generation IDs invalidate late results, profile/wallet/position/claim/merge/receipt-view state clears before new reads, and only signing has a busy lock. A wallet request or transaction already sent cannot be cancelled by navigation. Broadcast hashes are saved immediately in localStorage and shown under **Activity across all profiles**, including Mainnet; receipts are monitored while the tab is open and rechecked after reload. No transaction is automatically resubmitted. Closing the tab stops monitoring until it is opened again.
+
+## Static Cloudflare Pages deployment
+
+Use a **Pages** Git integration, not Workers Builds:
+
+| Setting | Value |
 |---|---|
-| **Cloudflare Pages** | Connect the repo → build `npm run build`, output `dist`. Or `npx wrangler pages deploy dist` (`wrangler.toml` included). **Recommended.** |
-| **Vercel** | Import the repo; `vercel.json` already sets `buildCommand` and `outputDirectory=dist`. |
-| **GitHub Pages** | Push to `main`; `.github/workflows/deploy.yml` builds, runs the smoke test, uploads and deploys. |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Root | Repository root |
+| Build variables | None required |
 
-Cloudflare Pages is the better default here: this is a static bundle that talks to public RPCs, so Cloudflare's unmetered bandwidth and edge caching fit better than Vercel's function-oriented free tier. Vercel is the nicer DX if you want previews per PR or plan to add server routes later. Neither can host the MCP server — that runs on the user's machine over stdio (or later as a Cloudflare Worker/SSE remote MCP).
+Pages publishes `dist/` automatically. `dist/` is generated, ignored and **not committed**; the build checks source/output parity. There is no Worker entry point. `npx wrangler deploy` is the wrong deployment command for the existing Pages configuration. For manual deployment to an existing Pages project use `npx wrangler pages deploy dist --project-name=YOUR_ACTUAL_PAGES_PROJECT_NAME` with appropriate account permissions. Do not confuse the token name with the project name.
 
-## MCP
+## Unsigned CLI and MCP
 
-```jsonc
-{
-  "mcpServers": {
-    "the-wheel": {
-      "command": "node",
-      "args": ["/absolute/path/to/the-wheel/mcp/server.js"],
-      "env": { "SQUEEK_PROFILE": "sepolia" }   // or "sepolia-v6"
-    }
-  }
-}
+```bash
+node src/cli.js --help
+npm run verify
+npm run status
+npm run checkpoint -- --from 0xCALLER
+npm run claim -- --owner 0xOWNER --ids 1,2
+npm run merge -- --owner 0xOWNER --survivor 1 --donor 2 --confirm BURN-2
+npm run mcp
 ```
 
-- `SQUEEK_PROFILE=sepolia` (default) → `squeek_network_status`, `squeek_verify`, `squeek_wallet_status`, `squeek_art`
-- `SQUEEK_PROFILE=sepolia-v6` → adds `squeek_checkpoint_preview`, `squeek_claim_preview`, `squeek_merge_plan`, `squeek_merge_preview`, `squeek_prepare_{checkpoint,claim,merge}`
-- `KEEPER_PRIVATE_KEY=…` adds `squeek_submit_checkpoint` **only** — checkpoint and nothing else, matching the docs' keeper rule
+Replace the illustrative addresses with real public addresses. Owner actions return unsigned calls for the owner's wallet. No `--live`, private-key option, unattended owner automation or `mine` command exists.
 
-Prepare tools return `{ to, data, value, chainId }` for the owner's wallet. The server never signs owner actions.
+MCP defaults to `SQUEEK_PROFILE=sepolia-v6`; `sepolia` exposes only unverified observations/art. Shared schemas are in `sdk/tools.js`, published as `web/tools.json`. Browser tools are available through `window.squeek.callTool(name, args)`; cross-origin messages cannot request wallet actions.
 
-## SDK
+For an operator-run checkpoint keeper, read `keeper/checkpoint.mjs`: both `CHECKPOINT_KEEPER_ENABLED=true` and `--submit-checkpoint` are required, with a dedicated low-value keeper account supplied outside the app. Its target, calldata and value are fixed/checked; it is not exposed through CLI/MCP and is not enabled by any package script. Never supply an owner key.
 
-```js
-import { createSqueekchain, createSqueek9, PROFILES } from "./sdk/squeekchain.js";
+## Repository layout
 
-const live = createSqueek9({ profileKey: "sepolia" });
-await live.verify();                       // implementation versions + wiring
-await live.networkStatus();                // rounds, issuance, supply, checkpoint state
-await live.walletStatus(owner);            // Squeeks, levels, nextMergeHeight, deposited, claimable
-await live.art(1);                         // { name, attributes, image: data:image/svg+xml;base64,… }
+- `sdk/`: pinned record, snapshot/RPC trust, verification cache, discovery, unsigned previews, shared tool schemas.
+- `web/`: light-default UI, saved theme, local fonts, telemetry and persistent transaction Activity.
+- `mcp/`: local stdio, read/prepare-only.
+- `src/`: unsigned public owner CLI and compatibility facades.
+- `keeper/`: separate checkpoint-only opt-in script.
+- `test/`: offline and Playwright suites.
+- `build.mjs`, `wrangler.toml`: existing static build/Pages architecture, preserved.
 
-const v6 = createSqueekchain();            // docs-pinned graph
-await v6.claimPreview(owner);              // simulated batches with gas
-await v6.mergePlan(owner);                 // mergeable pairs + power delta
-await v6.mergePreview(owner, survivor, donor);
-```
-
-Both adapters are JSON-safe (`bigint` → decimal strings), remember snapshots for 4s, and fail over across three public Sepolia RPCs because they return **HTTP 429** under load.
-
-## Safety model
-
-- No private key in the web or MCP path; signing is a wallet popup
-- Verification before reading: implementation versions + wiring for both graphs; the live profile is explicitly marked as coming from the official dApp bundle + API rather than a published record
-- Simulate before proposing a signature (`eth_estimateGas` doubles as a check; decoded reverts like `RoundNotSettled`, `CooldownActive`, `PendingActivation` surface first)
-- Merges are irreversible: typed confirmation, explicit donor warning, machine-readable guard for agents
-- Art is untrusted output: rendered as an isolated image, never injected as markup
-- Count cooldowns in **completed Squeek blocks**, never wall-clock time
-
-## Troubleshooting
-
-| Symptom | Meaning |
-|---|---|
-| `RoundNotSettled(1974)` on v6 | Expected: that deployment stopped being settled. Use the live profile for reads. |
-| "No injected wallet found" | Sandboxed iframe or no extension — open the app in its own tab. |
-| HTTP 429 | Public RPC throttling; the SDK fails over and memoises. Point `RPC_URL` at your own node for heavy use. |
-| Live profile shows 0 claimable | v9 pays through **staking**: an undeposited Squeek earns nothing, and the deposit flow is not documented yet. |
-| Art takes a second | `tokenURI` renders the DotGrid page onchain (~90 KB of metadata per token). |
-
-The Wheel is testnet-only today. Testnet SQK and Squeeks have no monetary value.
+Independent community software. Sepolia testnet only; not investment advice.

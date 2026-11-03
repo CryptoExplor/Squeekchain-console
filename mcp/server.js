@@ -1,29 +1,21 @@
 #!/usr/bin/env node
-/**
- * MCP server (stdio, JSON-RPC 2.0, newline-delimited).
- *
- *   SQUEEK_PROFILE=sepolia node mcp/server.js        # live graph: reads + art (v9 flows undocumented)
- *   SQUEEK_PROFILE=sepolia-v6 node mcp/server.js     # docs-pinned v6: reads + prepare claim/merge/checkpoint
- *
- * The served profile decides which tools exist. This server never holds a key and can never sign a
- * claim or a merge: those tools return unsigned transactions for the owner's wallet. Set
- * KEEPER_PRIVATE_KEY only if you want checkpoint submission, and note that it exposes *only*
- * `squeek_submit_checkpoint` — the docs' rule for a keeper given a key by its operator.
+import { rpcToolError } from '../sdk/rpc-errors.js';
+/** Wheelhouse MCP: stdio public reads and unsigned preparations only.
+ * No key configuration, signing or submission. Keeper is isolated in keeper/.
  */
 import readline from "node:readline";
-import { createSqueekchain, SqueekchainError } from "../sdk/squeekchain.js";
+import { createSqueekchain } from "../sdk/squeekchain.js";
 import { createSqueek9 } from "../sdk/v9.js";
-import { getProfile, PROFILES } from "../sdk/deployments.js";
+import { getProfile, PROFILES, DEFAULT_PROFILE } from "../sdk/deployments.js";
 import { TOOL_SPECS, buildManifest } from "../sdk/tools.js";
 
 const PROTOCOL_VERSION = "2024-11-05";
-const SERVER_INFO = { name: "the-wheel", title: "The Wheel", version: "1.0.0" };
+const SERVER_INFO = { name: "wheelhouse", title: "Wheelhouse", version: "1.0.0" };
 const rpcUrl = process.env.RPC_URL || undefined;
-const profileKey = process.env.SQUEEK_PROFILE || "sepolia";
+const profileKey = process.env.SQUEEK_PROFILE || DEFAULT_PROFILE;
 const profile = getProfile(profileKey);
-const keeperKey = process.env.KEEPER_PRIVATE_KEY || null;
 
-const log = (...a) => process.stderr.write(`[the-wheel-mcp] ${a.join(" ")}\n`);
+const log = (...a) => process.stderr.write(`[wheelhouse-mcp] ${a.join(" ")}\n`);
 if (!profile.addresses) {
   log(`profile "${profileKey}" has no deployment — refusing to start`);
   process.exit(1);
@@ -32,7 +24,7 @@ if (!profile.addresses) {
 const adapter =
   profile.abiSet === "v9"
     ? createSqueek9({ profileKey, rpcUrl })
-    : createSqueekchain({ rpcUrl, addresses: profile.addresses, skipVerification: process.env.SKIP_VERIFICATION === "true" });
+    : createSqueekchain({ rpcUrl, addresses: profile.addresses });
 
 const caps = profile.capabilities;
 const requireAddress = (value, label = "owner") => {
@@ -61,19 +53,8 @@ if (adapter.art) {
 }
 
 if (caps.checkpoint) {
-  handlers.squeek_checkpoint_preview = async () => {
-    const net = await adapter.networkStatus();
-    return {
-      ...net.checkpoint,
-      transaction: net.checkpoint.canCheckpoint ? adapter.buildCheckpoint() : null,
-      note: "checkpoint() is permissionless and pays no caller reward; it funds the SQK holders claim",
-    };
-  };
-  handlers.squeek_prepare_checkpoint = async () => {
-    const preview = await adapter.checkpointPreview();
-    if (!preview.ok) return { ok: false, reason: preview.reason };
-    return { ok: true, transaction: preview.tx, gas: preview.gas, note: "hand to a wallet; this server does not sign" };
-  };
+  handlers.squeek_checkpoint_preview = async args => adapter.checkpointPreview(requireAddress(args.from, "from"));
+  handlers.squeek_prepare_checkpoint = async args => adapter.checkpointPreview(requireAddress(args.from, "from"));
 }
 
 if (caps.claim) {
@@ -94,13 +75,13 @@ if (caps.claim) {
 
 if (caps.merge) {
   handlers.squeek_merge_plan = async (args) => adapter.mergePlan(requireAddress(args.owner));
-  handlers.squeek_merge_preview = async (args) => adapter.mergePreview(requireAddress(args.owner), args.survivor, args.donor);
+  handlers.squeek_merge_preview = async (args) => adapter.mergePreview(requireAddress(args.owner), args.survivor, args.donor, { confirm: args.confirm });
   handlers.squeek_prepare_merge = async (args) => {
     const owner = requireAddress(args.owner);
     if (args.confirm !== `BURN-${args.donor}`) {
       throw new Error(`refusing to prepare a merge without confirm: "BURN-${args.donor}"`);
     }
-    const preview = await adapter.mergePreview(owner, args.survivor, args.donor);
+    const preview = await adapter.mergePreview(owner, args.survivor, args.donor, { confirm: args.confirm });
     return {
       ok: true,
       owner,
@@ -114,32 +95,6 @@ if (caps.merge) {
   };
 }
 
-if (keeperKey && caps.checkpoint) {
-  handlers.squeek_submit_checkpoint = async () => {
-    const { createWalletClient, http } = await import("viem");
-    const { privateKeyToAccount } = await import("viem/accounts");
-    const { sepolia } = await import("viem/chains");
-    const account = privateKeyToAccount(keeperKey.startsWith("0x") ? keeperKey : `0x${keeperKey}`);
-    const preview = await adapter.checkpointPreview();
-    if (!preview.ok) return { ok: false, reason: preview.reason };
-    const wallet = createWalletClient({ account, chain: sepolia, transport: http(rpcUrl) });
-    const hash = await wallet.sendTransaction({ to: preview.tx.to, data: preview.tx.data, value: 0n, chain: sepolia, account });
-    const receipt = await adapter.client.waitForTransactionReceipt({ hash, timeout: 180_000 });
-    return { ok: receipt.status === "success", hash, blockNumber: String(receipt.blockNumber), gasUsed: String(receipt.gasUsed) };
-  };
-}
-
-const extraSpecs = keeperKey
-  ? [
-      {
-        name: "squeek_submit_checkpoint",
-        description: "Submit checkpoint() from the keeper key (checkpoint only, never claims or merges).",
-        inputSchema: { type: "object", properties: {} },
-        sideEffects: "sends-transaction",
-      },
-    ]
-  : [];
-
 const availableTools = () => [
   ...TOOL_SPECS.filter((t) => t.surfaces.includes("mcp") && handlers[t.name]).map(({ name, description, inputSchema, sideEffects }) => ({
     name,
@@ -147,7 +102,6 @@ const availableTools = () => [
     inputSchema,
     sideEffects,
   })),
-  ...extraSpecs,
 ];
 
 // ── JSON-RPC ─────────────────────────────────────────────────────────────────
@@ -160,16 +114,16 @@ async function handleToolCall(id, params) {
   const handler = handlers[name];
   if (!handler) return fail(id, -32602, `unknown tool for profile ${profile.key}: ${name}`);
   try {
-    if (adapter.assertVerified && profile.abiSet !== "v9") await adapter.assertVerified();
     const result = await handler(params?.arguments ?? {});
     return reply(id, {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       isError: Boolean(result && result.ok === false && (result.error || result.reason)),
     });
   } catch (err) {
-    log(`tool ${name} failed: ${err.message}`);
+    const failure = rpcToolError(err, adapter.rpcDiagnostics?.() ?? []);
+    log(`tool ${name} failed: ${failure.error}`);
     return reply(id, {
-      content: [{ type: "text", text: JSON.stringify({ error: err.message, revert: err instanceof SqueekchainError ? err.revert : null }, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(failure, null, 2) }],
       isError: true,
     });
   }
@@ -223,5 +177,5 @@ if (process.argv.includes("--manifest") || process.argv.includes("--profiles")) 
       if (message?.id !== undefined) fail(message.id, -32603, err.message);
     });
   });
-  log(`ready · profile ${profile.key} (${profile.kind}) · ${availableTools().length} tools · rpc ${rpcUrl ?? "default"} · keeper ${keeperKey ? "on" : "off"}`);
+  log(`ready · profile ${profile.key} (${profile.kind}) · ${availableTools().length} tools · rpc ${rpcUrl ?? "default"} · unsigned only`);
 }

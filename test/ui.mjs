@@ -14,6 +14,7 @@ const html = fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf
 const dom = new JSDOM(html, { url: 'https://console.test/' });
 const { window: win } = dom;
 const $ = id => win.document.getElementById(id);
+win.localStorage.setItem("squeekchain:profile", "sepolia");
 let rejectNetwork = false, pending, selectedClaim, selectedMerge;
 const adapter = {
   networkStatus: async () => { if (pending) return pending; if (rejectNetwork) throw new Error('RPC offline'); return net; },
@@ -28,9 +29,13 @@ win.ethereum = { request: async ({ method }) => method === 'eth_chainId' ? '0xaa
 const api = mount({ doc: win.document, win, adapterFactory: () => adapter, fetcher: async () => response() });
 await api.refresh();
 assert.equal(win.document.documentElement.dataset.theme, 'light');
+assert.equal($('btn-theme').getAttribute('aria-pressed'), 'false');
 $('btn-theme').click(); assert.equal(win.document.documentElement.dataset.theme, 'dark');
+assert.equal($('btn-theme').getAttribute('aria-pressed'), 'true');
+assert.equal($('btn-theme').title, 'Switch to light theme');
 $('btn-theme').click(); assert.equal(win.localStorage.getItem('squeekchain:theme'), 'light');
 assert.equal($('net-round').textContent, '1000');
+assert.equal($('settlement-notice').classList.contains('hidden'), true, 'v9 must not show the v6 settlement notice');
 assert.equal($('btn-checkpoint').disabled, true);
 assert.equal($('capability-grid').children.length, 4);
 assert.match($('wheel-rpm').textContent, /12.5/);
@@ -43,29 +48,48 @@ assert.ok((await api.callTool('squeek_request_merge')).error);
 await api.loadArt(['1']);
 assert.equal($('art-grid').querySelectorAll('img').length, 1);
 await api.switchProfile('sepolia-v6');
+net.checkpoint.roundSettled = false;
+await api.refresh();
+assert.match($('settlement-notice').textContent, /Settlement frontier at round 1000/);
+assert.match($('settlement-notice').textContent, /No new rewards.*at this snapshot/);
+net.core.settledThroughRound = '1001'; net.checkpoint.roundSettled = true; net.checkpoint.canCheckpoint = true;
+await api.refresh();
+assert.match($('settlement-notice').textContent, /Settlement frontier at round 1001/);
+assert.doesNotMatch($('settlement-notice').textContent, /No new rewards/);
+net.checkpoint.roundSettled = false; net.checkpoint.canCheckpoint = false;
+assert.equal(api.state.account, null, 'switch clears the connected-wallet view');
+await api.connect();
 assert.ok(Object.keys(api.tools()).includes('squeek_request_merge'));
 $('claim-ids').value = '1, 2';
 await $('btn-claim').onclick();
 assert.deepEqual(selectedClaim, ['1', '2']);
 $('merge-survivor').value = '1'; $('merge-donor').value = '2';
-await $('btn-custom-merge').onclick();
+const merging = $('btn-custom-merge').onclick();
+await new Promise(resolve => setTimeout(resolve, 0));
+assert.equal(selectedMerge, undefined, 'no merge simulation before BURN guard');
+$('modal-input').value = '2'; $('modal-input').dispatchEvent(new win.Event('input'));
+assert.equal($('btn-modal-confirm').disabled, true);
+$('modal-input').value = 'BURN-2'; $('modal-input').dispatchEvent(new win.Event('input'));
+$('btn-modal-confirm').click();
+await merging;
 assert.deepEqual(selectedMerge, { survivor: '1', donor: '2' });
 await api.switchProfile('mainnet');
 assert.equal($('profile-select').selectedOptions[0].disabled, false);
 assert.match($('profile-notice').textContent, /no mainnet deployment/);
-assert.equal($('net-round').textContent, '—');
+assert.equal($('settlement-notice').textContent, '', 'profile switches clear live frontier warnings');
+assert.equal($('net-round').textContent, 'Unknown');
 assert.equal($('btn-checkpoint').disabled, true);
 assert.equal($('holder-body').classList.contains('hidden'), true);
 assert.equal($('tool-call').options.length, 0);
 assert.ok((await api.callTool('squeek_network_status')).error);
-assert.equal($('wheel-rpm').textContent, '—');
+assert.equal($('wheel-rpm').textContent, 'Unknown');
 // An in-flight testnet read must never repopulate the mainnet page.
 let release;
 pending = new Promise(resolve => { release = resolve; });
 const switching = api.switchProfile('sepolia');
 await api.switchProfile('mainnet');
 release(net); await switching; pending = null;
-assert.equal($('net-round').textContent, '—');
+assert.equal($('net-round').textContent, 'Unknown');
 rejectNetwork = true;
 await api.switchProfile('sepolia');
 assert.equal($('verified-chip').textContent, 'read failed');
@@ -88,26 +112,16 @@ await assert.rejects(telemetry.read(), /Rate limited/);
 assert.equal(calls, 3);
 assert.equal(telemetryView(payload, timestamp).state, 'Running');
 assert.equal(telemetryView({ ...payload, measurement: { ...payload.measurement, rpmMilli: 0 } }, timestamp).state, 'Resting');
-assert.equal(telemetryView(payload, timestamp + 121000).rpm, '—');
+assert.equal(telemetryView(payload, timestamp + 121000).rpm, 'Unknown');
 assert.equal(telemetryView({ measurement: null }).state, 'Unknown');
 for (const bad of [{ schemaVersion: 99 }, { schemaVersion: 1, status: 'unavailable', reason: 'offline' }, { schemaVersion: 1, measurement: {} }]) {
   await assert.rejects(createTelemetry({ fetcher: async () => response(bad) }).read());
 }
 console.log('PASS telemetry: schema validation, unknown vs zero, stale readings, ETag/304, Retry-After backoff');
 
-// A selected subset must never silently discard an unowned token or trust cached ownership.
+// Production no longer has a verification bypass for tests or integrations.
+// Complete claim sorting/live ownership/simulation coverage lives in phase1-safety.mjs,
+// using a test-only bundled record fixture rather than bypassing production verification.
 const { createSqueekchain } = await import('../sdk/squeekchain.js');
-const sdk = createSqueekchain({ skipVerification: true });
-let ownerReads = 0;
-sdk.client.getBlockNumber = async () => 123n;
-sdk.client.readContract = async () => { ownerReads++; return owner; };
-sdk.client.estimateGas = async () => 100n;
-const cached = { squeeks: [{ tokenId: '1', claimable: { base: '1' } }] };
-await assert.rejects(sdk.claimPreview(owner, ['1', '999'], { status: cached }), /no IDs were dropped/);
-assert.equal(ownerReads, 0);
-const claim = await sdk.claimPreview(owner, ['1', '1'], { status: cached });
-assert.equal(claim.batches[0].tokenIds.length, 1);
-assert.equal(ownerReads, 1);
-sdk.client.readContract = async () => '0x0000000000000000000000000000000000000001';
-await assert.rejects(sdk.claimPreview(owner, ['1'], { status: cached }), /no longer owns/);
-console.log('PASS claim safety: reject unowned selection, deduplicate IDs, re-read ownership instead of trusting cached holdings');
+assert.throws(() => createSqueekchain({ skipVerification: true }), /cannot be disabled/);
+console.log('PASS SDK configuration: verification cannot be disabled');

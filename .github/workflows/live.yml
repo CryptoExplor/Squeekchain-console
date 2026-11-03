@@ -1,0 +1,65 @@
+name: thewheel
+run-name: thewheel · Read-only Sepolia live qualification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+# Explicit dispatch/label opt-in only; serialize runs to avoid competing public-RPC scans.
+concurrency:
+  group: thewheel-live-sepolia
+  cancel-in-progress: false
+
+jobs:
+  live:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-live'
+    env:
+      LIVE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Initialize qualification evidence
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          fs.mkdirSync('live-qualification', { recursive: true });
+          fs.writeFileSync('live-qualification/live-qualification.json', JSON.stringify({
+            schemaVersion: 1,
+            sourceCommit: process.env.LIVE_SOURCE_COMMIT,
+            runUrl: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+            status: 'not-run',
+            qualified: false,
+            phase0: 'incomplete',
+            reason: 'Live tests have not started. Check setup/probe logs if this is the final artifact.'
+          }, null, 2) + '\n');
+          NODE
+      - run: npm ci
+      - name: Install Chromium and OS libraries
+        run: npx playwright install --with-deps chromium
+      - name: Probe public Sepolia RPC capabilities
+        run: npm run rpc:probe
+      - name: Qualify live Sepolia reads (no wallet, keys or signing)
+        run: npm run test:live
+      - name: Upload Playwright report and qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thewheel-live-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+            live-qualification/
+          if-no-files-found: error
+          retention-days: 14
