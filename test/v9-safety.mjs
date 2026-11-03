@@ -25,7 +25,7 @@ const at=12056257n,hash='0x'+'ab'.repeat(32),snapshot={blockNumber:at,blockHash:
 const same=(a,b)=>String(a).toLowerCase()===String(b).toLowerCase();
 const abis={core:core9Abi,issuance:issuance9Abi,staking:staking9Abi,nft:nft9Abi,token:token9Abi};
 function fake() {
- const flags={approved:false,all:false,allowance:0n,mergesOpen:true,paused:false,settled:true,fee:2n,empty:false,wrongDepositor:false};const calls=[];
+ const flags={coreRound:20n,issued:100n,tokenSupply:200n,approved:false,all:false,allowance:0n,mergesOpen:true,paused:false,settled:true,fee:2n,empty:false,wrongDepositor:false};const calls=[];
  const track=(name,fn)=>async req=>{if(req?.blockNumber!=null)assert.equal(req.blockNumber,at,name);calls.push({name,...req});return fn(req);};
  const client={
  getChainId:async()=>11155111,
@@ -41,10 +41,10 @@ function fake() {
  if(fn==='implementationCodeVersion'||fn==='implementationStorageLayoutDigest')return pin[fn];
  if(Object.hasOwn(pin?.wiring??{},fn))return pin.wiring[fn];
  if(fn==='configuration')return {genesisTimestamp:0n,roundDuration:600n};
- if(fn==='state')return same(address,profile.addresses.core)?{settledThroughRound:20n,blockHeight:100n,blockProgress:0n,workPerThousandBlocks:1000,paused:flags.paused}:{paused:flags.paused,minted:100n,gachaFunded:50n,stakingFunded:50n,processedThroughRound:19n,fundedBlocks:50n};
+ if(fn==='state')return same(address,profile.addresses.core)?{settledThroughRound:flags.coreRound,blockHeight:100n,blockProgress:0n,workPerThousandBlocks:1000,paused:flags.paused}:{paused:flags.paused,minted:flags.issued,gachaFunded:50n,stakingFunded:50n,processedThroughRound:19n,fundedBlocks:50n};
  if(fn==='curve')return {targetPower:10000n,floorBps:10};
  if(fn==='checkpointStatus')return [flags.paused,20n,flags.settled];
- if(fn==='totalSupply')return 100n;if(fn==='cap')return 1000n;if(fn==='MAXIMUM_LEVEL')return 10;
+ if(fn==='totalSupply')return same(address,profile.addresses.token)?flags.tokenSupply:100n;if(fn==='cap')return 1000n;if(fn==='MAXIMUM_LEVEL')return 10;
  if(fn==='mergesOpen')return flags.mergesOpen;
  if(fn==='cooldownBlocks')return BigInt(args[0])*3n;
  if(fn==='basePower')return 1000n*BigInt(args[1]);
@@ -83,6 +83,9 @@ const verify=await sdk.verify();assert.equal(verify.trusted,true);assert.equal(v
 assert.equal((await sdk.verify()).cacheHit,true);
 const wallet=await sdk.walletStatus(owner);assert.deepEqual(wallet.squeeks.map(t=>[t.tokenId,t.custody]),[['1','Wallet'],['2','Wallet'],['3','Staked'],['4','Staked']]);assert.equal(wallet.totals.power,'2100');assert.equal(wallet.totals.deposited,2);
 assert.equal(wallet.net.policy.levels[1].cooldownBlocks,'6');
+assert.equal(wallet.net.mining.issued.base,'100');assert.equal(wallet.net.mining.minted.base,'200');
+f.flags.coreRound=21n;const settledOnly=await sdk.networkStatus();assert.equal(settledOnly.core.settledThroughRound,'21');assert.equal(settledOnly.mining.issued.base,'100','settlement is not issuance');
+f.flags.issued=101n;assert.equal((await sdk.networkStatus()).mining.issued.base,'101','issuance state is reread, not frozen to identity export');f.flags.coreRound=20n;f.flags.issued=100n;
 let preview=await sdk.actionPreview(owner,'deposit',{tokenIds:['1','2']});assert.equal(preview.approvalRequired,true);assert.deepEqual(preview.tokenIds,['1','2']);
 const cases=[['approveNft',{tokenId:'1'},'nft','approve'],['approveAll',{},'nft','setApprovalForAll'],['approveSqk',{amount:'10'},'token','approve'],['withdraw',{tokenIds:['3']},'staking','withdraw'],['merge',{survivor:'1',donor:'2',confirm:'BURN-2'},'nft','merge'],['mergeDeposited',{survivor:'3',donor:'4',confirm:'BURN-4'},'staking','mergeDeposited'],['claim',{},'staking','claim'],['claimAndStake',{},'staking','claimAndStake'],['checkpoint',{},'issuance','checkpoint'],['unstake',{amount:'10'},'staking','unstake']];
 for(const[action,input,contract,fn]of cases){const p=await sdk.actionPreview(owner,action,input);assert.equal(p.ok,true,action);assert.ok(same(p.tx.to,profile.addresses[contract]));assert.equal(decodeFunctionData({abi:abis[contract],data:p.tx.data}).functionName,fn);assert.ok(f.calls.some(c=>c.name==='simulateContract'&&c.functionName===fn));}

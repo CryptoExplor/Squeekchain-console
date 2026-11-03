@@ -93,8 +93,8 @@ try {
   console.log('PASS review: retain telemetry during manual/poll fetches, clear failures, isolate profiles');
 
   await api.connect();
-  assert.match($('wallet-chip').textContent, /0x5989/);
-  assert.match($('wallet-chip').textContent, /0\.100 ETH/);
+  assert.equal($('wallet-chip'),null);assert.match($('btn-connect').textContent,/0x5989/);
+  assert.match($('wallet-eth').textContent, /0\.100 ETH/);
   verifyFails = true; await api.refresh();
   assert.equal($('profile-status').classList.contains('bad'), true);
   // jsdom does not lay out responsive viewports. Check the applicable CSS declarations
@@ -106,7 +106,7 @@ try {
           const max = /max-width:\s*(\d+)px/.exec(rule.conditionText);
           if (max && width <= Number(max[1])) visit(rule.cssRules);
         } else if (rule.selectorText && rule.style.display === 'none') {
-          for (const id of ['wallet-chip', 'verified-chip']) {
+          for (const id of ['btn-connect', 'profile-status']) {
             for (let node = $(id); node; node = node.parentElement) {
               assert.equal(node.matches(rule.selectorText), false, `${id} hidden at ${width}px by ${rule.selectorText}`);
             }
@@ -116,7 +116,7 @@ try {
     };
     visit(style.sheet.cssRules);
   }
-  assert.notEqual(win.getComputedStyle($('wallet-chip')).display, 'none');
+  assert.notEqual(win.getComputedStyle($('btn-connect')).display, 'none');
   console.log('PASS review: wallet text and verification failure remain visible in base and breakpoint CSS');
 
   verifyFails = false;

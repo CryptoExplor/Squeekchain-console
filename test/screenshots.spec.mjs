@@ -77,7 +77,8 @@ test('TokenCard keyboard opens isolated image; modal traps and restores focus', 
 
 async function assertCompactHeader(page, width, connected) {
   const header = page.getByRole('banner');
-  await expect(page.getByTestId('wallet-chip'))[connected ? 'toBeVisible' : 'toBeHidden']();
+  await expect(page.getByTestId('wallet-chip')).toHaveCount(0);
+  await expect(page.getByTestId('wallet-eth'))[connected ? 'toHaveText' : 'toBeHidden'](...(connected?['ETH balance: 0.125 ETH']:[]));
   await expect(page.getByTestId('wallet-button')).toHaveAttribute('aria-label', connected ? 'Wallet menu' : 'Connect wallet');
   const geometry = await header.locator('select:visible, .chip:visible, .btn:visible').evaluateAll(nodes => nodes.map(node => {
     const rect = node.getBoundingClientRect(), css = getComputedStyle(node);
@@ -109,7 +110,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
     await assertCompactHeader(page, width, connected);
     await page.evaluate(() => document.activeElement.blur());
     await capture(page, testInfo, `header-${connected ? 'connected' : 'disconnected'}-${theme}-${width}.png`, page.getByRole('banner'));
-    if (connected) { await page.getByTestId('wallet-button').click(); await page.getByTestId('btn-disconnect').click(); await expect(page.getByTestId('wallet-chip')).toBeHidden(); }
+    if (connected) { await page.getByTestId('wallet-button').click(); await page.getByTestId('btn-disconnect').click(); await expect(page.getByTestId('wallet-chip')).toHaveCount(0); }
     await page.evaluate(() => window.squeek.destroy());
   });
 }
@@ -179,7 +180,7 @@ test('structure: wallet menu copy, pending dot, Activity drawer and confirmed cl
     await window.squeek.connect();
     window.squeek.activity.record('0x' + 'ab'.repeat(32), 'Mock claim');
   });
-  await expect(page.getByTestId('wallet-chip')).toContainText('0.125 ETH');
+  await expect(page.getByTestId('wallet-eth')).toContainText('0.125 ETH');
   await page.getByTestId('wallet-button').click();
   await page.getByTestId('btn-copy-address').click();
   expect(await page.evaluate(() => window.copiedAddress)).toBe('0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54');
@@ -202,7 +203,7 @@ test('structure: wallet menu copy, pending dot, Activity drawer and confirmed cl
   await page.keyboard.press('Escape');
   await page.getByTestId('wallet-button').click(); await page.getByTestId('btn-disconnect').click();
   await expect(page).toHaveURL(/#sepolia-v6\/network$/);
-  await expect(page.getByTestId('wallet-chip')).toBeHidden();
+  await expect(page.getByTestId('wallet-chip')).toHaveCount(0);
   await page.evaluate(() => window.squeek.destroy());
 });
 

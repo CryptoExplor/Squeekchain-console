@@ -32,7 +32,7 @@ Light default; saved light/dark/system override. Local Barlow Condensed, Quicksa
 
 ## Evidence
 
-See [STATUS](STATUS.md) for exact current results and limits, [68 mocked captures](screenshots/README.md), [gzip report](audit/phase2-js-size.json), and both request-budget reports. Total external JavaScript is **157,160 bytes / 250,000 cap**, independently gzipped across eight scripts including the tiny pre-paint external theme bootstrap and lazy modules. Offline tests are not live qualification. No live suite, signing, live workflow dispatch, keeper, merge or manual deployment was run. The requested preview is built by the existing Pages integration after the branch push. Phase 4 planner/per-token redesign remains deferred.
+See [STATUS](STATUS.md) for exact current results and limits, [76 mocked captures](screenshots/README.md), [gzip report](audit/phase2-js-size.json), and both request-budget reports. Total external JavaScript is **157,707 bytes / 250,000 cap**, independently gzipped across eight scripts including the tiny pre-paint external theme bootstrap and lazy modules. Offline tests are not live qualification. No live suite, signing, live workflow dispatch, keeper, merge or manual deployment was run. The requested preview is built by the existing Pages integration after the branch push. Phase 4 planner/per-token redesign remains deferred.
 
 ## Context-only signals
 
@@ -48,3 +48,11 @@ Stall detection uses verified snapshot time and Core genesis/round duration, not
 - **Phase 7 — quality:** Lighthouse 90+ mobile, accessibility, lazy v9 ABI/art, README and mocked-wallet E2E for every action. CSP hardening is brought forward into this fix pack; no Lighthouse result is claimed yet.
 
 Staking is live under the equal-v9-profile decision; the superseded documentation-only restriction must not return. Alerts remain in-tab; cron/push/OG and other backend services are deferred. Typed BURN, simulation before every prompt, mismatch stops, Unknown ≠ zero, Mainnet Not deployed and the single non-affiliation footer remain mandatory.
+
+## Manual-preview corrections
+
+One visible verification badge opens Trust; one header wallet button identifies the connected owner. ETH balance lives in that menu consistently on both profiles, with Unknown for unavailable data and connected-owner isolation in watch mode. Banners use a measured header-bottom offset and remain readable while scrolling/resizing; actual identity/hash mismatches remain red stops, while RPC availability is identified separately. Only read-error banners clear on successful verified reads. Refreshes coalesce within a generation, never across profile changes; failed wallet reads do not immediately repeat the network snapshot.
+
+v6 network reads include NFT `totalSupply()` in the existing same-block multicall. Issuance labels are explicit: v6 mining `state().minted`, v9 issuance `state().minted` with processed round; token totalSupply is not labelled issued. Core settlement is not issuance checkpointing. Round grammar is singular only for 1.
+
+The user now explicitly orders PublicNode, dRPC, 0xRPC, ZAN, EthPandaOps; this supersedes the earlier no-dRPC/Tenderly-first preference. These five HTTPS candidates serve snapshots/state/log fallbacks in that order; custom RPC and Sepolia wallet preferences remain. WSS aliases are not passed to the HTTP transport or counted as additional independent providers. Network fetch failures/timeouts now share bounded cooldown, without treating RPC range errors, programming TypeErrors or trust failures as network failover. No live availability assertion is made.

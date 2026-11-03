@@ -654,3 +654,8 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 @media (max-width: 760px) {
   .topbar .header-badges { grid-template-columns: auto minmax(0, 1fr); }
 }
+
+/* Diagnostics stay below the measured header, including after scrolling. */
+#banner { position: sticky; top: calc(var(--header-bottom, 86px) + 8px); z-index: 25; overflow-wrap: anywhere; }
+#wallet-eth { margin: 0; padding: 8px; }
+#issuance-source { font-size: 11px; line-height: 1.5; margin-top: 8px; }

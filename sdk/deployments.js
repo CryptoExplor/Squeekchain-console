@@ -152,7 +152,7 @@ export const PROFILES = {
     },
     capabilities: { checkpoint: true, claim: true, merge: true, deposit: false, art: true, transfer: false, reads: true },
     notes:
-      "Supported docs-pinned v6. Each read or simulation requires the published identities at one cross-checked Sepolia block. Availability, checkpoint readiness and claimability are read at runtime; no frozen-frontier assumption.",
+      "Equal profile: every operation checks the published identity pins and same-block two-peer agreement. Mismatch stops actions.",
     apiBase: null,
     startBlock: 11902282n,
   },

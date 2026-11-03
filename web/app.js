@@ -4,7 +4,7 @@
  * Profile-driven: each deployment profile maps onto an adapter with the same surface
  * (verify / networkStatus / walletStatus / capability-driven actions / art).
  *   sepolia-v9   → pinned issuance v9 + staking + NFT graph (guarded reads/actions)
- *   sepolia-v6   → the docs-pinned SqueekMining v6 graph        (reads + checkpoint/claim/merge)
+ *   sepolia-v6   → the published SqueekMining v6 graph        (reads + checkpoint/claim/merge)
  *   mainnet      → no deployment
  *
  * Every action is simulated first and signed in the user's wallet. No key ever reaches this code.
@@ -40,7 +40,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const el = {
     profileSelect: $("profile-select"),
     verified: $("verified-chip"),
-    walletChip: $("wallet-chip"),
+    walletEth: $("wallet-eth"),
     connect: $("btn-connect"),
     theme: $("btn-theme"),
     refresh: $("btn-refresh"),
@@ -129,11 +129,32 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── helpers ────────────────────────────────────────────────────────────────
   const toast = (msg, kind = "") => Toast({ doc, host: el.toasts, message: msg, kind });
+  let readBanner=false;
+  const header=doc.querySelector('.topbar');
+  const positionBanner=()=>doc.documentElement.style.setProperty('--header-bottom',`${Math.max(0,header?.getBoundingClientRect().bottom??0)}px`);
+  const headerObserver=win.ResizeObserver?new win.ResizeObserver(positionBanner):null;
+  if(header)headerObserver?.observe(header);
+  win.addEventListener('resize',positionBanner);win.addEventListener('scroll',positionBanner,{passive:true});
+  positionBanner();
   const showBanner = (msg, kind = "") => {
+    readBanner=false;positionBanner();
     el.banner.textContent = msg;
     el.banner.className = `notice ${kind}`;
   };
-  const hideBanner = () => el.banner.classList.add("hidden");
+  const hideBanner = () => {readBanner=false;el.banner.classList.add('hidden');};
+  const clearReadBanner=()=>{if(readBanner)hideBanner();};
+  function showReadFailure(error,scope) {
+    const failure=rpcToolError(error,state.adapter?.rpcDiagnostics?.()??[]);
+    state.lastReadFailure={scope,profile:state.profileKey,...failure};
+    const availability=failure.diagnostics.availability;
+    const message=availability?'RPC unavailable. Verified reads need two independent Sepolia peers. Nothing was signed.':`${scope} failed: ${failure.error}. Nothing was signed.`;
+    el.verified.textContent=availability?'Unavailable':'Stopped';
+    $('profile-status').textContent=availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Read failed';
+    $('profile-status').className=`chip ${availability?'warn':'bad'}`;
+    $('profile-status').title=el.verified.title='';
+    renderTrust(availability?null:{ok:false,trusted:false});$('trust-result').textContent=availability?'Unavailable':'Stopped';
+    showBanner(message,availability?'warn':'bad');readBanner=true;
+  }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
   const num = formatNumber;
   const sqk = formatAmount;
@@ -272,6 +293,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     state.adapter = null;
     state.account = state.inspected = account; state.chainId = chainId;
     state.net = state.status = state.plan = null;
+    state.walletEth=null;
     state.receipts = [];
     state.art.clear();
     state.artifactsLoaded = false;
@@ -332,6 +354,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.cp.reason.textContent = profile.addresses ? "Waiting for verified chain state." : "Unavailable until a mainnet deployment is published and verified.";
     el.verified.textContent = profile.addresses ? "Checking…" : "Not deployed";
     el.verified.className = "sr-only";
+    $('profile-status').title=el.verified.title='';
+    $('net-issued-label').textContent=profile.abiSet==='v9'?'Issued by v9 checkpoints':'Minted by v6 mining';
+    $('issuance-source').textContent='';
     $("profile-status").className = "chip";
     $("profile-status").textContent = profile.addresses ? "Checking…" : "Not deployed";
     renderTrust(null);
@@ -340,7 +365,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     renderCapabilities(profile);
     el.net.chain.textContent = profile.chainId === CHAIN.id ? "Sepolia" : "Ethereum";
     el.net.kind.textContent = profile.kind;
-    el.net.release.textContent = profile.identities?.release ?? (profile.addresses ? "docs-pinned v6" : "no deployment");
+    el.net.release.textContent = profile.identities?.release ?? (profile.addresses ? "published v6" : "no deployment");
     el.net.notice.textContent = profile.notes ?? "";
     el.net.notice.className = `notice ${profile.addresses ? "" : "warn"}`;
   }
@@ -466,6 +491,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         if (!state.account || !state.adapter || destroyed) return;
         dialog.close();
         state.account = accs?.[0] ?? null;
+        state.walletEth=null;
         state.profileCounts = {}; renderProfileOptions();
         state.inspected = state.account;
         state.status = null;
@@ -503,9 +529,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('btn-copy-address').classList.toggle('hidden', !state.account);
     $('btn-disconnect').classList.toggle('hidden', !state.account);
     el.connect.setAttribute('aria-expanded', String(!$('wallet-menu').classList.contains('hidden')));
-    el.walletChip.textContent = state.account ? short(state.account) : "";
-    el.walletChip.className = `chip ${state.account ? "ok" : "hidden"}`;
-    el.walletChip.title = state.account ?? "";
+    if(!state.account)state.walletEth=null;
+    el.walletEth.classList.toggle('hidden',!state.account);
+    el.walletEth.textContent=state.account?`ETH balance: ${state.walletEth??UNKNOWN}${state.walletEth==null?'':' ETH'}`:'';
   }
 
   async function sendTransaction(tx, label, owner = state.account, load = captureLoad()) {
@@ -565,8 +591,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for (const node of [el.net.settlement,$('holder-rewards-notice')]) { node.textContent=notice; node.classList.toggle('hidden',!stalled); }
     $('settlement-status').textContent=advancement.trim();
     setStat(el.net.blocks, core.blockHeight, num);
-    setStat(el.net.lag, mining.lagRounds, value => num(value) === UNKNOWN ? UNKNOWN : `${num(value)} round(s)`);
-    setStat(el.net.issued, mining.issued ?? mining.minted, sqk);
+    setStat(el.net.lag, mining.lagRounds, value => num(value) === UNKNOWN ? UNKNOWN : `${num(value)} ${BigInt(value)===1n?'round':'rounds'}`);
+    const v9=getProfile(state.profileKey).abiSet==='v9';
+    setStat(el.net.issued,v9?mining.issued:mining.minted,sqk);
+    $('net-issued-label').textContent=v9?'Issued by v9 checkpoints':'Minted by v6 mining';
+    $('issuance-source').textContent=v9?`issuance.state().minted · processed round ${valueText(mining.processedThroughRound)}. Core settlement alone does not issue SQK.`:'mining.state().minted · on-chain';
     setStat(el.net.squeeks, net.nft?.totalSupply, num);
     setStat(el.net.paused, core.paused, value => value === true ? 'yes' : value === false ? 'no' : UNKNOWN);
     el.net.paused.parentElement.className = `stat ${core.paused === true ? 'bad' : core.paused === false ? 'ok' : ''}`;
@@ -584,7 +613,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   function renderWalletChipStats(status) {
     if (!status || !state.account || status.owner?.toLowerCase() !== state.account.toLowerCase()) return;
-    el.walletChip.textContent = `${short(status.owner)} · ${num(status.ethBalance?.eth) === UNKNOWN ? UNKNOWN : `${Number(status.ethBalance.eth).toFixed(3)} ETH`}`;
+    state.walletEth=num(status.ethBalance?.eth)===UNKNOWN?null:Number(status.ethBalance.eth).toFixed(3);
+    el.walletEth.textContent=`ETH balance: ${state.walletEth??UNKNOWN}${state.walletEth==null?'':' ETH'}`;
   }
 
   function columnsForProfile() {
@@ -714,17 +744,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (!isCurrent(load)) return null;
       renderNetwork(net);
       renderVerification(v);
+      clearReadBanner();
       return net;
     } catch (err) {
       if (!isCurrent(load)) return null;
       state.net = null;
       renderNetworkPlaceholder();
-      el.verified.textContent = "Stopped";
-      el.verified.className = "sr-only"; $("profile-status").className = "chip bad";
-      $("profile-status").textContent = "Mismatch: stop";
-      renderTrust({ok:false,trusted:false});
-      $('trust-result').textContent='Stopped';
-      showBanner(`Read failed: ${errorMessage(err)}. Nothing was signed.`, "bad");
+      showReadFailure(err,'Network read');
       return null;
     } finally {
       if (isCurrent(load)) networkPanel.setBusy(false);
@@ -749,24 +775,30 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       renderHolder(status, plan);
       if (status.net && status.verification) { renderNetwork({...status.net,snapshot:status.snapshot??status.net.snapshot}); renderVerification(status.verification); }
+      clearReadBanner();
       return status;
     } catch (err) {
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       renderHolder(null);
-      renderWalletChip();
-      showBanner(`Could not read ${short(owner)}: ${errorMessage(err)}`, "bad");
+      state.walletEth=null;renderWalletChip();state.net=null;renderNetworkPlaceholder();
+      showReadFailure(err,'Wallet read');
       return null;
     }
   }
 
-  async function refreshAll() {
-    const load = captureLoad();
-    if (state.adapter && (state.inspected ?? state.account)) {
-      // Production walletStatus includes network state and a pure merge plan from
-      // the SAME run/snapshot. Do not pay for a second network/plan snapshot.
-      const status = await refreshWallet();
-      if (isCurrent(load) && !status?.net) await refreshNetwork();
-    } else await refreshNetwork();
+  let refreshFlight;
+  function refreshAll() {
+    if(refreshFlight?.generation===generation)return refreshFlight.promise;
+    const load=captureLoad(),flight={generation};
+    flight.promise=(async()=>{
+      if(state.adapter&&(state.inspected??state.account)) {
+        const status=await refreshWallet();
+        // A failed wallet snapshot is already diagnosed. Do not immediately
+        // enqueue another failing network snapshot against the same endpoints.
+        if(isCurrent(load)&&status&&!status.net)await refreshNetwork();
+      }else await refreshNetwork();
+    })().finally(()=>{if(refreshFlight===flight)refreshFlight=null;});
+    refreshFlight=flight;return flight.promise;
   }
 
   const viewTask = async fn => {
@@ -1265,7 +1297,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
+    destroy: () => { headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
   };
 }
 

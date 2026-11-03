@@ -121,12 +121,12 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
   async function networkStatus() { return readNetworkStatus(); }
 
   async function readNetworkStatus() {
-    const [miningState, coreState, accounting, cpStatus, policy, rewardPerBlock, supplyCap, config] = await client.multicall({
+    const [miningState, coreState, accounting, cpStatus, policy, rewardPerBlock, supplyCap, config, nftSupply] = await client.multicall({
       allowFailure: false, blockNumber: activeSnapshot.blockNumber,
       contracts: [
         ['mining', miningAbi, 'state'], ['core', coreAbi, 'state'], ['mining', miningAbi, 'accounting'],
         ['mining', miningAbi, 'checkpointStatus'], ['mining', miningAbi, 'collectionPolicy', [COLLECTION]],
-        ['mining', miningAbi, 'REWARD_PER_BLOCK'], ['mining', miningAbi, 'SUPPLY_CAP'], ['core', coreAbi, 'configuration'],
+        ['mining', miningAbi, 'REWARD_PER_BLOCK'], ['mining', miningAbi, 'SUPPLY_CAP'], ['core', coreAbi, 'configuration'], ['nft', nftAbi, 'totalSupply'],
       ].map(([name, abi, functionName, args = []]) => ({ address: addr[name], abi, functionName, args })),
     });
     const [corePaused, nextRound, roundSettled] = cpStatus;
@@ -146,6 +146,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
         genesisTimestamp: String(config.genesisTimestamp),
         roundDuration: String(config.roundDuration),
       },
+      nft: { totalSupply: String(nftSupply) },
       mining: {
         processedThroughRound: String(miningState.processedThroughRound),
         lagRounds: String(BigInt(coreState.settledThroughRound) - BigInt(miningState.processedThroughRound)),

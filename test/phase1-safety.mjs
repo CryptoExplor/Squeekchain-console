@@ -58,6 +58,7 @@ function fakeClient({ alter = (_request, value) => value } = {}) {
       if (fn === 'collectionPolicy') return structuredClone(policy);
       if (fn === 'configuration') return same(address, DEPLOYMENT.core) ? { ...CORE_CONFIGURATION } : { ...miningConfig };
       if (fn === 'ownerOf') return BigInt(args[0]) === 777n ? other : owner;
+      if (fn === 'totalSupply') return 9972n;
       if (fn === 'balanceOf') return same(address, DEPLOYMENT.nft) ? 2n : 10n ** 18n;
       if (fn === 'claimable') return 2n * 10n ** 18n;
       if (fn === 'checkpointStatus') return [false, 5n, true];
@@ -262,6 +263,7 @@ try {
   const context = createRpcContext();
   const wireSdk = createFixtureSdk({ rpcContext: context });
   const network = await wireSdk.networkStatus();
+  assert.equal(network.nft.totalSupply,'9972','v6 supply comes from same-block NFT totalSupply');
   assert.equal(network.snapshot.timestamp,'1');
   assert.equal(network.core.roundDuration,String(CORE_CONFIGURATION.roundDuration));
   const cold = wire.length;

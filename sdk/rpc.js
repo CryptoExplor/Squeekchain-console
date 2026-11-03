@@ -9,12 +9,14 @@ const sessionCooldowns = new Map();
 
 // Roles are observed availability preferences, never deployment/trust pins.
 export const PUBLIC_RPC_ENDPOINTS = [
-  { url: 'https://sepolia.gateway.tenderly.co', roles: ['snapshot', 'state', 'logs'], logOrder: 1 },
-  { url: 'https://ethereum-sepolia-rpc.publicnode.com', roles: ['snapshot', 'state'] },
-  { url: 'https://ethereum-sepolia-public.nodies.app', roles: ['snapshot', 'state'] },
-  { url: 'https://eth-sepolia.api.onfinality.io/public', roles: ['snapshot', 'state', 'logs'], logOrder: 3 },
-  { url: 'https://0xrpc.io/sep', roles: ['snapshot', 'state', 'logs'], logOrder: 2 },
+  { url: 'https://ethereum-sepolia-rpc.publicnode.com', roles: ['snapshot', 'state', 'logs'], logOrder: 1 },
+  { url: 'https://sepolia.drpc.org', roles: ['snapshot', 'state', 'logs'], logOrder: 2 },
+  { url: 'https://0xrpc.io/sep', roles: ['snapshot', 'state', 'logs'], logOrder: 3 },
+  { url: 'https://api.zan.top/eth-sepolia', roles: ['snapshot', 'state', 'logs'], logOrder: 4 },
+  { url: 'https://rpc.sepolia.ethpandaops.io', roles: ['snapshot', 'state', 'logs'], logOrder: 5 },
 ];
+// The browser transport is HTTP JSON-RPC. WSS aliases are not fed to http(),
+// nor counted as independent peers alongside HTTPS from the same operator.
 export const PUBLIC_RPCS = PUBLIC_RPC_ENDPOINTS.map(endpoint => endpoint.url);
 export const SEPOLIA_ID = 11155111;
 export const SEPOLIA_HEX = '0xaa36a7';
@@ -127,11 +129,17 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
         }
       },
     }) });
-    const request = chainCheckedRequest(contextualRequest(args => {
+    const request = chainCheckedRequest(contextualRequest(async args => {
       // Skip a rate-limited endpoint, including identity re-probes. Do not sleep or
       // block healthy fallbacks. Shared across contexts/profile refreshes in this tab.
-      if (now() < (rpcCooldowns.get(url) ?? 0)) throw new RpcAvailabilityError(new Error('RPC rate limited; waiting for Retry-After backoff'), { endpoint: url, method: args.method, kind: 'cooldown' });
-      return raw.request(args);
+      if (now() < (rpcCooldowns.get(url) ?? 0)) throw new RpcAvailabilityError(new Error('RPC unavailable; waiting for endpoint cooldown'), { endpoint: url, method: args.method, kind: 'cooldown' });
+      try {return await raw.request(args);}
+      catch(error) {
+        // Network/CORS fetch failures and timeouts need backoff too. Do NOT cool
+        // down JSON-RPC range errors: discovery must still try smaller ranges.
+        if(!isTrustError(error)&&!isRpcProgrammingError(error)&&rpcCauses(error).some(({error:e})=>e.name==='TimeoutError'||e.name==='TypeError'))rpcCooldowns.set(url,Math.max(rpcCooldowns.get(url)??0,now()+30_000));
+        throw error;
+      }
     }, url), { key: url, chainCache, signal, endpoint: url });
     return [url, custom({ request: contextualRequest(request, url) }, { retryCount: 0 })];
   }));
@@ -210,7 +218,7 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
   const readIdentity = async (snapshot, requests) => Promise.all(snapshot.peers.map(async peer => {
     const endpoint=peer.identityUrl,method=requests[0]?.method;
     requireSepolia(await peer.getChainId());
-    if(now()<(rpcCooldowns.get(endpoint)??0))throw new RpcAvailabilityError(new Error('RPC rate limited; waiting for Retry-After backoff'),{endpoint,method,kind:'cooldown'});
+    if(now()<(rpcCooldowns.get(endpoint)??0))throw new RpcAvailabilityError(new Error('RPC unavailable; waiting for endpoint cooldown'),{endpoint,method,kind:'cooldown'});
     try {return await readIdentityBatch(peer,requests,{signal,onResponse:(response,url)=>{
       if(response.status===429||response.status===503){const timestamp=now();rpcCooldowns.set(url,timestamp+retryAfterMs(response.headers.get('Retry-After'),timestamp));}
     }});} catch(error) {
