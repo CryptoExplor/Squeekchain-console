@@ -101,7 +101,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
         await context.check(activeSnapshot);
         throwIfAborted(signal);
         prepared.commit();
-        return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash, peers:activeSnapshot.peers?.map(peer=>({label:peer.name,state:'agreed'}))??[] } } : result;
+        return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash, timestamp: activeSnapshot.timestamp == null ? null : String(activeSnapshot.timestamp), peers:activeSnapshot.peers?.map(peer=>({label:peer.name,state:'agreed'}))??[] } } : result;
       } catch (error) { throw wrap(error, "Snapshot unavailable"); }
       finally { activeSnapshot = null; verification = null; }
     });
@@ -144,6 +144,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
         blockProgress: String(coreState.blockProgress),
         paused: coreState.paused,
         genesisTimestamp: String(config.genesisTimestamp),
+        roundDuration: String(config.roundDuration),
       },
       mining: {
         processedThroughRound: String(miningState.processedThroughRound),

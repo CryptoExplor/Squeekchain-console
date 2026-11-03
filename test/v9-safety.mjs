@@ -39,6 +39,7 @@ function fake() {
  if(fn==='implementationCodeAddress')return pin.implSlot;
  if(fn==='implementationCodeVersion'||fn==='implementationStorageLayoutDigest')return pin[fn];
  if(Object.hasOwn(pin?.wiring??{},fn))return pin.wiring[fn];
+ if(fn==='configuration')return {genesisTimestamp:0n,roundDuration:600n};
  if(fn==='state')return same(address,profile.addresses.core)?{settledThroughRound:20n,blockHeight:100n,blockProgress:0n,workPerThousandBlocks:1000,paused:flags.paused}:{minted:100n,gachaFunded:50n,stakingFunded:50n,processedThroughRound:19n,fundedBlocks:50n};
  if(fn==='curve')return {targetPower:10000n,floorBps:10};
  if(fn==='checkpointStatus')return [flags.paused,20n,flags.settled];
@@ -124,7 +125,7 @@ globalThis.fetch=async(_url,init)=>{const r=JSON.parse(init.body);wire.push(r);c
 };
 try {
  const x=createSqueek9({rpcContext:createRpcContext(),discoveryCache:createDiscoveryStore(null)});
- await x.networkStatus();const coldNetwork=wire.length;wire.length=0;
+ const network=await x.networkStatus();assert.equal(network.snapshot.timestamp,'1000');assert.equal(network.core.roundDuration,'600');const coldNetwork=wire.length;wire.length=0;
  await x.networkStatus();const warmNetwork=wire.length;assert.ok(warmNetwork<=25,'warm network '+warmNetwork);wire.length=0;
  await x.walletStatus(owner);const coldWallet=wire.length;wire.length=0;
  const wallet=await x.walletStatus(owner);const warmWallet=wire.length;assert.equal(wallet.totals.count,4);assert.ok(warmWallet<=25,'warm wallet '+warmWallet);

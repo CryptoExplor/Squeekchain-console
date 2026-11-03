@@ -6,7 +6,7 @@
 
 The user-supplied identity export resolves the earlier identity-evidence blocker. **Sepolia v6 and Sepolia v9 are equal, selectable profiles**, with live verification or stopped states, not version-based transaction restrictions. Mainnet is **Not deployed**.
 
-The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`budgetBytes: 250_000` in `build.mjs`). This supersedes both the previous 146,800-byte acceptance limit and the older 200,000-byte build limit. Developers and Settings remain dynamically imported. All seven external JS files, including lazy modules, count toward the cap, independently gzipped—not one combined compression stream. Current total: **152,951 bytes** ([breakdown](audit/phase2-js-size.json)).
+The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`budgetBytes: 250_000` in `build.mjs`). This supersedes both the previous 146,800-byte acceptance limit and the older 200,000-byte build limit. Developers and Settings remain dynamically imported. All seven external JS files, including lazy modules, count toward the cap, independently gzipped—not one combined compression stream. Current total: **153,968 bytes** ([breakdown](audit/phase2-js-size.json)).
 
 ## Delivery checklist
 
@@ -16,13 +16,26 @@ The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`bu
 - [x] v9 first-visit default, saved choice, profile-qualified hash routes, both collection balance counts on connect, one-held auto-selection, both-held explicit choice, neither-held retention, Unknown-safe behavior.
 - [x] Runtime settlement/readiness for both profiles; mining-live text requires observed round advancement. No fixed frontier or version-derived live state. Pause explanation appears only when Core.paused is true.
 - [x] v9 Wallet/Staked Squeeks, indexed deposit-event discovery, same-block depositor plus NFT custody confirmation, separate per-token/broad NFT and exact SQK approval previews. Wallet/staked position details share one multicall.
-- [x] v9 NFT/staking merges, mergesOpen reason, exact BURN acknowledgement before any construction/simulation. Claims, claimAndStake, stake, unstake and settled issuance checkpoint use the official ABI. Unstake reviews fee/net/maxFee/deadline; changed fee/outcome or expired deadline stops. Owner wallet signs; agent transports never sign or submit.
+- [x] v9 NFT/staking merges, mergesOpen reason, exact BURN acknowledgement before any construction/simulation. Claims, claimAndStake, stake, unstake and settled issuance checkpoint use the official ABI. Unstake reviews fee/net/maxFee/deadline; changed fee/outcome or expired deadline stops. Owner wallet signs; MCP/SDK return unsigned preparations. In-page request tools simulate first and ask the human wallet; no agent sees a key.
 - [x] Active-profile on-chain policy table; both address graphs and ABI/pin/staking-source provenance in Info › Contracts. Missing policy readings remain Unknown.
 - [x] Subtract pass: removed taglines, obsolete restrictions, repeated checkpoint/non-affiliation copy and art helpers; one footer line. Source icons/accessible names, age on verification badge, one Trust status line and honest Agreed/Not sampled peer list. Concise action/cache labels, empty-state connection action, conditional RPC-secret warning. Merge safety/input remain; unstake review uses a labelled fee/net definition list instead of a base-unit paragraph.
-- [x] `sdk/tools.js` single registry for **29 read/prepare tools** (name/description/schema/side effect); generated `web/tools.json`, local MCP, `window.squeek` and postMessage use it. Per-call profile selection and burn guard are shared. No wallet-popup tools in the agent registry.
+- [x] `sdk/tools.js` single registry for **29 read/prepare tools + 9 browser-only request tools** (name/description/schema/side effect); generated `web/tools.json`, local MCP, `window.squeek` and postMessage use it. Per-call profile selection and burn guard are shared. Wallet-popup tools are available only to the in-page browser surface; cross-origin postMessage requests are rejected and MCP does not advertise or handle them.
 - [x] Offline v9 action/approval/fee/custody/identity/cache tests and browser action/autopick/Unknown/fee-change/claim-change/burn tests. Existing race, Activity, focus, contrast, header and Mainnet tests retained.
-- [x] **44 regenerated mocked captures**: 32 structure/header views plus 12 v9 Squeeks/Merge/Unstake views, light/dark × 1280/390. [Gallery](screenshots/README.md). Mock fixtures do not qualify live contracts.
+- [x] **60 regenerated mocked captures**: 32 structure/header views, 12 v9 Squeeks/Merge/Unstake views and 16 contextual stall/watch/pending views, light/dark × 1280/390. [Gallery](screenshots/README.md). Mock fixtures do not qualify live contracts.
 - [x] Extended `test/live.spec.mjs` to both profiles, read-only. **Did not run it**, dispatch/label a workflow, start a keeper or submit a transaction.
+
+## Contextual restorations on top of `94ebebf`
+
+`94ebebf` was retained, not reverted. The older local partial snapshot was preserved in a local Git stash before fast-forwarding to the existing PR head. This follow-up keeps the 250,000-byte cap, canonical-only internals and subtract pass.
+
+- [x] **Stalled rewards:** `sdk/reward-status.js` computes expected completed rounds as `max(0, floor((snapshot.timestamp - genesisTimestamp) / roundDuration))`. More than two rounds behind displays the single approved notice beside Claim and on Network; current or unknown state hides it. Snapshot timestamp is retained from the already-fetched cross-checked block; both adapters read Core configuration at the operation block. No wall clock or `lagRounds` heuristic, hardcoded frontier or extra block request. `test/reward-status.mjs`, `test/browser.spec.mjs` cover mocked v6 round **1973**, >2 threshold, recovery, checkpoint-lag independence, failure and switch clearing.
+- [x] **Browser wallet tools:** `sdk/tools.js` owns all metadata for checkpoint/claim/merge plus deposit/withdraw/merge_deposited/claim_and_stake/stake/unstake requests. `window.squeek` and same-origin postMessage use them; each requires an active connected owner/profile and simulation before the wallet. Merges require the supplied BURN acknowledgement plus the human's typed acknowledgement before calldata/simulation. Requests cannot silently switch profiles or sign while watching another account. Claim/outcome/fee re-preview guards remain. `test/profile-registry.mjs` checks generated/browser/MCP metadata and MCP rejection of request names; `test/restorations.spec.mjs` tests all nine tools, core actions on both profiles, cross-origin rejection and same-origin human review.
+- [x] **Developers permissions:** three-row table says “Your wallet popup” for window.squeek / same-origin postMessage; MCP and SDK say “No”. One row note: “Agents never see a private key.”
+- [x] **Watch mode:** contextual Viewing chip and Exit above holdings, `0x… (view only)` placeholder, case-insensitive owner checks. Watching never overwrites the connected wallet's identity/balance chip. Exit returns to connected holdings or the empty Connect state. The address field remains usable while connected.
+- [x] **Trust:** compact seven-item checklist for chain, slots, runtime hashes, versions, layouts, wiring and two-peer block agreement. It shows Checked / Stopped / Unknown with the live verification state, not unconditional verification claims.
+- [x] **Pending navigation:** notice directly under the selector only for unresolved transactions; it survives switches, including Mainnet, and disappears when there are none. Switching never cancels a broadcast. `test/restorations.spec.mjs` covers persistence/clear; existing Activity late-response/reload coverage remains.
+
+All new interaction tests use roles or test IDs. The first browser pass caught a programmatic-focus assertion after mouse input; the test now enters keyboard modality before checking the existing visible focus style. A pause-summary expectation was restored. A new watch test initially waited on the hidden Squeeks input after disconnect navigated to Network; its trace identified the missing tab selection, fixed before the final passing run. No failed or interrupted run is counted as acceptance evidence.
 
 ## Phase 2 data-layer checklist
 
@@ -36,9 +49,9 @@ The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`bu
 
 ## Validation and request budgets
 
-- `npm run build`: **PASS**, **152,951 / 250,000 gzip bytes**, all seven external scripts. Settings/Developers lazy loading also asserted in the browser.
-- `npm test`: **PASS**, 13 deterministic offline scripts. No external RPC required; test-only synthetic code hashes never override production pins.
-- Mocked Chromium: **76 PASS**, last complete run **44.5s**; captures regenerated with `UPDATE_SCREENSHOTS=1`. Roles/test IDs select controls; copy assertions check safety/state, not navigation selectors.
+- `npm run build`: **PASS**, **153,968 / 250,000 gzip bytes**, all seven external scripts. Settings/Developers lazy loading also asserted in the browser.
+- `npm test`: **PASS**, 14 deterministic offline scripts. No external RPC required; test-only synthetic code hashes never override production pins.
+- Mocked Chromium: **108 PASS**, last complete run **59.7s**; captures regenerated with `UPDATE_SCREENSHOTS=1`. Roles/test IDs select controls; copy assertions check safety/state, not navigation selectors.
 - `git diff --check`: run before commit.
 
 | Profile | Cold network | Warm network | Wallet | Evidence |

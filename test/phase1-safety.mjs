@@ -261,7 +261,9 @@ globalThis.fetch = async (_url, init) => {
 try {
   const context = createRpcContext();
   const wireSdk = createFixtureSdk({ rpcContext: context });
-  await wireSdk.networkStatus();
+  const network = await wireSdk.networkStatus();
+  assert.equal(network.snapshot.timestamp,'1');
+  assert.equal(network.core.roundDuration,String(CORE_CONFIGURATION.roundDuration));
   const cold = wire.length;
   wire.length = 0;
   const warm = await wireSdk.networkStatus();

@@ -1599,6 +1599,494 @@
         "web",
         "mcp"
       ]
+    },
+    {
+      "name": "squeek_request_checkpoint",
+      "description": "Browser only: simulate checkpoint, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "0x caller address for same-block checkpoint simulation (optional only for connected browser wallet)"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
+            "enum": [
+              "sepolia-v6",
+              "sepolia-v9"
+            ],
+            "default": "sepolia-v9"
+          }
+        },
+        "required": []
+      },
+      "sideEffects": "wallet-popup",
+      "surfaces": [
+        "web"
+      ]
+    },
+    {
+      "name": "squeek_request_claim",
+      "description": "Browser only: simulate claim, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "0x address that owns the Squeeks"
+          },
+          "tokenIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "optional subset"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
+            "enum": [
+              "sepolia-v6",
+              "sepolia-v9"
+            ],
+            "default": "sepolia-v9"
+          }
+        },
+        "required": []
+      },
+      "sideEffects": "wallet-popup",
+      "surfaces": [
+        "web"
+      ]
+    },
+    {
+      "name": "squeek_request_merge",
+      "description": "Browser only: simulate merge, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key. Requires confirm: BURN-<donor> before any construction and the human must type it again.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "0x address that owns both Squeeks"
+          },
+          "survivor": {
+            "type": "string",
+            "description": "token ID that survives"
+          },
+          "donor": {
+            "type": "string",
+            "description": "token ID that is burned"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "must equal BURN-<donor> to acknowledge the burn"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
+            "enum": [
+              "sepolia-v6",
+              "sepolia-v9"
+            ],
+            "default": "sepolia-v9"
+          }
+        },
+        "required": [
+          "survivor",
+          "donor",
+          "confirm"
+        ]
+      },
+      "sideEffects": "wallet-popup",
+      "surfaces": [
+        "web"
+      ]
+    },
+    {
+      "name": "squeek_request_deposit",
+      "description": "Browser only: simulate deposit, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "Owner/depositor address"
+          },
+          "tokenIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "NFT IDs for deposit/withdraw"
+          },
+          "tokenId": {
+            "type": "string",
+            "description": "One NFT ID to approve"
+          },
+          "survivor": {
+            "type": "string",
+            "description": "Surviving ID"
+          },
+          "donor": {
+            "type": "string",
+            "description": "Burned ID"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "Must equal BURN-<donor>"
+          },
+          "amount": {
+            "type": "string",
+            "description": "SQK amount in base units"
+          },
+          "maxFee": {
+            "type": "string",
+            "description": "Previous unstake quote cap in base units"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "Previous unstake uint64 deadline"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
+            "enum": [
+              "sepolia-v6",
+              "sepolia-v9"
+            ],
+            "default": "sepolia-v9"
+          }
+        },
+        "required": [
+          "tokenIds"
+        ]
+      },
+      "sideEffects": "wallet-popup",
+      "surfaces": [
+        "web"
+      ]
+    },
+    {
+      "name": "squeek_request_withdraw",
+      "description": "Browser only: simulate withdraw, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "Owner/depositor address"
+          },
+          "tokenIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "NFT IDs for deposit/withdraw"
+          },
+          "tokenId": {
+            "type": "string",
+            "description": "One NFT ID to approve"
+          },
+          "survivor": {
+            "type": "string",
+            "description": "Surviving ID"
+          },
+          "donor": {
+            "type": "string",
+            "description": "Burned ID"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "Must equal BURN-<donor>"
+          },
+          "amount": {
+            "type": "string",
+            "description": "SQK amount in base units"
+          },
+          "maxFee": {
+            "type": "string",
+            "description": "Previous unstake quote cap in base units"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "Previous unstake uint64 deadline"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
+            "enum": [
+              "sepolia-v6",
+              "sepolia-v9"
+            ],
+            "default": "sepolia-v9"
+          }
+        },
+        "required": [
+          "tokenIds"
+        ]
+      },
+      "sideEffects": "wallet-popup",
+      "surfaces": [
+        "web"
+      ]
+    },
+    {
+      "name": "squeek_request_merge_deposited",
+      "description": "Browser only: simulate merge_deposited, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key. Requires confirm: BURN-<donor> before any construction and the human must type it again.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "Owner/depositor address"
+          },
+          "tokenIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "NFT IDs for deposit/withdraw"
+          },
+          "tokenId": {
+            "type": "string",
+            "description": "One NFT ID to approve"
+          },
+          "survivor": {
+            "type": "string",
+            "description": "Surviving ID"
+          },
+          "donor": {
+            "type": "string",
+            "description": "Burned ID"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "Must equal BURN-<donor>"
+          },
+          "amount": {
+            "type": "string",
+            "description": "SQK amount in base units"
+          },
+          "maxFee": {
+            "type": "string",
+            "description": "Previous unstake quote cap in base units"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "Previous unstake uint64 deadline"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
+            "enum": [
+              "sepolia-v6",
+              "sepolia-v9"
+            ],
+            "default": "sepolia-v9"
+          }
+        },
+        "required": [
+          "survivor",
+          "donor",
+          "confirm"
+        ]
+      },
+      "sideEffects": "wallet-popup",
+      "surfaces": [
+        "web"
+      ]
+    },
+    {
+      "name": "squeek_request_claim_and_stake",
+      "description": "Browser only: simulate claim_and_stake, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "Owner/depositor address"
+          },
+          "tokenIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "NFT IDs for deposit/withdraw"
+          },
+          "tokenId": {
+            "type": "string",
+            "description": "One NFT ID to approve"
+          },
+          "survivor": {
+            "type": "string",
+            "description": "Surviving ID"
+          },
+          "donor": {
+            "type": "string",
+            "description": "Burned ID"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "Must equal BURN-<donor>"
+          },
+          "amount": {
+            "type": "string",
+            "description": "SQK amount in base units"
+          },
+          "maxFee": {
+            "type": "string",
+            "description": "Previous unstake quote cap in base units"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "Previous unstake uint64 deadline"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
+            "enum": [
+              "sepolia-v6",
+              "sepolia-v9"
+            ],
+            "default": "sepolia-v9"
+          }
+        },
+        "required": []
+      },
+      "sideEffects": "wallet-popup",
+      "surfaces": [
+        "web"
+      ]
+    },
+    {
+      "name": "squeek_request_stake",
+      "description": "Browser only: simulate stake, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "Owner/depositor address"
+          },
+          "tokenIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "NFT IDs for deposit/withdraw"
+          },
+          "tokenId": {
+            "type": "string",
+            "description": "One NFT ID to approve"
+          },
+          "survivor": {
+            "type": "string",
+            "description": "Surviving ID"
+          },
+          "donor": {
+            "type": "string",
+            "description": "Burned ID"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "Must equal BURN-<donor>"
+          },
+          "amount": {
+            "type": "string",
+            "description": "SQK amount in base units"
+          },
+          "maxFee": {
+            "type": "string",
+            "description": "Previous unstake quote cap in base units"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "Previous unstake uint64 deadline"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
+            "enum": [
+              "sepolia-v6",
+              "sepolia-v9"
+            ],
+            "default": "sepolia-v9"
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      },
+      "sideEffects": "wallet-popup",
+      "surfaces": [
+        "web"
+      ]
+    },
+    {
+      "name": "squeek_request_unstake",
+      "description": "Browser only: simulate unstake, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "Owner/depositor address"
+          },
+          "tokenIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "NFT IDs for deposit/withdraw"
+          },
+          "tokenId": {
+            "type": "string",
+            "description": "One NFT ID to approve"
+          },
+          "survivor": {
+            "type": "string",
+            "description": "Surviving ID"
+          },
+          "donor": {
+            "type": "string",
+            "description": "Burned ID"
+          },
+          "confirm": {
+            "type": "string",
+            "description": "Must equal BURN-<donor>"
+          },
+          "amount": {
+            "type": "string",
+            "description": "SQK amount in base units"
+          },
+          "maxFee": {
+            "type": "string",
+            "description": "Previous unstake quote cap in base units"
+          },
+          "deadline": {
+            "type": "string",
+            "description": "Previous unstake uint64 deadline"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
+            "enum": [
+              "sepolia-v6",
+              "sepolia-v9"
+            ],
+            "default": "sepolia-v9"
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      },
+      "sideEffects": "wallet-popup",
+      "surfaces": [
+        "web"
+      ]
     }
   ]
 }

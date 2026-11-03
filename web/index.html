@@ -26,7 +26,7 @@
       </div>
       <div class="toolbar">
 
-        <select aria-label="Network deployment" id="profile-select" title="Deployment" data-testid="profile-select"></select>
+        <div class="profile-control"><select aria-label="Network deployment" id="profile-select" title="Deployment" data-testid="profile-select"></select><p id="profile-pending-notice" data-testid="profile-pending-notice" class="small hidden" role="status" aria-live="polite"></p></div>
         <div class="header-badges"><button class="chip" id="profile-status" type="button" data-testid="profile-status" aria-label="Live verification: open Info Trust"><span id="verified-chip" data-testid="verified-chip" role="status" aria-live="polite">Checking…</span><span id="verification-age" aria-hidden="true"></span></button>
         <span class="chip hidden" id="wallet-chip" data-testid="wallet-chip"></span></div>
         <div class="wallet-controls"><div class="wallet-control">
@@ -67,7 +67,7 @@
           <div class="grid cols-4">
             <div class="stat"><span class="label">Network</span><strong id="net-chain" data-testid="net-chain">Unknown</strong></div>
             <div class="stat"><span class="label">Profile</span><strong id="net-kind" data-testid="net-kind">Unknown</strong></div>
-            <div class="stat"><span class="label">Settled round</span><strong id="net-round" data-testid="net-round">Unknown</strong></div>
+            <div class="stat"><span class="label">Settled through round</span><strong id="net-round" data-testid="net-round">Unknown</strong><span id="settlement-status" data-testid="settlement-status" role="status"></span></div>
             <div class="stat"><span class="label">Squeek blocks</span><strong id="net-blocks" data-testid="net-blocks">Unknown</strong></div>
             <div class="stat"><span class="label">Checkpoint lag</span><strong id="net-lag" data-testid="net-lag">Unknown</strong></div>
             <div class="stat"><span class="label">Issued / minted</span><strong id="net-issued" data-testid="net-issued">Unknown</strong></div>
@@ -111,7 +111,7 @@
         <div class="section-heading"><div><h2>Squeeks</h2></div></div>
 
         <div class="row" id="watch-row" data-testid="watch-row">
-            <input aria-label="View address" id="watch-input" placeholder="0x…" spellcheck="false" data-testid="watch-input">
+            <input aria-label="View address" id="watch-input" placeholder="0x… (view only)" spellcheck="false" data-testid="watch-input">
             <button class="btn" id="btn-watch" data-testid="btn-watch">View address</button>
           </div><div class="panel">
           <div class="panel-head">
@@ -120,6 +120,7 @@
           <span class="source-icon" role="img" tabindex="0" title="Chain · same-block verified RPC reads" aria-label="Chain · same-block verified RPC reads" data-testid="source-holdings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m10 14 4-4M8 15l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 3 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"></path></svg></span></div>
 
 
+          <div id="watch-mode" data-testid="watch-mode" class="row hidden" role="status"><span id="watch-chip" data-testid="watch-chip" class="chip"></span><button id="btn-exit-watch" data-testid="btn-exit-watch" class="btn" type="button">Exit</button></div>
           <div id="holder-body" class="hidden" data-testid="holder-body">
             <div class="grid cols-4" style="margin: 12px 0">
               <div class="stat"><span class="label">Squeeks</span><strong id="holder-count" data-testid="holder-count">Unknown</strong></div>
@@ -129,7 +130,7 @@
             </div>
             <div class="row">
               <input id="claim-ids" aria-label="Token IDs to claim" placeholder="IDs: 1, 2, 3 · blank = all owned" spellcheck="false" data-testid="claim-ids">
-              <button class="btn btn-primary" id="btn-claim" disabled="" data-testid="btn-claim">Claim</button>
+              <button class="btn btn-primary" id="btn-claim" disabled="" data-testid="btn-claim">Claim</button><span id="holder-rewards-notice" data-testid="holder-rewards-notice" class="notice warn hidden" role="status" aria-live="polite"></span>
               <button class="btn icon" id="btn-plan" data-testid="btn-plan" aria-label="Refresh merge plan" title="Refresh merge plan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.3-5.7L21 8M21 3v5h-5"></path></svg></button>
               <span class="mono small muted" id="holder-hint" data-testid="holder-hint"></span>
             </div>
@@ -186,12 +187,12 @@
 <p id="info-reward-status" data-testid="info-reward-status">Live reward state: Unknown.</p>
 <p id="core-pause-note" data-testid="core-pause-note" class="hidden">Core is paused: checkpoints and new issuance stop, but already-funded rewards may still be claimable.</p><a href="https://docs.squeekchain.com/assets/deployments/sepolia.json" target="_blank" rel="noreferrer">Deployment record ↗</a><p>Each Squeek’s image and traits are derived onchain from the collection seed and token ID. DotGrid art is displayed as an isolated image.</p></section>
 <section id="info-trust" class="panel info-section" tabindex="-1" data-testid="info-trust"><h2>Trust</h2><p>Both profiles are verified at one block against pinned identities; a mismatch stops actions.</p>
-<p id="trust-summary" role="status" aria-live="polite" data-testid="trust-summary"><span id="trust-result" data-testid="trust-result">Unknown</span> · block <span id="trust-block" data-testid="trust-block">Unknown</span> · <span id="trust-time" data-testid="trust-time">Unknown</span></p><ul id="trust-rpcs" data-testid="trust-rpcs" aria-label="RPC peers"></ul><button class="btn" data-open-settings="">Settings</button></section>
+<p id="trust-summary" role="status" aria-live="polite" data-testid="trust-summary"><span id="trust-result" data-testid="trust-result">Unknown</span> · block <span id="trust-block" data-testid="trust-block">Unknown</span> · <span id="trust-time" data-testid="trust-time">Unknown</span></p><ul id="trust-checklist" data-testid="trust-checklist" class="trust-checklist" aria-label="Verification checks"><li><span>Chain ID</span><span data-trust-check>Unknown</span></li><li><span>Implementation and admin slots</span><span data-trust-check>Unknown</span></li><li><span>Runtime code hashes</span><span data-trust-check>Unknown</span></li><li><span>Versions</span><span data-trust-check>Unknown</span></li><li><span>Layout digests</span><span data-trust-check>Unknown</span></li><li><span>Wiring</span><span data-trust-check>Unknown</span></li><li><span>Two RPC peers agreeing on the block hash</span><span data-trust-check>Unknown</span></li></ul><ul id="trust-rpcs" data-testid="trust-rpcs" aria-label="RPC peers"></ul><button class="btn" data-open-settings="">Settings</button></section>
 <section id="info-status" class="panel info-section" tabindex="-1" data-testid="info-status"><h2>Status</h2><p id="capability-profile" data-testid="capability-profile"></p><div id="capability-grid" class="status-list" data-testid="capability-grid"></div></section>
 <section id="info-contracts" class="panel info-section" tabindex="-1" data-testid="info-contracts"><h2>Contracts</h2><p id="contracts-release" data-testid="contracts-release"></p><ul id="contracts-list" data-testid="contracts-list"></ul></section>
 <section id="info-developers" class="info-section" tabindex="-1" data-testid="info-developers"><h2>Developers</h2>
 
-        <div class="panel"><div class="table-wrap"><table data-testid="developer-surfaces"><thead><tr><th scope="col">Surface</th><th scope="col">Access</th><th scope="col">Signs?</th></tr></thead><tbody><tr><th scope="row">MCP</th><td>Read / prepare</td><td>No</td></tr><tr><th scope="row">window.squeek / postMessage</th><td>Read / prepare tools</td><td>No</td></tr><tr><th scope="row">SDK</th><td>Read / prepare</td><td>No</td></tr></tbody></table></div>
+        <div class="panel"><div class="table-wrap"><table data-testid="developer-surfaces"><thead><tr><th scope="col">Surface</th><th scope="col">Access</th><th scope="col">Signs?</th></tr></thead><tbody><tr><th scope="row">MCP</th><td>Read / prepare</td><td>No</td></tr><tr><th scope="row">window.squeek / same-origin postMessage</th><td>Read / prepare / request</td><td>Your wallet popup</td></tr><tr><th scope="row">SDK</th><td>Read / prepare</td><td>No</td></tr></tbody><tfoot><tr><td colspan="3">Agents never see a private key.</td></tr></tfoot></table></div>
 
 
           <div class="row">

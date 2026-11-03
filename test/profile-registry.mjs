@@ -30,10 +30,11 @@ for(const legacySource of ['storage','hash']) {
  assert.deepEqual(Object.keys(app.tools()),TOOL_SPECS.map(t=>t.name));
  assert.deepEqual(JSON.parse(fs.readFileSync('web/tools.json')).tools,buildManifest().tools);
  for(const profile of ['sepolia-v6','sepolia-v9','sepolia']) {
- const input=[{jsonrpc:'2.0',id:1,method:'tools/list'}].map(JSON.stringify).join('\n')+'\n';
+ const input=[{jsonrpc:'2.0',id:1,method:'tools/list'},{jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'squeek_request_checkpoint',arguments:{}}}].map(JSON.stringify).join('\n')+'\n';
  const child=spawnSync(process.execPath,['mcp/server.js'],{input,encoding:'utf8',env:{PATH:process.env.PATH,SQUEEK_PROFILE:profile},timeout:10000});
- assert.equal(child.status,0,child.stderr);const tools=JSON.parse(child.stdout.trim()).result.tools;
- assert.deepEqual(tools,canonical(TOOL_SPECS));
+ assert.equal(child.status,0,child.stderr);const replies=child.stdout.trim().split('\n').map(JSON.parse);const tools=replies.find(reply=>reply.id===1).result.tools;assert.equal(replies.find(reply=>reply.id===2).error.code,-32602);
+ assert.deepEqual(tools,canonical(TOOL_SPECS.filter(spec=>spec.surfaces.includes('mcp'))));
+ assert.ok(tools.every(tool=>!tool.name.startsWith('squeek_request_')));
  }
  } finally {app.destroy();win.close();}
 }

@@ -629,3 +629,18 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 .confirm-details {display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin:16px 0 0;}
 .confirm-details dt {color:var(--sqk-gray);}
 .confirm-details dd {margin:0;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;}
+
+/* Context-only states keep navigation compact when there is nothing to report. */
+.profile-control { min-width: 0; }
+#profile-pending-notice { margin: 4px 0 0; color: var(--sqk-muted); overflow-wrap: anywhere; }
+#watch-mode { margin-block: 8px; }
+.trust-checklist { list-style: none; padding: 0; }
+.trust-checklist li { display: flex; justify-content: space-between; gap: 12px; padding-block: 4px; }
+@media (min-width: 761px) {
+  .topbar .toolbar { align-items: flex-start; }
+  .profile-control { width: 200px; flex: 0 1 200px; }
+  .topbar .profile-control #profile-select { width: 100%; max-width: none; min-width: 0; }
+}
+@media (min-width: 761px) and (max-width: 1050px) {
+  .profile-control { width: 128px; flex-basis: 128px; }
+}

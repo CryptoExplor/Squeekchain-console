@@ -24,7 +24,7 @@ import {
   rpcToolError,
   ACTION_REASONS,
   PUBLIC_RPC_ENDPOINTS,
-  runReadTool, toolProfile,
+  runReadTool, toolProfile, settlementStatus, requireBurn,
   profileBalances, chooseProfile, profileFromHash, profileInput, parseEther, formatEther,
 } from "./bundle.js";
 
@@ -209,6 +209,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!state.account) renderWalletChip();
     $('activity-empty').classList.toggle('hidden', items.length !== 0);
     const pending = items.filter(item => !['confirmed', 'reverted'].includes(item.status)).length;
+    $('profile-pending-notice').textContent = pending ? "Pending transactions continue; switching can't cancel them." : '';
+    $('profile-pending-notice').classList.toggle('hidden',!pending);
     $('pending-count').textContent = String(pending);
     $('pending-count').classList.toggle('hidden', !pending);
     $('btn-open-activity').setAttribute('aria-label', `Activity, ${pending} pending`);
@@ -318,6 +320,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   function renderNetworkPlaceholder() {
     const profile = getProfile(state.profileKey);
+    $("holder-rewards-notice").textContent = ""; $("holder-rewards-notice").classList.add("hidden");
+    $("settlement-status").textContent = "";
     el.net.settlement.textContent = "";
     el.net.settlement.classList.add("hidden");
     for (const key of ["round", "blocks", "lag", "issued", "squeeks", "paused"]) el.net[key].textContent = UNKNOWN;
@@ -372,8 +376,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('trust-block').textContent=valueText(v?.blockNumber ?? state.net?.snapshot?.blockNumber);
     $('trust-result').textContent=v ? v.ok && v.trusted ? 'Verified' : capabilities().reasons.mismatch : UNKNOWN;
     updateTrustAge();
+    $('trust-checklist').dataset.state=v ? v.ok && v.trusted ? 'verified' : 'stopped' : 'unknown';
+    doc.querySelectorAll('[data-trust-check]').forEach(node=>{node.textContent=v ? v.ok && v.trusted ? 'Checked' : 'Stopped' : UNKNOWN;});
     $('core-pause-note').classList.toggle('hidden',state.net?.core?.paused!==true);
-    $('info-reward-status').textContent=el.net.settlement.textContent || UNKNOWN;
+    $('info-reward-status').textContent=el.net.settlement.textContent || (state.net?.core?.paused===true?capabilities().reasons.paused:state.net?.core?.settledThroughRound != null ? `Settled through round ${state.net.core.settledThroughRound}.` : UNKNOWN);
     const peers = [...(store.get('wheelhouse:rpc')?['Custom RPC']:[]),...PUBLIC_RPC_ENDPOINTS.map(peer=>new URL(peer.url).hostname)];
     const checked=state.net?.snapshot?.peers??[];
     $('trust-rpcs').replaceChildren(...(getProfile(state.profileKey).addresses?peers:[]).map(label=>{
@@ -550,10 +556,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const core=net.core??{},mining=net.mining??{},checkpoint=net.checkpoint??{};
     setStat(el.net.round,core.settledThroughRound);
     const hasRound=/^\d+$/.test(String(round));
-    const readiness=core.paused===true?capabilities().reasons.paused:checkpoint.canCheckpoint===true?`Round ${checkpoint.nextRound} ready to checkpoint.`:checkpoint.roundSettled===false?capabilities().reasons.unsettled:'Awaiting the next live advancement reading.';
     const advancement=hasRound&&previous!=null&&BigInt(round)>previous&&core.paused!==true?' Mining live: rounds advanced.':'';
-    el.net.settlement.textContent=hasRound?`Settled through round ${round}. ${readiness}${advancement}`:'';
-    el.net.settlement.classList.toggle('hidden',!hasRound);
+    const stalled=settlementStatus(net).stalled===true;
+    const notice=stalled?`Rewards paused: settlement stopped at round ${round}.`:'';
+    for (const node of [el.net.settlement,$('holder-rewards-notice')]) { node.textContent=notice; node.classList.toggle('hidden',!stalled); }
+    $('settlement-status').textContent=advancement.trim();
     setStat(el.net.blocks, core.blockHeight, num);
     setStat(el.net.lag, mining.lagRounds, value => num(value) === UNKNOWN ? UNKNOWN : `${num(value)} round(s)`);
     setStat(el.net.issued, mining.issued ?? mining.minted, sqk);
@@ -573,7 +580,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   function renderWalletChipStats(status) {
-    if (!status || !state.account) return;
+    if (!status || !state.account || status.owner?.toLowerCase() !== state.account.toLowerCase()) return;
     el.walletChip.textContent = `${short(status.owner)} · ${num(status.ethBalance?.eth) === UNKNOWN ? UNKNOWN : `${Number(status.ethBalance.eth).toFixed(3)} ETH`}`;
   }
 
@@ -598,7 +605,15 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         ];
   }
 
+  function renderWatchMode() {
+    const viewing=Boolean(state.inspected && state.inspected.toLowerCase()!==state.account?.toLowerCase());
+    $('watch-mode').classList.toggle('hidden',!viewing);
+    $('watch-chip').textContent=viewing?`Viewing ${short(state.inspected)}`:'';
+    $('watch-chip').title=viewing?state.inspected:'';
+    el.holder.watchRow.classList.remove('hidden');
+  }
   function renderHolder(status, plan = null) {
+    renderWatchMode();
     state.status = status;
     state.plan = plan;
     const caps = capabilities();
@@ -635,7 +650,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $("claim-ids").classList.toggle("hidden", isV9);
     $("v9-actions").classList.toggle("hidden", !isV9);
     $("v9-review").disabled = !signerOwns || state.busy;
-    el.holder.watchRow.classList.toggle("hidden", Boolean(state.account));
+
 
     Table({ head: el.holder.head, body: el.holder.tbody, columns: columnsForProfile(), rows: status.squeeks ?? [], cell: (s, c) => {
       if(c.key==='cooldown') {const until=s.nextMergeHeight??s.nextMergeBlock, height=status.net?.core?.blockHeight??state.net?.core?.blockHeight;return until==null||height==null?UNKNOWN:String(BigInt(until)>BigInt(height)?BigInt(until)-BigInt(height):0n);}
@@ -719,18 +734,18 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const load = captureLoad();
     try {
       const status = await readFor(load, "walletStatus", owner);
-      if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
+      if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       renderWalletChipStats(status);
       let plan = status.mergePlan ?? null;
       if (!plan && capabilities().merge && status.totals?.count > 1 && state.adapter.mergePlan) {
         plan = await readFor(load, "mergePlan", owner, { status });
       }
-      if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
+      if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       renderHolder(status, plan);
-      if (status.net && status.verification) { renderNetwork(status.net); renderVerification(status.verification); }
+      if (status.net && status.verification) { renderNetwork({...status.net,snapshot:status.snapshot??status.net.snapshot}); renderVerification(status.verification); }
       return status;
     } catch (err) {
-      if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
+      if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       renderHolder(null);
       renderWalletChip();
       showBanner(`Could not read ${short(owner)}: ${errorMessage(err)}`, "bad");
@@ -966,8 +981,20 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   function buildTools() {
     if (!state.adapter) return {};
-    return Object.fromEntries(TOOL_SPECS.map(spec=>[spec.name,{description:spec.description,run:args=>{
+    return Object.fromEntries(TOOL_SPECS.filter(spec=>spec.surfaces.includes('web')).map(spec=>[spec.name,{description:spec.description,run:args=>{
       const selected=toolProfile(args.profile??state.profileKey);
+      if (spec.sideEffects==='wallet-popup') {
+        if (selected.key!==state.profileKey) throw new Error('Select the requested profile before opening a wallet prompt.');
+        if (!state.account) throw new Error('Connect your wallet first.');
+        for (const address of [args.owner,args.from]) if (address != null && address.toLowerCase()!==state.account.toLowerCase()) throw new Error('Connect the owner wallet.');
+        const action=spec.name.slice('squeek_request_'.length);
+        if (action!=='checkpoint' && state.inspected?.toLowerCase()!==state.account.toLowerCase()) throw new Error('Exit view-only mode before requesting an owner action.');
+        if (action==='merge' || action==='merge_deposited') requireBurn(args.donor,args.confirm);
+        if (action==='checkpoint') return requestCheckpoint();
+        if (action==='claim') return requestClaim(args.tokenIds);
+        if (action==='merge') return requestMerge({survivor:args.survivor,donor:args.donor});
+        return requestAction({merge_deposited:'mergeDeposited',claim_and_stake:'claimAndStake'}[action]??action,args);
+      }
       const adapter=selected.key===state.profileKey?state.adapter:buildAdapter(selected.key);
       return runReadTool(adapter,spec.name,{...args,owner:ownerOrDefault(args),from:args.from??state.account});
     }}]));
@@ -1099,10 +1126,15 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     return requestMerge({ survivor: String(BigInt(survivor)), donor: String(BigInt(donor)), nextLevel: Number(position.level) + 1 });
   });
   el.holder.plan.onclick = () => viewTask(refreshWallet);
+  $('btn-exit-watch').onclick = () => viewTask(async()=>{
+    state.inspected=state.account;el.holder.watchInput.value='';renderHolder(null);
+    await refreshWallet();
+  });
   el.holder.watch.onclick = async () => {
     const value = el.holder.watchInput.value.trim();
     if (!/^0x[0-9a-fA-F]{40}$/.test(value)) return toast("enter a valid 0x address", "err");
     state.inspected = value;
+    renderHolder(null);
     selectTab('squeeks');
     await viewTask(refreshWallet);
   };
@@ -1122,15 +1154,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   el.agent.run.onclick = async () => { await developerUI(); return el.agent.run.onclick(); };
   el.agent.copy.onclick = async () => { await developerUI(); return el.agent.copy.onclick(); };
 
-  win.addEventListener("message", async (event) => {
+  const onToolMessage = async (event) => {
     const msg = event.data;
     if (!msg || msg.type !== "squeek.tool" || typeof msg.name !== "string") return;
     // Embedders can read, but may not trigger wallet requests across origins.
     if (msg.name.startsWith("squeek_request_") && event.origin !== win.location.origin) return;
     const result = await callTool(msg.name, msg.args ?? {});
     const payload = { type: "squeek.result", id: msg.id ?? null, ok: !result?.error, result };
-    (event.source ?? win).postMessage(payload, "*");
-  });
+    (event.source ?? win).postMessage(payload, event.origin && event.origin !== "null" ? event.origin : "*");
+  };
+  win.addEventListener("message", onToolMessage);
 
   function renderToolOptions() {
     const names = Object.keys(buildTools());
@@ -1190,7 +1223,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(ageTimer); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
+    destroy: () => { dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(ageTimer); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
   };
 }
 

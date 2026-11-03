@@ -2,7 +2,7 @@
 
 **Synthetic fixtures only — not live qualification.** Actual app DOM/CSS/components and bundled local fonts, with injected network/wallet adapters and external requests blocked or explicitly mocked. Verified labels are fixture data. Review captures perform no contract simulation, wallet signature or transaction submission; Merge stops at the typed BURN acknowledgement.
 
-44 captures: Squeeks, Network, Info, Settings, Merge, Mainnet in light/dark × 1280/390, plus eight connected/disconnected header crops and twelve v9 Squeeks/Merge/Unstake captures. Desktop viewport 1280×960; mobile 390×844; header crops use a 900px viewport height, device scale 1. Settings/Merge/Unstake use viewport images; other main states are full-page. Fonts finish loading and animations are disabled. Token #87 deliberately has Unknown fields. Review banners are injected by tests only; they are absent from production.
+60 captures: Squeeks, Network, Info, Settings, Merge, Mainnet in light/dark × 1280/390, plus eight connected/disconnected header crops, twelve v9 Squeeks/Merge/Unstake captures, and sixteen conditional stall/watch/pending captures. Desktop viewport 1280×960; mobile 390×844; header crops use a 900px viewport height, device scale 1. Settings/Merge/Unstake use viewport images; other main states are full-page. Fonts finish loading and animations are disabled. Token #87 deliberately has Unknown fields. Review banners are injected by tests only; they are absent from production.
 
 Header controls are 36px with 8px gaps and 18px theme/refresh/settings glyphs. Geometry and visibility are asserted, including 900/1024px desktop, hash routes and mobile overflow. The old Overview/Wallet gallery was replaced by Network/Squeeks.
 
@@ -27,6 +27,17 @@ Header controls are 36px with 8px gaps and 18px theme/refresh/settings glyphs. G
 | Unstake · fee/net/maxFee/deadline | [PNG](v9-unstake-light-1280.png) | [PNG](v9-unstake-dark-1280.png) | [PNG](v9-unstake-light-390.png) | [PNG](v9-unstake-dark-390.png) |
 
 v9 Squeeks uses full-page captures; its Merge stops before simulation and Unstake uses an injected preview, not a contract simulation. Real quotes/ownership/verification cannot be inferred from these images. Action regression tests use a mock wallet that refuses submission; no real wallet signature/transaction occurs.
+
+### Conditional restorations
+
+| View | Light · 1280px | Dark · 1280px | Light · 390px | Dark · 390px |
+|---|---|---|---|---|
+| Stall · Network (mocked v6 round 1973) | [PNG](stall-network-light-1280.png) | [PNG](stall-network-dark-1280.png) | [PNG](stall-network-light-390.png) | [PNG](stall-network-dark-390.png) |
+| Stall · beside Claim | [PNG](stall-squeeks-light-1280.png) | [PNG](stall-squeeks-dark-1280.png) | [PNG](stall-squeeks-light-390.png) | [PNG](stall-squeeks-dark-390.png) |
+| Watch mode · connected wallet retained | [PNG](watch-light-1280.png) | [PNG](watch-dark-1280.png) | [PNG](watch-light-390.png) | [PNG](watch-dark-390.png) |
+| Pending · selector notice | [PNG](pending-light-1280.png) | [PNG](pending-dark-1280.png) | [PNG](pending-light-390.png) | [PNG](pending-dark-390.png) |
+
+Stall fixtures set Core configuration and snapshot timestamp with checkpoint lag zero; the notice is absent when settlement is current. Watch captures keep the connected wallet chip while inspecting another address. Pending fixtures are browser-local synthetic records, not submitted transactions. Info captures also show the compact Trust checklist and corrected Developers table.
 
 Explicit regeneration:
 

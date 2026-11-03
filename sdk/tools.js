@@ -4,8 +4,8 @@ import { STAKING_ACTIONS } from "./tool-runtime.js";
  * Single source of truth for tool metadata.
  *
  * The web dApp, the generated web/tools.json manifest and the MCP server all read this list,
- * so an agent sees the same names, descriptions and schemas on every surface. All agent transports read or prepare unsigned transactions only.
- * Wallet prompts belong to the human-facing UI, never this registry.
+ * so shared tools have identical names, descriptions and schemas on every surface.
+ * Browser-only request tools simulate then ask the human wallet; MCP never signs or submits.
  */
 
 const str = (description, extra = {}) => ({ type: "string", description, ...extra });
@@ -123,7 +123,16 @@ const stakingSpecs = Object.keys(STAKING_ACTIONS).flatMap(action => ['preview','
   inputSchema:obj({owner:str('Owner/depositor address'),tokenIds:arr('NFT IDs for deposit/withdraw'),tokenId:str('One NFT ID to approve'),survivor:str('Surviving ID'),donor:str('Burned ID'),confirm:str('Must equal BURN-<donor>'),amount:str('SQK amount in base units'),maxFee:str('Previous unstake quote cap in base units'),deadline:str('Previous unstake uint64 deadline')},['owner',...(['deposit','withdraw'].includes(action)?['tokenIds']:action==='approve_nft'?['tokenId']:['approve_sqk','stake','unstake'].includes(action)?['amount']:action==='merge_deposited'?['survivor','donor','confirm']:[])]),
   surfaces:['web','mcp'],sideEffects:mode==='prepare'?'prepare-only':'read-only',
 })));
-export const TOOL_SPECS = [...BASE_SPECS,...stakingSpecs].map(spec=>({...spec,surfaces:['web','mcp'],inputSchema:{...spec.inputSchema,properties:{...spec.inputSchema.properties,profile:profileArg}}}));
+const unsignedSpecs=[...BASE_SPECS,...stakingSpecs];
+const walletActions=['checkpoint','claim','merge','deposit','withdraw','merge_deposited','claim_and_stake','stake','unstake'];
+const requestSpecs=walletActions.map(action=>{
+  const source=unsignedSpecs.find(spec=>spec.name===`squeek_prepare_${action}`);
+  return {...source,name:`squeek_request_${action}`,
+    description:`Browser only: simulate ${action}, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key.${action.includes('merge')?" Requires confirm: BURN-<donor> before any construction and the human must type it again.":''}`,
+    inputSchema:{...source.inputSchema,required:(source.inputSchema.required??[]).filter(key=>key!=='owner')},
+    surfaces:['web'],sideEffects:'wallet-popup'};
+});
+export const TOOL_SPECS = [...unsignedSpecs,...requestSpecs].map(spec=>({...spec,surfaces:spec.sideEffects==='wallet-popup'?['web']:['web','mcp'],inputSchema:{...spec.inputSchema,properties:{...spec.inputSchema.properties,profile:profileArg}}}));
 
 /** Tool manifest published as web/tools.json and advertised by the MCP server. */
 export function buildManifest({ surface } = {}) {

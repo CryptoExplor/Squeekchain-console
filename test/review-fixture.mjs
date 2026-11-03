@@ -37,7 +37,7 @@ export async function installReviewFixture(page) {
     }, on() {}, removeListener() {} };
     window.squeek = mount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}),
       adapterFactory: profileKey => ({
-        networkStatus: async () => network, verify: async () => ({ ...verification, trusted: true }), walletStatus: async () => wallet, mergePlan: async () => plan,
+        networkStatus: async () => network, verify: async () => ({ ...verification, trusted: true }), walletStatus: async owner => ({...wallet,owner}), mergePlan: async () => plan,
         mergePreview: async () => { counters.simulations++; throw new Error('Screenshot must stop before simulation or wallet submission'); },
         art: async tokenId => ({ tokenId, name: `Mock Squeek #${tokenId}`, attributes: [], image: 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="#fff6dd"/><path d="M2 2h4v4H2z" fill="#8a6a10"/><path d="M3 3h1v1H3zM5 3h1v1H5z" fill="#292b26"/></svg>') }),
       }),

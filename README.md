@@ -6,7 +6,7 @@ A static, browser-first Squeekchain holder console. The app is branded **Wheelho
 
 The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
 
-[Review the 44 mocked screenshots](docs/screenshots/README.md): Squeeks, Network, Info, Settings, Merge dialog and not-deployed Mainnet, v9 Unstake, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **152,951 bytes gzipped**, below the build-enforced 250,000-byte budget, including lazy Developers/Settings modules ([breakdown](docs/audit/phase2-js-size.json)).
+[Review the 60 mocked screenshots](docs/screenshots/README.md): Squeeks, Network, Info, Settings, Merge dialog and not-deployed Mainnet, v9 Unstake, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **153,968 bytes gzipped**, below the build-enforced 250,000-byte budget, including lazy Developers/Settings modules ([breakdown](docs/audit/phase2-js-size.json)).
 
 ## Deployments and safety
 
@@ -123,7 +123,7 @@ npm run mcp
 
 Replace the illustrative addresses with real public addresses. Owner actions return unsigned calls for the owner's wallet. No `--live`, private-key option, unattended owner automation or `mine` command exists.
 
-MCP defaults to `SQUEEK_PROFILE=sepolia-v9`; every read/prepare tool accepts `profile: "sepolia-v6" | "sepolia-v9"`. Shared names/descriptions/schemas live only in `sdk/tools.js`, published as `web/tools.json` and checked against MCP/browser metadata. Browser tools use `window.squeek.callTool(name, args)`. All agent surfaces are unsigned read/prepare only; wallet prompts belong to the human UI. The CLI commands above remain v6 helpers.
+MCP defaults to `SQUEEK_PROFILE=sepolia-v9`; every read/prepare tool accepts `profile: "sepolia-v6" | "sepolia-v9"`. Shared names/descriptions/schemas live only in `sdk/tools.js`, published as `web/tools.json` and checked against MCP/browser metadata. Browser tools use `window.squeek.callTool(name, args)`. MCP and SDK are read/prepare only. Browser-only `squeek_request_*` tools can ask the human wallet after simulation, via `window.squeek` or same-origin postMessage; merges require BURN acknowledgement and agents never see a private key. The CLI commands above remain v6 helpers.
 
 For an operator-run checkpoint keeper, read `keeper/checkpoint.mjs`: both `CHECKPOINT_KEEPER_ENABLED=true` and `--submit-checkpoint` are required, with a dedicated low-value keeper account supplied outside the app. Its target, calldata and value are fixed/checked; it is not exposed through CLI/MCP and is not enabled by any package script. Never supply an owner key.
 

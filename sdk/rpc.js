@@ -55,7 +55,7 @@ export function createSnapshotGuard(client, peers, { signal } = {}) {
       }
     }
     if (selected.length < 2) throw new Error('Unavailable: two independent Sepolia RPCs are required');
-    const result = { blockNumber: at, blockHash: selected[0].block.hash, peers: selected.map(item => item.peer) };
+    const result = { blockNumber: at, blockHash: selected[0].block.hash, timestamp: selected[0].block.timestamp, peers: selected.map(item => item.peer) };
     // Reuse the peer blocks just fetched instead of downloading them a second time.
     agree(result, [...selected.map(item => item.block), await client.getBlock({ blockNumber: at })]);
     return result;

@@ -29,13 +29,13 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
         const prepared = await verifier.prepare(client, activeSnapshot); verification = prepared.value;
         throwIfAborted(signal); const result = await operation(); throwIfAborted(signal);
         await context.check(activeSnapshot); throwIfAborted(signal); prepared.commit();
-        return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash, peers:activeSnapshot.peers?.map(peer=>({label:peer.name,state:'agreed'}))??[] } } : result;
+        return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash, timestamp: activeSnapshot.timestamp == null ? null : String(activeSnapshot.timestamp), peers:activeSnapshot.peers?.map(peer=>({label:peer.name,state:'agreed'}))??[] } } : result;
       } finally { activeSnapshot = verification = null; }
     }); queue = task.catch(()=>{}); return task;
   }
   async function networkStatus({ force = false } = {}) {
 
-    const [coreState, issuanceState, curve, cpStatus, tokenSupply, tokenCap, nftSupply, maxLevel, mergesOpen] = await Promise.all([
+    const [coreState, issuanceState, curve, cpStatus, tokenSupply, tokenCap, nftSupply, maxLevel, mergesOpen, config] = await Promise.all([
       read("core", core9Abi, "state"),
       read("issuance", issuance9Abi, "state"),
       read("issuance", issuance9Abi, "curve"),
@@ -45,6 +45,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
       read("nft", nft9Abi, "totalSupply"),
       read("nft", nft9Abi, "MAXIMUM_LEVEL"),
       read("nft", nft9Abi, "mergesOpen"),
+      read("core", core9Abi, "configuration"),
     ]);
     const [corePaused, nextRound, roundSettled] = cpStatus;
     const levels=await client.multicall({contracts:Array.from({length:Number(maxLevel)},(_,i)=>i+1).flatMap(level=>[
@@ -62,6 +63,8 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
         blockProgress: String(coreState.blockProgress),
         workPerThousandBlocks: String(coreState.workPerThousandBlocks),
         paused: coreState.paused,
+        genesisTimestamp: String(config.genesisTimestamp),
+        roundDuration: String(config.roundDuration),
       },
       mining: {
         issued: sqkAmount(issuanceState.minted),

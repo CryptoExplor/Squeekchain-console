@@ -37,7 +37,7 @@ test('offline browser: Wheelhouse identity, default/saved themes, mobile visibil
   await page.selectOption('#profile-select', 'sepolia-v9');
   await expect(page.getByTestId('profile-select')).toHaveValue('sepolia-v9');
   await expect(page.getByTestId('btn-checkpoint')).toBeDisabled();
-  await expect(page.getByTestId('tool-call')).not.toContainText('squeek_request_merge');
+  await expect(page.getByTestId('tool-call').locator('option[value="squeek_request_merge"]')).toHaveCount(1);
   await page.selectOption('#profile-select', 'mainnet');
   await expect(page.getByTestId('not-deployed')).toBeVisible();
   await expect(page.getByTestId('not-deployed-note')).toContainText('no mainnet deployment');
@@ -187,31 +187,32 @@ test('broadcast Activity survives a profile switch, late wallet response and pag
 });
 
 
-test('v6 settlement frontier follows live reads, clears on advancement/failure/switch, never hardcodes a round', async ({ page }) => {
+test('v6 settlement stall uses configuration and snapshot time, not checkpoint lag', async ({page}) => {
   await installRaceHarness(page);
-  await page.evaluate(async () => {
-    const h = window.races, original = h.network;
-    h.frontier = '4567'; h.ready = false;
-    h.network = () => ({ ...original(h.frontier), checkpoint: { canCheckpoint: h.ready, roundSettled: h.ready, nextRound: String(BigInt(h.frontier) + 1n), reason: 'Next round is not settled' } });
-    await window.squeek.refresh();
+  await page.evaluate(async()=>{
+    const h=races,original=h.network;h.frontier='1973';h.expected='1976';h.ready=false;
+    h.network=()=>({...original(h.frontier),core:{...original(h.frontier).core,genesisTimestamp:'1000',roundDuration:'600'},snapshot:{timestamp:String(1000n+BigInt(h.expected)*600n)},checkpoint:{canCheckpoint:h.ready,roundSettled:h.ready}});
+    await squeek.refresh();
   });
   await page.getByTestId('tab-network').click();
-  await expect(page.getByTestId('settlement-notice')).toBeVisible();
-  await expect(page.getByTestId('settlement-notice')).toContainText('Settled through round 4567');
-  await expect(page.getByTestId('settlement-notice')).toContainText('Next round is not settled');
-  await page.setViewportSize({ width: 320, height: 900 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.evaluate(async () => { window.races.frontier = '4568'; window.races.ready = true; await window.squeek.refresh(); });
-  await expect(page.getByTestId('settlement-notice')).toContainText('Settled through round 4568');
-  await expect(page.getByTestId('settlement-notice')).not.toContainText('Next round is not settled');
-  await page.evaluate(async () => { window.races.network = () => { throw new Error('RPC unavailable'); }; await window.squeek.refresh(); });
+  await expect(page.getByTestId('settlement-notice')).toHaveText('Rewards paused: settlement stopped at round 1973.');
+  await page.getByTestId('tab-squeeks').click();
+  await expect(page.getByTestId('holder-rewards-notice')).toBeVisible();
+  await expect(page.getByTestId('btn-claim')).toBeEnabled();
+  await page.setViewportSize({width:320,height:900});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.evaluate(async()=>{races.expected='1975';await squeek.refresh();});
+  await expect(page.getByTestId('holder-rewards-notice')).toBeHidden();
   await expect(page.getByTestId('settlement-notice')).toBeHidden();
+  await page.evaluate(async()=>{races.expected='1976';races.ready=true;await squeek.refresh();});
+  await expect(page.getByTestId('holder-rewards-notice')).toBeVisible();
+  await page.evaluate(async()=>{races.frontier='1976';await squeek.refresh();});
+  await expect(page.getByTestId('holder-rewards-notice')).toBeHidden();
+  await page.evaluate(async()=>{races.frontier='1973';await squeek.refresh();races.network=()=>{throw new Error('RPC unavailable');};await squeek.refresh();});
+  await expect(page.getByTestId('holder-rewards-notice')).toBeHidden();
+  await page.getByTestId('profile-select').selectOption('mainnet');
   await expect(page.getByTestId('settlement-notice')).toHaveText('');
-  await page.selectOption('#profile-select', 'sepolia-v9');
-  await expect(page.getByTestId('settlement-notice')).toBeHidden();
-  await page.selectOption('#profile-select', 'mainnet');
-  await expect(page.getByTestId('settlement-notice')).toHaveText('');
-  await page.evaluate(() => window.squeek.destroy());
+  await page.evaluate(()=>squeek.destroy());
 });
 
 test('offline browser wire: state TypeError/cooldown fail over through bundled transports', async ({ page }) => {

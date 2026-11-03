@@ -18,7 +18,7 @@ Squeeks empty state has connection and watch-address controls, not instructions.
 
 ## Safety and agents
 
-Both wallet and staked merges require exact BURN-<donorId> before construction/simulation. The input's label gives the instruction; the dialog retains the permanent-burn safety line. Fresh simulation precedes every wallet prompt. Claims re-preview actual payout and recipient; changed outcomes stop. Unstake uses a labelled amount/fee-maxFee/net/deadline/gas review, and reuses the reviewed cap/deadline on re-preview. Agents read or prepare unsigned calls only: the same registry in `sdk/tools.js` drives generated JSON, local stdio MCP and browser tools. Human UI owns wallet prompts; there are no agent wallet-popup tools or owner keys.
+Both wallet and staked merges require exact BURN-<donorId> before construction/simulation. The input's label gives the instruction; the dialog retains the permanent-burn safety line. Fresh simulation precedes every wallet prompt. Claims re-preview actual payout and recipient; changed outcomes stop. Unstake uses a labelled amount/fee-maxFee/net/deadline/gas review, and reuses the reviewed cap/deadline on re-preview. The single registry in `sdk/tools.js` drives generated JSON, local stdio MCP and browser tools. MCP/SDK read or prepare unsigned calls. Browser-only request tools can open a human wallet popup after simulation; cross-origin postMessage requests are refused. Profile/owner/watch guards and typed BURN confirmation apply. Agents never see a private key.
 
 ## Structure and accessibility
 
@@ -28,4 +28,8 @@ Light default; saved light/dark/system override. Local Barlow Condensed, Quicksa
 
 ## Evidence
 
-See [STATUS](STATUS.md) for exact current results and limits, [44 mocked captures](screenshots/README.md), [gzip report](audit/phase2-js-size.json), and both request-budget reports. Total external JavaScript is **152,951 bytes / 250,000 cap**, independently gzipped including lazy scripts. Offline tests are not live qualification. No live suite, signing, workflow dispatch, keeper, merge or deploy was run. Phase 4 planner/per-token redesign remains deferred.
+See [STATUS](STATUS.md) for exact current results and limits, [60 mocked captures](screenshots/README.md), [gzip report](audit/phase2-js-size.json), and both request-budget reports. Total external JavaScript is **153,968 bytes / 250,000 cap**, independently gzipped including lazy scripts. Offline tests are not live qualification. No live suite, signing, workflow dispatch, keeper, merge or deploy was run. Phase 4 planner/per-token redesign remains deferred.
+
+## Context-only signals
+
+Stall detection uses verified snapshot time and Core genesis/round duration, not checkpoint lag or the wall clock. Only a >2 completed-round deficit shows the approved rewards-paused line beside Claim and on Network. Missing configuration/time stays Unknown. Watch mode has a contextual Viewing chip and Exit without replacing wallet identity. Pending transactions show a selector-local non-cancellation notice only while unresolved. Trust summarizes its seven check categories with live Checked/Stopped/Unknown state. Contextual captures cover both themes and desktop/mobile; no tagline/helper paragraphs were restored.

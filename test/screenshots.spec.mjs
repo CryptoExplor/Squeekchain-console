@@ -90,7 +90,9 @@ async function assertCompactHeader(page, width, connected) {
     const icon = page.getByTestId(id);
     expect((await icon.boundingBox()).width).toBe(36);
     await expect(icon.locator('svg')).toHaveAttribute('width', '18');
+    await page.keyboard.press("Tab");
     await icon.focus();
+    await expect(icon).toBeFocused();
     expect(await icon.evaluate(node => parseFloat(getComputedStyle(node).outlineWidth))).toBeGreaterThanOrEqual(3);
   }
   if (width >= 900) expect(new Set(geometry.map(c => Math.round(c.y))).size).toBe(1);
