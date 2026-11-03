@@ -2,6 +2,19 @@
 
 An independent browser-first holder utility, network second. Repository remains **Squeekchain-console**; deployment target is Vercel. No official affiliation, backend, RPC proxy or architecture restart.
 
+
+## Profile decision — 2026-11-03 (Phase 2 registry)
+
+**v6 and v9 are equal profiles. The user chooses; no version-based restriction.** This supersedes “v9 read-only, transactions disabled” and “staking only when documented.” The intended profiles are **Sepolia v6** and **Sepolia v9**. Mainnet remains **Not deployed**. Both versions use identical fail-closed identity/peer checks, simulation and authorization safeguards; no verified badge or signing with missing pins.
+
+First visit without a wallet defaults to v9; later visits restore the user's last choice. Hash routes include the profile. At connection, read both NFT balances: select the only held collection, ask with both counts when both are held, retain the current choice when neither is held. Failed/unknown counts must not become zero or silently auto-pick. Both options stay visible with connected-wallet counts.
+
+Remove supported/read-only/unverified product labels after migration. The status badge shows live verification or a stopped state, never optimism based on the version. Reward pause/mining status comes from live readiness/advancement; one unchanged sample is not proof of a permanent freeze.
+
+Use the existing official-dApp-derived `sdk/abi-v9.js`, not handwritten ABI fragments. Contracts must disclose v6 published-record provenance and v9 official-bundle provenance with the verified staking source. Both wallet-held and confirmed staked Squeeks appear together with Wallet/Staked tags. Deposits have a separate explained approval step; per-token approval is preferred and broader approval requires an explicit choice. Both merge paths require exact BURN-<donorId>. Unstake shows quoteUnstake fee/net and uses the quoted fee as maxFee with a deadline. Every wallet prompt requires simulation; claims are freshly previewed before signing. The same action names/profile arguments and burn rules apply to tools.json and local unsigned MCP.
+
+**Not implemented yet:** registry migration, v9 actions, agent schemas, new fixtures/budgets/screenshots and the unexecuted v9 live gate extension. Source audit found the requested local ABI entries, but complete same-block on-chain pins cannot yet be established with this environment's available networking/tools. API observations and verified constructor arguments are not substituted for current storage/code/wiring reads. See the [STATUS blocker/checklist](STATUS.md) and [candidate-only evidence](audit/profile-registry-evidence-2026-11-03.json). Current UI/code still reflects the legacy baseline below; it must not be described as the completed equal-profile design.
+
 ## Foundations
 
 - Light by default; explicit light/dark/system saved preference wins. System follows OS changes. Theme metadata/state, local fonts and pre-paint selection retained.
@@ -9,7 +22,7 @@ An independent browser-first holder utility, network second. Repository remains 
 - Header controls 36px, common radius and 8px gaps; theme/refresh/gear have authored 18px glyphs. Action/dialog controls remain 44px. Visible 3px focus, reduced motion, skip link, keyboard tab/menu navigation, sheet and confirmation focus traps/restoration.
 - Existing selected text/background contrast checks require at least 4.5:1 in light and dark; not a blanket WCAG or Lighthouse certification.
 
-## Structure
+## Existing Phase 3 structure (registry migration pending)
 
 Squeeks · Art · Network · Info use URL hashes. Network defaults without a wallet/watch; connecting or viewing an address selects Squeeks. Explicit deep links survive reload/history. No hero, page intro, section eyebrows, network strip or next-move cards. Holdings capability cards move to Info › Status. Watch input sits at the top of Squeeks with its existing read-only inspection behavior. Existing claim/merge inputs remain until Phase 4.
 
@@ -21,7 +34,7 @@ Info anchors: How it works, Trust, Status, Contracts, Developers, About. Policy 
 
 ## Components and safety
 
-Existing Panel, Stat, Table, TokenCard, ConfirmDialog, Toast and Skeleton architecture stays intact. Mobile holdings remain labelled cards from the same table cells; artwork stays an isolated image. Unknown remains visible, known zero stays zero, unavailable readings do not masquerade as live data. Modal BURN-<id>, fresh simulation and wallet-only signing are unchanged. Unpublished v9 transactions, staking and Mainnet actions stay unavailable. Footer non-affiliation remains.
+Existing Panel, Stat, Table, TokenCard, ConfirmDialog, Toast and Skeleton architecture stays intact. Mobile holdings remain labelled cards from the same table cells; artwork stays an isolated image. Unknown remains visible, known zero stays zero, unavailable readings do not masquerade as live data. Modal BURN-<id>, fresh simulation and wallet-only signing are unchanged. The legacy implementation still withholds v9/staking actions pending the pin/registry migration described above; this is no longer the desired version policy. Mainnet actions stay unavailable. Footer non-affiliation remains.
 
 ## Acceptance
 

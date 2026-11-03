@@ -1,19 +1,56 @@
-# Wheelhouse — Phase 3 structure ready for draft review
+# Wheelhouse — Phase 2 profile-registry decision recorded; identity evidence blocked
 
 **Date:** 2026-11-03 (Asia/Calcutta). **PR:** [#3](https://github.com/CryptoExplor/Squeekchain-console/pull/3), open/draft. **Branch:** `arena/417b8688-squeekchain-console`. The user explicitly chose to extend the existing draft after being told this session cannot create a separate branch. No main push, merge or deployment.
+
+
+## Decision — 2026-11-03: equal profiles (supersedes the old v9 restriction)
+
+**v6 and v9 are equal profiles. The user chooses; no version is restricted by policy.** This explicitly replaces the previous “v9 read-only, transactions disabled” rule and the documentation-publication prerequisite for v9/staking. Official-dApp-derived ABIs and a dated, block-pinned observed identity record are acceptable sources under this decision. Mainnet remains **Not deployed**. The existing **thewheel** project/workflow name is unchanged.
+
+The same protections apply to both versions: chain/identity/wiring checks, two independent snapshot hashes, stop on mismatch, explicit irreversible-burn acknowledgement, simulation before every wallet prompt and fresh claim previews. Removing a version-based policy restriction does not make a missing identity pin a verified identity. Do not derive “mining live” from a version number or one sample; require observed round advancement. Do not infer a permanent v6 pause from a single unchanged frontier.
+
+**Implementation status:** the decision is recorded, but the new registry/action integration is **not complete**. Runtime still has the legacy v9 gates and labels; those are pending migration, not the desired policy. No capability bits were blindly enabled and no observed API values were promoted to verified pins. The Phase 3 sections below describe the existing baseline, not the newly approved Phase 2 behavior.
+
+### Evidence acquisition and blocker
+
+- Re-read the [official dApp](https://sepolia.squeekchain.com/), [core API](https://api.squeekchain.com/v1/core) and [economy API](https://api.squeekchain.com/v1/economy/state). The API reports release `stream-game-sepolia-test-20261026-01`, issuance version 9 and staking version 2. Core and economy responses have **different safe blocks: 12056220 and 12056222**. These are candidate observations, not an atomic on-chain identity export.
+- The local `sdk/abi-v9.js` includes all requested function signatures. It was not hand-written or modified here. File SHA-256: `c202c992b724f7e807188edc682fd08c8d7d49e582631d4d69df602509d6359b`. Its header identifies the official dApp bundle as the source; a fresh whole-bundle extraction/parity comparison was not completed in this audit.
+- [Blockscout proxy verification](https://eth-sepolia.blockscout.com/address/0x4b67b739dFd832f4EAC67a7Aa3bc244fB74cea4F?tab=contract) and the [implementation metadata endpoint](https://eth-sepolia.blockscout.com/api/v2/smart-contracts/0xBBb816616d8840bD98094bF5a20F208Df089230B) are accessible. The latter identifies an exactly verified implementation ABI/source record. Full source/ABI parity has not been established. Constructor arguments do **not** prove current proxy slots.
+- Required same-block EIP-1967 implementation/admin slots, code bytes/runtime hashes and wiring still need independent on-chain evidence. This sandbox permits outbound command networking only to its configured allowlist, which excludes RPC hosts; the available page-retrieval tool cannot issue JSON-RPC POSTs. The attempted Blockscout GET RPC-proxy route `api?module=proxy&action=eth_blockNumber` returned `Unknown module`. No source guesses, allowlist bypass or repeated live attempts.
+- [Candidate evidence](audit/profile-registry-evidence-2026-11-03.json) is deliberately not imported by runtime configuration. **Stop here until a complete block-pinned read-only export is available** from an RPC-capable environment, preferably with two-peer hash agreement. No private keys are needed. No `test:live`, workflow dispatch/label or transaction was run.
+
+### Phase 2 checklist (pending means not delivered)
+
+- [x] Record equal-profile decision in STATUS and DESIGN; explicitly supersede permanent v9/staking policy restrictions.
+- [x] Inventory requested signatures in the existing dApp-derived ABI and record available source observations.
+- [ ] Obtain full dated same-block v9 identity pins: chainId; core/issuance/staking implementation and admin slots; versions (core, issuance 9, staking 2); layout digests; runtime hashes; bindings/core/token/mining and NFT/staking wiring; block/hash/peer/source provenance. Fail closed on any mismatch or missing required pin.
+- [ ] Registry labels **Sepolia v6 / Sepolia v9**, live verification-or-stopped badge only; v9 first-visit default, saved choice thereafter, profile in the URL hash. Mainnet Not deployed.
+- [ ] On connect, read both NFT `balanceOf` counts; only one holding → select it; both → show counts and let the user choose; neither → retain current. Unknown is not zero. Keep both profiles in the select with counts when connected.
+- [ ] Live settlement/mining status from reads and advancement, not version labels or frozen round constants.
+- [ ] v9 wallet NFT merge with `mergesOpen()` reason and exact BURN-<donorId> before building/simulation.
+- [ ] v9 deposit/withdraw/mergeDeposited; wallet+staked discovery with `depositor()` confirmation and Wallet/Staked tags; separately explained approval step with per-token approval preferred and explicit approval-scope choice.
+- [ ] v9 claim(account), claimAndStake, stake and unstake. Show `quoteUnstake` fee/net; bind maxFee to that quote, supply deadline, re-preview/simulate before wallet prompts.
+- [ ] v9 issuance checkpoint only when live checkpointStatus says settled.
+- [ ] Info › Contracts: both address sets and exact ABI provenance, including Blockscout-verified staking source.
+- [ ] Browser tools.json and local read/prepare-only MCP parity via profile argument; same action names and typed-burn rules, no agent-held keys or remote submission.
+- [ ] Per-action mocked v9 tests; approval/unstake-fee/profile-auto-pick tests; measured request budgets **for each profile**.
+- [ ] Extend live.spec with read-only v9 identity verification; **do not execute it here**.
+- [ ] v9 Squeeks, Merge and Unstake screenshots in light/dark at desktop/mobile after implementation. Existing Phase 3 captures are not evidence of these new actions.
+
+No new v9 request-budget measurement or v9 action/dialog screenshot is claimed. Existing v6 wire budgets and baseline suites below are unchanged.
 
 ## Plan
 
 - Phase 0 audit/live gate: historically complete. [Run 41618128325](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41618128325) qualified `dd0afff7a88250d5d8aca88427ffe449c9e387c4`; [metadata evidence](audit/live-qualification-run-41618128325.json). Artifact contents were not inspected; no block/hash/latency metrics are invented.
 - Phase 1 design system: merged in PR #2 at `22263e775461101b7d1dcb24933edd2ccd5a281f`. Its final source `b26f7f94fb0c28601408f4fade93f87bc2f84b1f` also passed [run 41650460910](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41650460910). These passes do **not** qualify this head.
 - Header polish: in PR #3, now extended with Phase 3 at the user's request; PR #3 is not merged.
-- Phase 2 data-layer gap audit: not newly completed or claimed by this structural change.
+- **Phase 2 profile registry: decision recorded; implementation blocked pending complete on-chain pins (checklist above).**
 - **Phase 3 structure: implemented for draft review.**
 - Phase 4: selection-based actions, planner, per-Squeek pages and expanded holder/watch workflow — next, not implemented here.
 - Phase 5: slim Network / Genesis decision later. Phase 6: agent expansion later; existing tools only moved to Info › Developers. Phase 7: Vercel CSP, additional mock-wallet E2E, Lighthouse 90+ and README hardening later; no Lighthouse score claimed.
-- Deferred: Cloudflare cron/alerts, push, Telegram, OG. Vercel is the target; alerts remain in-tab. Staking stays **Coming when documented**.
+- Deferred: Cloudflare cron/alerts, push, Telegram, OG. Vercel is the target; alerts remain in-tab. The prior staking documentation gate is superseded by the equal-profile decision above; the implementation is pending.
 
-## Phase 3 delivery
+## Phase 3 baseline delivery (before the new decision)
 
 - Hash tabs: Squeeks, Art, Network, Info; default Network without an address, Squeeks on wallet connection or watch. Explicit hashes/deep links, back/forward and keyboard tab navigation work. Legacy JavaScript tab names remain aliases for integrations.
 - Header status opens Info › Trust. Wallet menu: copy, Activity with pending count, disconnect. When saved Activity exists without a connected wallet, the menu remains reachable and offers connection on deployed profiles. On Mainnet it offers Activity only, never connection or a chain action.
@@ -25,7 +62,7 @@
 - Hero, intro, network strip, next-move cards, holdings capability grid and section eyebrows removed. Watch remains at the top of Squeeks as View address, with the existing disconnected/watch behavior. Developers and capabilities are in Info. Activity is a drawer instead of an always-open panel. Mainnet still has no chain panels or owner actions, but Info and saved Activity are available.
 - Mocked-review notices are injected only by test fixtures, never by the production page.
 
-## Safety preserved
+## Existing baseline safety (migration pending)
 
 No changes to snapshot/hash verification, deployment pins, runtime ABI integration, capability authority, owner checks, exact BURN acknowledgement before call construction/simulation, simulation review/fresh verification, wallet-only signing or keeper defaults. Unknown never becomes fabricated zero. Genuine zero remains valid. Reward/frontier/paused messages are driven by live reads, not hardcoded rounds; Core pause stops new issuance, not claims of already-funded SQK. Mainnet remains not deployed; observed v9 never gains transaction paths. Profile switches still abort/clear/isolate stale state, and broadcast Activity survives them. No keys, backend, RPC proxy, remote MCP, closed-tab monitoring or transaction resubmission.
 
