@@ -42,7 +42,7 @@ test('offline browser: Wheelhouse identity, default/saved themes, mobile visibil
   await expect(page.locator('#btn-connect')).toBeHidden();
   await expect(page.locator('#btn-checkpoint')).toBeHidden();
   await expect(page.locator('#btn-checkpoint')).toBeDisabled();
-  await expect(page.locator('#net-round')).toHaveText('—');
+  await expect(page.locator('#net-round')).toHaveText('Unknown');
   await page.keyboard.press('Control+Home');
   await page.locator('.skip-link').focus();
   await page.keyboard.press('Enter');
@@ -103,7 +103,7 @@ test('switch during pending RPC: abort the load and discard old-profile data', a
     window.races.reads[0].resolve(window.races.network('999'));
     await window.pendingRead;
   });
-  await expect(page.locator('#net-round')).toHaveText('—');
+  await expect(page.locator('#net-round')).toHaveText('Unknown');
   await expect(page.locator('#claim-result')).toBeEmpty();
   await expect(page.locator('#squeeks-tbody')).toBeEmpty();
   expect(await page.evaluate(() => [window.squeek.state.account, window.squeek.state.inspected, window.squeek.state.status, window.squeek.state.plan, window.squeek.state.receipts.length])).toEqual([null, null, null, null, 0]);
@@ -123,7 +123,7 @@ test('three rapid switches: only the final generation may render', async ({ page
     window.races.reads[1].resolve(window.races.network('200'));
     window.races.reads[0].resolve(window.races.network('100'));
   });
-  await expect(page.locator('#net-round')).toHaveText('—');
+  await expect(page.locator('#net-round')).toHaveText('Unknown');
   await page.evaluate(() => { window.races.reads[2].resolve(window.races.network('300')); });
   await expect(page.locator('#net-round')).toHaveText('300');
   await expect(page.locator('#net-kind')).toHaveText('read-only (unverified)');

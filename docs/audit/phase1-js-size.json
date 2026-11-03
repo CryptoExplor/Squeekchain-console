@@ -1,0 +1,32 @@
+{
+  "algorithm": "gzip (Node default level)",
+  "scripts": [
+    {
+      "file": "activity.js",
+      "rawBytes": 4479,
+      "gzipBytes": 1745
+    },
+    {
+      "file": "app.js",
+      "rawBytes": 53122,
+      "gzipBytes": 14605
+    },
+    {
+      "file": "bundle.js",
+      "rawBytes": 464126,
+      "gzipBytes": 126582
+    },
+    {
+      "file": "components.js",
+      "rawBytes": 7610,
+      "gzipBytes": 2574
+    },
+    {
+      "file": "telemetry.js",
+      "rawBytes": 3092,
+      "gzipBytes": 1314
+    }
+  ],
+  "totalGzipBytes": 146820,
+  "budgetBytes": 200000
+}

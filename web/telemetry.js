@@ -48,14 +48,14 @@ export function createTelemetry({ fetcher = globalThis.fetch, now = Date.now } =
 
 export function telemetryView(data, now = Date.now()) {
   const m = data.measurement;
-  if (!m) return { state: 'Unknown', note: 'No device reading available.', rpm: '—', speed: '—', distance: '—' };
+  if (!m) return { state: 'Unknown', note: 'No device reading available.', rpm: 'Unknown', speed: 'Unknown', distance: 'Unknown' };
   const age = Math.max(0, Math.floor((now - Date.parse(m.receivedAt)) / 1000));
   const stale = m.freshness !== 'online' || age > 120;
   return {
     state: stale ? 'Stale' : m.coreStatus === 'COUNTER_FAULT' ? 'Device fault' : m.rpmMilli > 0 ? 'Running' : 'Resting',
-    rpm: stale ? '—' : (m.rpmMilli / 1000).toFixed(1),
-    speed: stale ? '—' : `${(m.speedMmPerSecond / 1000).toFixed(2)} m/s`,
-    distance: stale ? '—' : `${(m.distanceMm / 1_000_000).toFixed(2)} km`,
+    rpm: stale ? 'Unknown' : (m.rpmMilli / 1000).toFixed(1),
+    speed: stale ? 'Unknown' : `${(m.speedMmPerSecond / 1000).toFixed(2)} m/s`,
+    distance: stale ? 'Unknown' : `${(m.distanceMm / 1_000_000).toFixed(2)} km`,
     note: `${stale ? 'Stale device data' : 'Device reading'} · ${age}s ago. Measurement is not settled work.`,
   };
 }

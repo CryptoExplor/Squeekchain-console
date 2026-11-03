@@ -1,4 +1,4 @@
-# Wheelhouse — Phase 1 active / WIP
+# Wheelhouse — Phase 1 ready for review
 
 **Date:** 2026-11-03 (Asia/Calcutta). **PR:** #2, open/draft. **Branch:** `arena/314fd2af-squeekchain-console`. App rebrand approved; repository name unchanged.
 
@@ -6,12 +6,12 @@
 
 **Phase 0: Offline audit complete. Live qualification deferred to the pre-merge gate.** Phase 0 is **not fully complete** and no live pass is claimed. Per the updated plan, live qualification does not block Phase 1.
 
-**Phase 1 is active on the same branch and PR #2**: Wheelhouse branding, the light design system and safety fixes. Preserve the existing architecture and every approved safety rule; do not restart or create another phase PR.
+**Phase 1 implementation is ready for review on the same branch and PR #2**: Wheelhouse branding, the light design system and safety fixes. Preserve the existing architecture and every approved safety rule; do not restart or create another phase PR.
 
 | Phase 1 work | Current status |
 |---|---|
 | First task — browser RPC availability/fallback and diagnostics | Implemented in `c128c83d4171bece61d0226f0690abb366110c2f`; offline Node and bundled Chromium regressions pass. Typed cooldown/transport errors fail over, including browser fetch/CORS-style TypeErrors; cause traversal retains trust hard stops. Tool errors expose redacted endpoint, method and cause diagnostics. This is not a verified diagnosis of run `41606508624`. |
-| Wheelhouse branding and light design system | Continued with a consolidated neutral/gold/blue token palette, independent-console wordmark subtitle, readable 11px operational captions, semantic primary/danger controls, accessible theme state and matching browser chrome colors. Eight offline browser checks pass, including light/dark component contrast and focus; final human browser review is pending. See [design contract](DESIGN.md). |
+| Wheelhouse branding and light design system | Continued with a consolidated neutral/gold/blue token palette, independent-console wordmark subtitle, readable 11px operational captions, semantic primary/danger controls, accessible theme state and matching browser chrome colors. Twenty-five mocked Chromium checks pass, including the 16-state review gallery, light/dark component contrast and focus; final human browser review is pending. See [design contract](DESIGN.md). |
 | Approved safety fixes | Existing capability gates, same-block graph/two-peer verification, explicit BURN confirmation, fresh simulation and wallet-only signing, profile cancellation/isolation, persistent Activity, API hint validation and key isolation remain unchanged. |
 
 **At the end of Phase 1**, the user will re-trigger `run-live` for the intended final PR head and manually check the app in their browser before merge. The pre-merge live gate must pass; offline tests, SDK probes and manual review do not substitute for that gate. The agent will not retry `test:live` in the sandbox or apply the label. PR #2 remains open/draft/WIP. After each push, report the commit, changes and offline results.
@@ -21,6 +21,17 @@
 The historical real-browser `npm run test:live` check was attempted once after the RPC/discovery load fixes and failed before contract verification: all three public RPC probes in the **old** endpoint list returned `Failed to fetch`. This is not proof of rate limiting, CORS rejection, TLS failure, current identity mismatch, a frozen frontier, or transaction failure. No live reads qualified in that sandbox attempt and no transactions were submitted. The subsequent user-reported SDK successes below are partial live evidence, not a completed Playwright qualification.
 
 Evidence: [`audit/live-qualification-2026-11-02.json`](audit/live-qualification-2026-11-02.json). The earlier local-run plan is now superseded by the explicit-opt-in **thewheel** CI gate below. Retain successful artifacts from the opted-in live job for the intended final source SHA at the pre-merge gate; do not mark Phase 0 fully complete before live qualification. The historical jsdom smoke failure is not retried here. Public RPC availability is not a Phase 1 blocker.
+
+## Phase 1 finish checklist
+
+- **Shared components:** `web/components.js` exports Panel, Stat, Table, TokenCard, ConfirmDialog, Toast and Skeleton. Existing static markup is enhanced in place; no framework, backend or new authority over capabilities. Panel busy state preserves known readings; Skeleton visibly retains Unknown and respects reduced motion. Tables have captions/scoped headers; TokenCard is a keyboard-operable button and renders artwork as an isolated image. The shared dialog preserves the existing focus trap/restore/cancellation lifecycle and Merge's typed BURN-<id> before call construction/simulation, then review/fresh simulation/wallet signing.
+- **Unknown, never invented zero:** absent/nonfinite/unavailable values display literal **Unknown** in network, wallet, table and telemetry views. Known zero is still a valid reading. A missing paused flag is not shown as “no.” v6 Power and v9 Deposited are distinct fields, not a fallback pretending an absent power value is zero. Failed wallet refresh clears stale holdings/actions.
+- **Shell:** Wheelhouse wordmark in header/footer, profile select with separate Supported / Read-only · unverified / Not deployed badge, light-default saved theme toggle, and explicit **independent community console · not affiliated with Squeekchain** footer. Live verification status remains separate from profile support status.
+- **Review gallery:** [16 committed mocked Chromium screenshots](screenshots/README.md): light/dark × 1280px/390px × Overview/Wallet/Merge dialog/Mainnet-not-deployed. Every capture uses synthetic fixtures; no live qualification, contract simulation, signing or real wallet submission. The PR description links the gallery and individual images. Regenerate only with explicit `UPDATE_SCREENSHOTS=1 npm run test:browser`; ordinary CI saves captures to ignored test output.
+- **JavaScript size:** **146,820 gzip bytes (146.8 kB / 143.4 KiB)**, summed across all five independently gzipped dist JS files using Node's default gzip level. Under the **200,000-byte** budget, now checked at build time. [Per-file report](audit/phase1-js-size.json); `dist/` remains ignored.
+- **Final offline validation:** all **11** `npm test` scripts, build/static parity/size budget, all **25** mocked Chromium tests, and `git diff --check` pass. Wire request budgets remain **22 cold / 12 warm / 15 wallet**.
+
+**Phase 1 ready for review**, not approval to merge. PR #2 remains open/draft. All approved safety rules and the opt-in live workflow are unchanged. No sandbox `test:live`, label operation, keeper activation or transaction submission was performed. User-triggered live qualification at the intended final head and manual browser review are still required before merge; Phase 0 is not fully complete.
 
 ## Public RPC availability follow-up
 
@@ -98,7 +109,7 @@ The offline first-endpoint regression injects the exact programming TypeError th
 ## Validation
 
 - `npm test`: passes UI/telemetry/modal regressions, published-record characterization/local ABI parity, stdio tool listing, same-block identity mismatch cases, role-based RPC availability/failover/backoff and probe checks, paginated API hint isolation and onchain confirmation, actual wire request budgets, chain/cache invalidation, IndexedDB filtered/incremental/reorg discovery and Activity persistence/reverts/unavailability.
-- `npm run test:browser`: **8 passing Chromium tests**: light/saved theme and responsive layout; pending-RPC switch; three rapid switches; pending-simulation switch; late broadcast persistence/receipt tracking across a switch and reload; live-derived v6 frontier messaging/advancement/failure/switch/mobile behavior; bundled browser-wire state cooldown/TypeError failover; light/dark component contrast, readable captions, theme metadata/state and focus. RPC/adapters are mocked in this suite; it is not live qualification.
+- `npm run test:browser`: **25 passing mocked Chromium tests**: light/saved theme and responsive layout; pending-RPC switch; three rapid switches; pending-simulation switch; late broadcast persistence/receipt tracking across a switch and reload; live-derived v6 frontier messaging/advancement/failure/switch/mobile behavior; bundled browser-wire state cooldown/TypeError failover; light/dark component contrast, readable captions, theme metadata/state and focus; 16 screenshot states; TokenCard keyboard/isolated-image/dialog focus behavior. RPC/adapters are mocked in this suite; it is not live qualification.
 - `npm run build`: passes; `dist/` output parity is a build check, not tracked generated content.
 - CI includes `npx playwright install --with-deps chromium`. The sandbox used an npm-distributed Chromium with bundled system libraries because browser download hosts are restricted; that temporary package/binary is not a project dependency or committed artifact.
 - `npm run test:live`: the **historical sandbox attempt failed / was unavailable**; the updated full suite is **pending opted-in CI qualification**. The user-reported SDK checks above do not mark it passed.

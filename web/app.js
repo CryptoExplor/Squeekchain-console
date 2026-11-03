@@ -24,6 +24,7 @@ import {
   rpcToolError,
 } from "./bundle.js";
 
+import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
 import { createActivity } from "./activity.js";
 import { createTelemetry, telemetryView } from "./telemetry.js";
 
@@ -82,6 +83,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     toasts: $("toasts"),
   };
 
+  doc.querySelectorAll('.panel').forEach(node => Panel(node));
+  doc.querySelectorAll('.stat').forEach(node => Stat(node));
+  const networkPanel = Panel($("profile-panel"));
+  const dialog = ConfirmDialog({ doc, win, elements: el.modal });
+  const openModal = dialog.open;
+  const confirmModal = dialog.confirm;
+
   const store = {
     get: (k) => {
       try {
@@ -115,21 +123,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
 
   // ── helpers ────────────────────────────────────────────────────────────────
-  const toast = (msg, kind = "") => {
-    const node = doc.createElement("div");
-    node.className = `toast ${kind}`;
-    node.textContent = msg;
-    el.toasts.appendChild(node);
-    win.setTimeout?.(() => node.remove(), 7000);
-  };
+  const toast = (msg, kind = "") => Toast({ doc, host: el.toasts, message: msg, kind });
   const showBanner = (msg, kind = "") => {
     el.banner.textContent = msg;
     el.banner.className = `notice ${kind}`;
   };
   const hideBanner = () => el.banner.classList.add("hidden");
-  const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—");
-  const num = (v, d = 0) => (v === null || v === undefined ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: d }));
-  const sqk = (amount) => (amount ? `${num(Number(amount.sqk), 4)} SQK` : "—");
+  const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
+  const num = formatNumber;
+  const sqk = formatAmount;
+  const setStat = (node, value, formatter = valueText) => Stat(node.closest('.stat')).set(value, formatter);
   const json = (v) => JSON.stringify(v, null, 2);
   const showOut = (node, value) => {
     node.textContent = typeof value === "string" ? value : json(value);
@@ -220,6 +223,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       }),
     );
     el.profileSelect.value = state.profileKey;
+    const profile = getProfile(state.profileKey), badge = $("profile-status");
+    badge.textContent = profile.kind === 'supported' ? 'Supported' : profile.addresses ? 'Read-only · unverified' : 'Not deployed';
+    badge.className = `chip ${profile.kind === 'supported' ? 'ok' : 'warn'}`;
   }
 
   async function switchProfile(profileKey) {
@@ -227,7 +233,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     loadController.abort();
     generation++;
     loadController = new AbortController();
-    closeActiveModal?.();
+    dialog.close();
     state.profileKey = getProfile(profileKey).key;
     state.adapter = null;
     state.account = state.chainId = state.inspected = null;
@@ -244,13 +250,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       node.textContent = "";
       node.classList.add("hidden");
     }
-    for (const node of [el.holder.count, el.holder.power, el.holder.share, el.holder.claimable]) node.textContent = "—";
+    for (const node of [el.holder.count, el.holder.power, el.holder.share, el.holder.claimable]) node.textContent = UNKNOWN;
     el.holder.hint.textContent = el.holder.mergeNote.textContent = "";
     for (const id of ["claim-ids", "merge-survivor", "merge-donor", "watch-input", "art-token", "tool-args", "modal-input"]) $(id).value = "";
     el.modal.body.replaceChildren();
     el.modal.title.textContent = "";
     el.toasts.replaceChildren();
-    $("profile-panel").setAttribute("aria-busy", "false");
+    networkPanel.setBusy(false);
     store.set("squeekchain:profile", state.profileKey);
     renderWalletChip();
     renderProfileOptions();
@@ -284,7 +290,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const profile = getProfile(state.profileKey);
     el.net.settlement.textContent = "";
     el.net.settlement.classList.add("hidden");
-    for (const key of ["round", "blocks", "lag", "issued", "squeeks", "paused"]) el.net[key].textContent = "—";
+    for (const key of ["round", "blocks", "lag", "issued", "squeeks", "paused"]) el.net[key].textContent = UNKNOWN;
+    el.net.paused.parentElement.className = "stat";
     el.cp.button.disabled = true;
     el.cp.reason.textContent = profile.addresses ? "Waiting for verified chain state." : "Unavailable until a mainnet deployment is published and verified.";
     el.verified.textContent = profile.addresses ? "verifying…" : "not deployed";
@@ -320,7 +327,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const load = captureLoad();
     const enabled = state.profileKey === "sepolia";
     if (reset || !enabled) {
-      for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
+      for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = UNKNOWN;
       $("wheel-state").textContent = enabled ? "Loading" : "Unavailable";
       $("wheel-note").textContent = enabled ? "Reading official device telemetry…" : "Device telemetry belongs to the live Sepolia deployment only.";
     }
@@ -335,7 +342,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       $("wheel-note").textContent = view.note;
     } catch (err) {
       if (!isCurrent(load)) return;
-      for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = "—";
+      for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = UNKNOWN;
       $("wheel-state").textContent = "Unknown";
       $("wheel-note").textContent = `${err.message} No live reading to display.`;
     }
@@ -387,14 +394,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (!walletListenersRegistered) {
       p.on?.("accountsChanged", (accs) => {
         if (!state.account || !state.adapter || destroyed) return;
-        closeActiveModal?.();
+        dialog.close();
         state.account = accs?.[0] ?? null;
         state.inspected = state.account;
         state.status = null;
         renderWalletChip();
         refreshWallet();
       });
-      p.on?.("chainChanged", () => { state.adapter?.invalidateChain?.(); if (!state.account || destroyed) return; closeActiveModal?.(); void refreshAll(); });
+      p.on?.("chainChanged", () => { state.adapter?.invalidateChain?.(); if (!state.account || destroyed) return; dialog.close(); void refreshAll(); });
       walletListenersRegistered = true;
       }
       hideBanner();
@@ -452,91 +459,17 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     return result;
   }
 
-  // ── modal ─────────────────────────────────────────────────────────────────
-  let closeActiveModal = null;
-
-  function openModal({ initialFocus = el.modal.cancel, onClose }) {
-    const previousFocus = doc.activeElement;
-    const box = el.modal.root.querySelector(".modal-box");
-    const focusable = () => [...box.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')]
-      .filter(node => node.tabIndex >= 0 && !node.matches(':disabled') && !node.closest('.hidden, [hidden], [inert]')
-        && win.getComputedStyle(node).display !== "none" && win.getComputedStyle(node).visibility !== "hidden");
-    const focusInside = () => {
-      const nodes = focusable();
-      (nodes.includes(initialFocus) ? initialFocus : nodes[0] ?? box).focus();
-    };
-    const close = (value = false) => {
-      if (closeActiveModal !== close) return;
-      closeActiveModal = null;
-      doc.removeEventListener("keydown", onKeyDown, true);
-      doc.removeEventListener("focusin", onFocusIn);
-      el.modal.root.classList.add("hidden");
-      onClose(value);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-    const onKeyDown = event => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        close(false);
-      } else if (event.key === "Tab") {
-        event.preventDefault();
-        const nodes = focusable();
-        const index = nodes.indexOf(doc.activeElement);
-        const next = index < 0 ? (event.shiftKey ? nodes.length - 1 : 0)
-          : (index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length;
-        (nodes[next] ?? box).focus();
-      }
-    };
-    const onFocusIn = event => { if (!box.contains(event.target)) focusInside(); };
-    closeActiveModal = close;
-    el.modal.root.classList.remove("hidden");
-    doc.addEventListener("keydown", onKeyDown, true);
-    doc.addEventListener("focusin", onFocusIn);
-    focusInside();
-    return close;
-  }
-
-  function confirmModal({ title, body, requireText = null, confirmLabel = "Confirm" }) {
-    closeActiveModal?.();
-    return new Promise((resolve) => {
-      el.modal.title.textContent = title;
-      el.modal.body.textContent = body;
-      el.modal.input.value = "";
-      el.modal.input.classList.toggle("hidden", !requireText);
-      el.modal.input.placeholder = requireText ? `type ${requireText}` : "";
-      el.modal.confirm.textContent = confirmLabel;
-      el.modal.confirm.disabled = Boolean(requireText);
-      const close = openModal({
-        initialFocus: requireText ? el.modal.input : el.modal.cancel,
-        onClose: value => {
-          el.modal.confirm.onclick = null;
-          el.modal.cancel.onclick = null;
-          el.modal.input.oninput = null;
-          resolve(value);
-        },
-      });
-      el.modal.input.oninput = () => {
-        el.modal.confirm.disabled = requireText ? el.modal.input.value.trim() !== requireText : false;
-      };
-      el.modal.cancel.onclick = () => close(false);
-      el.modal.confirm.onclick = () => {
-        if (requireText && el.modal.input.value.trim() !== requireText) return;
-        close(true);
-      };
-    });
-  }
-
   // ── rendering ─────────────────────────────────────────────────────────────
   function renderNetwork(net) {
     state.net = net;
     renderNetworkPlaceholder();
-    el.net.round.textContent = net.core.settledThroughRound;
-    if (getProfile(state.profileKey).abiSet === "v6" && /^\d+$/.test(String(net.core.settledThroughRound))) {
-      let note = `Settlement frontier at round ${net.core.settledThroughRound}.`;
-      if (net.checkpoint.canCheckpoint === false && net.checkpoint.roundSettled === false && String(net.mining.lagRounds) === "0") {
+    const core = net.core ?? {}, mining = net.mining ?? {}, checkpoint = net.checkpoint ?? {};
+    setStat(el.net.round, core.settledThroughRound);
+    if (getProfile(state.profileKey).abiSet === "v6" && /^\d+$/.test(String(core.settledThroughRound))) {
+      let note = `Settlement frontier at round ${core.settledThroughRound}.`;
+      if (checkpoint.canCheckpoint === false && checkpoint.roundSettled === false && String(mining.lagRounds) === "0") {
         note += " No new rewards are being issued on this deployment at this snapshot: the next round is not settled. Existing rewards may still be claimable.";
-      } else if (net.checkpoint.canCheckpoint === true) {
+      } else if (checkpoint.canCheckpoint === true) {
         note += " Settled rounds are available to checkpoint; new rewards may be issued after a successful checkpoint.";
       } else {
         note += " Reward issuance depends on live settlement and checkpoint readiness; this reading does not establish a permanent freeze.";
@@ -544,29 +477,28 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       el.net.settlement.textContent = note;
       el.net.settlement.classList.remove("hidden");
     }
-    el.net.blocks.textContent = num(net.core.blockHeight);
-    el.net.lag.textContent = `${net.mining.lagRounds} round(s)`;
-    const issued = net.mining.issued ?? net.mining.minted;
-    el.net.issued.textContent = issued ? sqk(issued) : "—";
-    el.net.squeeks.textContent = net.nft?.totalSupply ? num(net.nft.totalSupply) : "—";
-    el.net.paused.textContent = net.core.paused ? "yes" : "no";
-    el.net.paused.parentElement.className = `stat ${net.core.paused ? "bad" : "ok"}`;
+    setStat(el.net.blocks, core.blockHeight, num);
+    setStat(el.net.lag, mining.lagRounds, value => num(value) === UNKNOWN ? UNKNOWN : `${num(value)} round(s)`);
+    setStat(el.net.issued, mining.issued ?? mining.minted, sqk);
+    setStat(el.net.squeeks, net.nft?.totalSupply, num);
+    setStat(el.net.paused, core.paused, value => value === true ? 'yes' : value === false ? 'no' : UNKNOWN);
+    el.net.paused.parentElement.className = `stat ${core.paused === true ? 'bad' : core.paused === false ? 'ok' : ''}`;
 
     const caps = capabilities();
-    const canCp = Boolean(caps.checkpoint && net.checkpoint.canCheckpoint);
+    const canCp = Boolean(caps.checkpoint && checkpoint.canCheckpoint === true);
     el.cp.button.disabled = state.busy || !canCp;
     el.cp.reason.textContent = caps.checkpoint
-      ? net.checkpoint.canCheckpoint
-        ? `next round ${net.checkpoint.nextRound} is settled — a checkpoint will fund it`
-        : net.checkpoint.reason
-      : `${net.checkpoint.contract ?? "issuance"} checkpoint is read-only here: v9 flows are undocumented, so this build will not guess. Status: ${net.checkpoint.reason ?? "round settled"}.`;
+      ? checkpoint.canCheckpoint
+        ? `next round ${valueText(checkpoint.nextRound)} is settled — a checkpoint will fund it`
+        : checkpoint.reason ?? UNKNOWN
+      : `${checkpoint.contract ?? "issuance"} checkpoint is read-only here: v9 flows are undocumented, so this build will not guess. Status: ${checkpoint.reason ?? UNKNOWN}.`;
     el.cp.explain.textContent =
       "Turns settled rounds into issued SQK. Holders cannot claim until someone checkpoints, so this is the job a wallet without Squeeks can do.";
   }
 
   function renderWalletChipStats(status) {
     if (!status) return;
-    el.walletChip.textContent = `${short(status.owner)} · ${Number(status.ethBalance.eth).toFixed(3)} ETH`;
+    el.walletChip.textContent = `${short(status.owner)} · ${num(status.ethBalance?.eth) === UNKNOWN ? UNKNOWN : `${Number(status.ethBalance.eth).toFixed(3)} ETH`}`;
   }
 
   function columnsForProfile() {
@@ -594,24 +526,31 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     state.status = status;
     state.plan = plan;
     const caps = capabilities();
-    el.holder.owner.textContent = status ? status.owner : "—";
+    const isV9 = getProfile(state.profileKey).abiSet === 'v9';
+    el.holder.power.parentElement.querySelector('.label').textContent = isV9 ? 'Deposited' : 'Power';
+    el.holder.owner.textContent = valueText(status?.owner);
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
-    if (!status) { el.holder.claim.disabled = true; $("btn-custom-merge").disabled = true; return; }
+    if (!status) {
+      for (const node of [el.holder.count, el.holder.power, el.holder.share, el.holder.claimable]) setStat(node, null);
+      el.holder.tbody.replaceChildren(); el.holder.head.replaceChildren(); el.holder.mergeList.replaceChildren();
+      el.holder.claim.disabled = true; $("btn-custom-merge").disabled = true; return;
+    }
+    const totals = status.totals ?? {};
 
-    const has = status.totals.count > 0;
-    const signerOwns = Boolean(state.account && status.owner.toLowerCase() === state.account.toLowerCase());
-    el.holder.count.textContent = num(status.totals.count);
-    el.holder.power.textContent = status.totals.power ? num(status.totals.power) : status.totals.deposited ? `${num(status.totals.deposited)} deposited` : "0";
-    el.holder.share.textContent = status.totals.sharePercent === null || status.totals.sharePercent === undefined ? "—" : `${status.totals.sharePercent}%`;
-    el.holder.claimable.textContent = sqk(status.totals.claimable);
-    el.holder.hint.textContent = !has
+    const has = num(totals.count) !== UNKNOWN && Number(totals.count) > 0;
+    const signerOwns = Boolean(state.account && status.owner?.toLowerCase() === state.account.toLowerCase());
+    setStat(el.holder.count, totals.count, num);
+    setStat(el.holder.power, isV9 ? totals.deposited : totals.power, num);
+    setStat(el.holder.share, totals.sharePercent, value => num(value, 4) === UNKNOWN ? UNKNOWN : `${num(value, 4)}%`);
+    setStat(el.holder.claimable, totals.claimable, sqk);
+    el.holder.hint.textContent = num(totals.count) === UNKNOWN ? "Holdings count Unknown; actions remain disabled." : !has
       ? "this address owns no Squeeks — it can still run checkpoints"
       : !caps.claim
         ? "v9 claims are staking-side and undocumented — this build stays read-only for owner actions"
         : signerOwns
-          ? status.totals.estimatedSqkPerDay
-            ? `≈${num(status.totals.estimatedSqkPerDay)} SQK/day at current share`
+          ? totals.estimatedSqkPerDay
+            ? `≈${num(totals.estimatedSqkPerDay)} SQK/day at current share`
             : ""
           : "read-only view: connect this wallet to claim or merge";
     el.holder.claim.disabled = state.busy || !has || !signerOwns || !caps.claim;
@@ -619,37 +558,18 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $("claim-ids").disabled = !caps.claim;
     el.holder.watchRow.classList.toggle("hidden", Boolean(state.account));
 
-    // table
-    const cols = columnsForProfile();
-    const headRow = doc.createElement("tr");
-    cols.forEach((c) => {
-      const th = doc.createElement("th");
-      th.textContent = c.label;
-      if (c.num) th.className = "num";
-      headRow.appendChild(th);
-    });
-    el.holder.head.replaceChildren(headRow);
-    el.holder.tbody.replaceChildren();
-    for (const s of status.squeeks) {
-      const tr = doc.createElement("tr");
-      for (const c of cols) {
-        const td = doc.createElement("td");
-        if (c.num) td.className = "num";
-        if (c.key === "claimable") td.textContent = s.claimable ? num(Number(s.claimable.sqk), 4) : "—";
-        else if (c.key === "deposited") td.textContent = s.deposited == null ? "Unknown" : s.deposited ? "yes" : "no";
-        else if (c.key === "pendingRound") td.textContent = s.pendingRound && s.pendingRound !== "0" ? `r${s.pendingRound}` : "—";
-        else if (c.key === "art") {
-          const btn = doc.createElement("button");
-          btn.className = "btn btn-ghost";
-          btn.style.padding = "2px 8px";
-          btn.textContent = "view";
-          btn.onclick = () => { selectTab("art"); viewTask(() => loadArt([s.tokenId])); };
-          td.appendChild(btn);
-        } else td.textContent = s[c.key] ?? "—";
-        tr.appendChild(td);
+    Table({ head: el.holder.head, body: el.holder.tbody, columns: columnsForProfile(), rows: status.squeeks ?? [], cell: (s, c) => {
+      if (c.key === 'claimable') return s.claimable ? num(s.claimable.sqk, 4) : UNKNOWN;
+      if (c.key === 'deposited') return s.deposited == null ? UNKNOWN : s.deposited ? 'yes' : 'no';
+      if (c.key === 'pendingRound') return s.pendingRound == null ? UNKNOWN : String(s.pendingRound) === '0' ? 'None' : `r${s.pendingRound}`;
+      if (c.key === 'art') {
+        const btn = doc.createElement('button'); btn.className = 'btn btn-ghost'; btn.textContent = 'View';
+        btn.setAttribute('aria-label', `View art for Squeek #${s.tokenId}`);
+        btn.onclick = () => { selectTab('art'); viewTask(() => loadArt([s.tokenId])); };
+        return btn;
       }
-      el.holder.tbody.appendChild(tr);
-    }
+      return s[c.key];
+    } });
 
     // merge plan
     el.holder.mergeList.replaceChildren();
@@ -687,7 +607,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!state.adapter) return null;
     const load = captureLoad();
     try {
-      $("profile-panel").setAttribute("aria-busy", "true");
+      networkPanel.setBusy(true);
       const net = await readFor(load, "networkStatus");
       const v = net.verification ?? await readFor(load, "verify");
       if (!isCurrent(load)) return null;
@@ -703,7 +623,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       showBanner(`Read failed: ${errorMessage(err)}. Nothing was signed.`, "bad");
       return null;
     } finally {
-      if (isCurrent(load)) $("profile-panel").setAttribute("aria-busy", "false");
+      if (isCurrent(load)) networkPanel.setBusy(false);
     }
   }
 
@@ -719,7 +639,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
       renderWalletChipStats(status);
       let plan = status.mergePlan ?? null;
-      if (!plan && capabilities().merge && status.totals.count > 1 && state.adapter.mergePlan) {
+      if (!plan && capabilities().merge && status.totals?.count > 1 && state.adapter.mergePlan) {
         plan = await readFor(load, "mergePlan", owner, { status });
       }
       if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
@@ -728,6 +648,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       return status;
     } catch (err) {
       if (!isCurrent(load) || owner !== (state.inspected ?? state.account)) return null;
+      renderHolder(null);
+      renderWalletChip();
       showBanner(`Could not read ${short(owner)}: ${errorMessage(err)}`, "bad");
       return null;
     }
@@ -867,23 +789,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderArt(items) {
     for (const item of items) {
       if (!item?.image) continue;
-      const card = doc.createElement("div");
-      card.className = "art-card";
-      const img = doc.createElement("img");
-      img.src = item.image; // data:image/svg+xml — isolated image, never inline markup
-      img.alt = item.name ?? `Squeek #${item.tokenId}`;
-      img.loading = "lazy";
-      const caption = doc.createElement("div");
-      caption.className = "token";
-      caption.textContent = `#${item.tokenId}`;
-      card.append(img, caption);
-      card.onclick = () => openArtDetail(item);
+      const card = TokenCard({ doc, item, onOpen: () => openArtDetail(item) });
       el.art.grid.prepend(card);
     }
   }
 
   function openArtDetail(item) {
-    closeActiveModal?.();
+    dialog.close();
     el.modal.title.textContent = item.name ?? `Squeek #${item.tokenId}`;
     el.modal.body.replaceChildren();
     const wrap = doc.createElement("div");
@@ -1161,7 +1073,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { closeActiveModal?.(); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
+    destroy: () => { dialog.close(); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
   };
 }
 

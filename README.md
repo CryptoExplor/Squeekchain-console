@@ -2,9 +2,11 @@
 
 A static, browser-first Squeekchain holder console. The app is branded **Wheelhouse**; the GitHub repository remains **CryptoExplor/Squeekchain-console**.
 
-**Phase 1 WIP — Phase 0 offline audit complete; live qualification deferred to the pre-merge gate, not passed.** Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
+**Phase 1 ready for review — Phase 0 offline audit complete; live qualification deferred to the pre-merge gate, not passed.** Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
 
 The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
+
+[Review the 16 mocked screenshots](docs/screenshots/README.md): Overview, Wallet, Merge dialog and not-deployed Mainnet, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **146,820 bytes gzipped**, below the build-enforced 200,000-byte budget ([breakdown](docs/audit/phase1-js-size.json)).
 
 ## Deployments and safety
 
@@ -36,7 +38,7 @@ npm run web                    # build + local static file server, port 5173
 npm run rpc:probe              # endpoint capability table; diagnostic, not live qualification
 npm test                       # deterministic offline regressions, safety, RPC budget, discovery and Activity
 npx playwright install --with-deps chromium
-npm run test:browser            # real Chromium, injected/offline data: layout, profile races, transaction persistence
+npm run test:browser            # real Chromium, injected/offline data: components, profile races, persistence, and the 16 mocked screenshot states
 npm run test:live               # real Chromium + public Sepolia RPCs; no RPC mocks or signatures
 ```
 

@@ -469,9 +469,8 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 #rpc-url { flex: 1; min-width: 0; width: 100%; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 12px 24px; font-size: 11px; }
 .footer-links span { color: var(--sqk-gray-lit); }
-#profile-panel[aria-busy="true"] .stat strong { animation: sqk-pulse 1.4s ease-in-out infinite; }
-#profile-panel[aria-busy="true"] .stat strong:empty::after { content: "\00a0"; display: block; background: var(--sqk-bg-raised); border-radius: var(--sqk-r-ctrl); }
-@keyframes sqk-pulse { 50% { opacity: .45; } }
+.is-skeleton { animation: sqk-pulse 1.4s ease-in-out infinite; background: var(--sqk-bg-raised); border-radius: var(--sqk-r-ctrl); }
+@keyframes sqk-pulse { 50% { background-color: var(--sqk-panel-alt); } }
 @media (max-width: 760px) {
   #profile-select { max-width: 100%; min-width: 0; flex-basis: 100%; }
   #verified-chip, #wallet-chip { max-width: 100%; }
@@ -479,8 +478,17 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
   .rpc-settings button { justify-content: center; }
   .footer-links { gap: 14px; }
 }
-@media (prefers-reduced-motion: reduce) { #profile-panel[aria-busy="true"] .stat strong { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .is-skeleton { animation: none; } }
 
 #activity-list { padding-left: 20px; overflow-wrap: anywhere; }
 #activity-list li { margin: 12px 0; }
 #activity-list span { display: block; color: var(--sqk-gray-lit); font: 11px/1.7 var(--sqk-font-data); }
+
+/* Shared DOM components retain semantic markup and use the theme tokens above. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+#profile-status { flex-shrink: 0; max-width: 100%; white-space: normal; }
+.art-card { font: inherit; color: var(--sqk-ink); min-width: 0; }
+.art-card .token { display: block; }
+.toasts { max-width: min(380px, calc(100vw - 32px)); }
+.toast { overflow-wrap: anywhere; }
+.modal-box [for="modal-input"] { display: block; margin-top: var(--sqk-s2); }

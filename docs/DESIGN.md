@@ -1,4 +1,4 @@
-# Wheelhouse design contract — Phase 1 WIP
+# Wheelhouse design contract — Phase 1 ready for review
 
 Wheelhouse is the independent, browser-first Squeekchain holder console. The repository remains **Squeekchain-console**; the Cloudflare Pages project and opt-in live workflow remain **thewheel**. No repository/project rename or official affiliation is implied.
 
@@ -14,11 +14,33 @@ The [official homepage](https://squeekchain.com/) was re-read on 2026-11-03. Its
 - **Accents:** gold primary controls with dark labels; blue links/focus. Semantic primary-fill/hover/on-primary tokens keep controls consistent. Destructive controls use a separate deep-red fill/hover with white labels in both themes, rather than reusing the brighter dark-theme error-text color.
 - **Accessibility:** 44px controls, visible 3px keyboard focus, reduced-motion handling, status text beyond color, mobile-visible wallet/verification, skip link and existing modal focus trap/restore. The palette test checks selected normal-text pairs at **at least 4.5:1**, including primary/danger hover and status chips. This is not a blanket WCAG certification.
 
+## Shared components
+
+`web/components.js` keeps the existing vanilla-DOM/static architecture and theme tokens. None of these components reads RPC, grants capabilities, constructs transactions or signs anything.
+
+| Component | Use and contract |
+|---|---|
+| Panel | Enhances existing panels with labelled regions and explicit busy state; retains known readings while refreshing. |
+| Stat | Centralizes display formatting; null, absent, invalid or unavailable values become **Unknown**, while a genuine zero remains zero. |
+| Table | Wallet holdings with an accessible caption, scoped headers and a scroll container on narrow screens. Missing cells show Unknown. |
+| TokenCard | Native button/keyboard interaction for gallery items; isolated `<img>`, never parsed SVG/metadata markup. |
+| ConfirmDialog | Shared confirmation/art focus trap and restoration. Merge requires exact typed BURN-<id> acknowledgement before building/simulating; subsequent simulation review/fresh verification/wallet-only signing remain unchanged. |
+| Toast | Text-only status/error notifications with status/alert semantics; long hashes wrap inside the mobile viewport. |
+| Skeleton | Loading treatment for Unknown values; does not hide known readings or replace missing readings with zero. Background-only pulse retains text contrast and respects reduced motion. |
+
+The header keeps live verification separate from the profile's support badge. Both header/footer carry the Wheelhouse wordmark; the footer explicitly states that this is an independent community console **not affiliated with Squeekchain**.
+
 ## Offline acceptance
+
+[The committed review gallery](screenshots/README.md) contains 16 light/dark × desktop/mobile × Overview/Wallet/Merge/Mainnet captures from the mocked suite.
 
 `npm run test:browser` uses Chromium with external requests blocked or explicitly mocked. It verifies light/saved theme behavior, 320/390/768/1280px layout without page overflow, wallet/verification visibility, keyboard navigation, profile cancellation and Activity persistence. The design-system test measures computed text/background contrast for secondary text, captions, status chips, primary and danger controls in both themes, checks theme metadata/state, and exercises keyboard focus. These checks are not live RPC qualification.
 
 `npm test` retains capability, trust, simulation, explicit BURN, no-key, no-signing, API hint validation, request-budget and persistence regressions. Presentation changes must never enable v9/mainnet actions, soften snapshot verification or make unavailable values zero. The full approved safety rules remain unchanged.
+
+## Distribution budget
+
+`npm run build` checks static parity (including the components module) and writes ignored `dist/js-size.json`. It independently gzips every dist JS response with Node's default gzip level and sums the result: **146,820 bytes**, under the **200,000-byte** budget. The build fails if this budget is reached/exceeded. Fonts/CSS are not counted as JavaScript. See the committed [per-file report](audit/phase1-js-size.json).
 
 ## Pre-merge review (deferred)
 

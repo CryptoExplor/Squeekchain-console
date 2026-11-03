@@ -71,7 +71,7 @@ try {
   assert.deepEqual(reading(), beforePoll, 'polling keeps the complete reading while fetching');
   release(response(null, 403)); await tick();
   assert.equal($('wheel-state').textContent, 'Unknown');
-  for (const id of ['wheel-rpm', 'wheel-speed', 'wheel-distance']) assert.equal($(id).textContent, '—');
+  for (const id of ['wheel-rpm', 'wheel-speed', 'wheel-distance']) assert.equal($(id).textContent, 'Unknown');
   assert.equal($('net-round').textContent, '1000', 'API failure leaves chain panels alone');
 
   // An in-flight reading may not repaint a different profile.
@@ -86,7 +86,7 @@ try {
 
   const switchingBack = api.switchProfile('sepolia');
   assert.equal($('wheel-state').textContent, 'Loading', 'profile change resets rather than reusing old readings');
-  assert.equal($('wheel-rpm').textContent, '—');
+  assert.equal($('wheel-rpm').textContent, 'Unknown');
   await switchingBack; release(response(measurement(5000))); await tick();
   assert.equal($('wheel-rpm').textContent, '5.0');
   fetchHook = async () => response(measurement(5000));

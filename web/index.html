@@ -30,6 +30,7 @@
         <a class="header-link" href="https://squeekchain.com" target="_blank" rel="noreferrer">Squeekchain ↗</a>
         <a class="header-link" href="https://docs.squeekchain.com" target="_blank" rel="noreferrer">Docs ↗</a>
         <select aria-label="Network deployment" id="profile-select" title="Deployment"></select>
+        <span class="chip ok" id="profile-status" role="status" aria-live="polite">Supported</span>
         <span class="chip" id="verified-chip" role="status" aria-live="polite">verifying…</span>
         <span class="chip" id="wallet-chip">not connected</span>
         <button class="btn btn-primary" id="btn-connect">Connect wallet</button>
@@ -90,17 +91,17 @@
         <div class="panel" id="profile-panel">
           <div class="panel-head">
             <h2>Chain pulse</h2>
-            <span class="panel-note" id="profile-release">—</span>
+            <span class="panel-note" id="profile-release">Unknown</span>
           </div>
           <div class="grid cols-4">
-            <div class="stat"><span class="label">Network</span><strong id="net-chain">—</strong></div>
-            <div class="stat"><span class="label">Kind</span><strong id="net-kind">—</strong></div>
-            <div class="stat"><span class="label">Settled round</span><strong id="net-round">—</strong></div>
-            <div class="stat"><span class="label">Squeek blocks</span><strong id="net-blocks">—</strong></div>
-            <div class="stat"><span class="label">Checkpoint lag</span><strong id="net-lag">—</strong></div>
-            <div class="stat"><span class="label">Issued / minted</span><strong id="net-issued">—</strong></div>
-            <div class="stat"><span class="label">Squeeks live</span><strong id="net-squeeks">—</strong></div>
-            <div class="stat"><span class="label">Core paused</span><strong id="net-paused">—</strong></div>
+            <div class="stat"><span class="label">Network</span><strong id="net-chain">Unknown</strong></div>
+            <div class="stat"><span class="label">Kind</span><strong id="net-kind">Unknown</strong></div>
+            <div class="stat"><span class="label">Settled round</span><strong id="net-round">Unknown</strong></div>
+            <div class="stat"><span class="label">Squeek blocks</span><strong id="net-blocks">Unknown</strong></div>
+            <div class="stat"><span class="label">Checkpoint lag</span><strong id="net-lag">Unknown</strong></div>
+            <div class="stat"><span class="label">Issued / minted</span><strong id="net-issued">Unknown</strong></div>
+            <div class="stat"><span class="label">Squeeks live</span><strong id="net-squeeks">Unknown</strong></div>
+            <div class="stat"><span class="label">Core paused</span><strong id="net-paused">Unknown</strong></div>
           </div>
           <div class="notice hidden" id="profile-notice"></div>
           <p class="notice warn hidden" id="settlement-notice" role="status" aria-live="polite"></p>
@@ -117,7 +118,7 @@
           </p>
           <div class="row">
             <button class="btn btn-gold" id="btn-checkpoint" disabled>Simulate &amp; checkpoint</button>
-            <span class="mono small" id="cp-reason">—</span>
+            <span class="mono small" id="cp-reason">Unknown</span>
           </div>
           <pre class="out hidden" id="cp-result"></pre>
         </div>
@@ -126,9 +127,9 @@
         <aside class="panel wheel-panel">
           <div class="panel-head"><h2>From the wheel</h2><span class="chip" id="wheel-state">Unknown</span></div>
           <div class="wheel-glyph" aria-hidden="true">◎</div>
-          <div class="wheel-speed"><strong id="wheel-rpm">—</strong><span class="label">RPM</span></div>
+          <div class="wheel-speed"><strong id="wheel-rpm">Unknown</strong><span class="label">RPM</span></div>
           <p class="muted small" id="wheel-note" role="status">Waiting for an official device reading.</p>
-          <div class="mini-metrics"><div><span class="label">Speed</span><strong id="wheel-speed">—</strong></div><div><span class="label">Daily distance</span><strong id="wheel-distance">—</strong></div></div>
+          <div class="mini-metrics"><div><span class="label">Speed</span><strong id="wheel-speed">Unknown</strong></div><div><span class="label">Daily distance</span><strong id="wheel-distance">Unknown</strong></div></div>
           <a class="btn stream-link" href="https://sepolia.squeekchain.com/#stream-game" target="_blank" rel="noreferrer">↗ Watch Squeektoshi</a>
           <span class="label telemetry-source">OFFICIAL API · DISPLAY ONLY</span>
         </aside>
@@ -148,7 +149,7 @@
         <div class="panel">
           <div class="panel-head">
             <h2>Holdings</h2>
-            <span class="panel-note" id="holder-owner">—</span>
+            <span class="panel-note" id="holder-owner">Unknown</span>
           </div>
           <div class="row" id="watch-row">
             <input aria-label="Wallet address to inspect" id="watch-input" placeholder="0x… inspect any address read-only" spellcheck="false" />
@@ -157,10 +158,10 @@
 
           <div id="holder-body" class="hidden">
             <div class="grid cols-4" style="margin: 12px 0">
-              <div class="stat"><span class="label">Squeeks</span><strong id="holder-count">—</strong></div>
-              <div class="stat"><span class="label">Power</span><strong id="holder-power">—</strong></div>
-              <div class="stat"><span class="label">Share</span><strong id="holder-share">—</strong></div>
-              <div class="stat accent"><span class="label">Claimable</span><strong id="holder-claimable">—</strong></div>
+              <div class="stat"><span class="label">Squeeks</span><strong id="holder-count">Unknown</strong></div>
+              <div class="stat"><span class="label">Power</span><strong id="holder-power">Unknown</strong></div>
+              <div class="stat"><span class="label">Share</span><strong id="holder-share">Unknown</strong></div>
+              <div class="stat accent"><span class="label">Claimable</span><strong id="holder-claimable">Unknown</strong></div>
             </div>
             <div class="row">
               <input id="claim-ids" aria-label="Token IDs to claim" placeholder="IDs: 1, 2, 3 · blank = all owned" spellcheck="false" />
@@ -185,7 +186,7 @@
               <input id="merge-donor" aria-label="Donor token ID to burn" placeholder="Burn token ID" inputmode="numeric" />
               <button class="btn" id="btn-custom-merge" disabled>Review my pair</button>
             </div>
-            <p class="small muted">Choose which image and token ID survives. Review and simulation come before the burn confirmation.</p>
+            <p class="small muted">Choose which image and token ID survives. Type the exact BURN-&lt;id&gt; acknowledgement before call construction or simulation; review the simulation before wallet signing.</p>
           </div>
           <p class="muted small" id="holder-empty">Connect a wallet, or inspect an address, to see positions.</p>
         </div>
@@ -244,13 +245,14 @@
         Wheelhouse · testnet software · addresses come from the published deployment record (v6) and the official dApp bundle +
         public API (observed v9, read-only and unverified) · no v9 transactions · no owner keys
       </p>
-      <div class="footer-links"><a href="https://github.com/CryptoExplor/Squeekchain-console" target="_blank" rel="noreferrer">Source ↗</a><a href="https://docs.squeekchain.com/developers/owner-actions/" target="_blank" rel="noreferrer">Safety & owner actions ↗</a><span>Independent community tool · Sepolia only · not investment advice</span></div>
+      <div class="footer-links"><a href="https://github.com/CryptoExplor/Squeekchain-console" target="_blank" rel="noreferrer">Source ↗</a><a href="https://docs.squeekchain.com/developers/owner-actions/" target="_blank" rel="noreferrer">Safety & owner actions ↗</a><span>Independent community console · not affiliated with Squeekchain · Sepolia only · not investment advice</span></div>
     </footer>
 
     <div class="modal hidden" id="modal">
-      <div class="modal-box" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-box" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-body">
         <h3 id="modal-title">Confirm</h3>
         <p id="modal-body"></p>
+        <label for="modal-input" class="label">Burn confirmation</label>
         <input id="modal-input" placeholder="type to confirm" spellcheck="false" autocomplete="off" />
         <div class="row end" style="margin-top: 12px">
           <button class="btn" id="btn-modal-cancel">Cancel</button>
