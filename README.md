@@ -2,7 +2,7 @@
 
 A static, browser-first Squeekchain holder console. The app is branded **Wheelhouse**; the GitHub repository remains **CryptoExplor/Squeekchain-console**.
 
-**WIP — Phase 0 live qualification has not passed.** Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
+**Phase 1 WIP — Phase 0 offline audit complete; live qualification deferred to the pre-merge gate, not passed.** Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
 
 ## Deployments and safety
 
@@ -51,11 +51,11 @@ The live test records public CORS RPC availability, two-peer block agreement and
 
 It uses read-only repository permissions and no configured secrets, wallet, keeper or signing variables. Opted-in runs are serialized under the same concurrency group to avoid hammering public RPCs. Test failures are not ignored. An always-run artifact upload retains the HTML Playwright report, screenshots/traces/test attachments and **`live-qualification/live-qualification.json`**, including failure evidence. A not-run JSON is seeded before dependency/browser setup so a later setup or probe failure is not mistaken for a pass. The dedicated live reporter rejects empty/skipped/incomplete suites as qualification passes; ordinary browser tests remain separate.
 
-**Run from PR #2 now:** add the **`run-live`** label. The job checks out the event's exact **PR head SHA**, not GitHub's synthetic merge commit. `LIVE_SOURCE_COMMIT` carries that same SHA into both the initial and final qualification JSON. For `workflow_dispatch`, the checkout/evidence use the selected ref's event SHA. No `pull_request_target`, configured secrets or write permissions are used.
+**At the end of Phase 1, the user re-triggers the pre-merge gate from PR #2:** remove/re-add the **`run-live`** label and manually review the app in their browser before merge. The job checks out the event's exact **PR head SHA**, not GitHub's synthetic merge commit. `LIVE_SOURCE_COMMIT` carries that same SHA into both the initial and final qualification JSON. For `workflow_dispatch`, the checkout/evidence use the selected ref's event SHA. No `pull_request_target`, configured secrets or write permissions are used.
 
 Dispatch from the Actions tab still requires the workflow on the default branch; the label trigger avoids that bootstrap requirement. I.e. no merge of this WIP PR is needed to run the label gate. Adding subsequent commits does not rerun live RPC tests automatically: remove and re-add `run-live` to qualify a newer head.
 
-**Phase 0 remains incomplete until the opted-in live job for the intended source SHA actually passes.** A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
+**Phase 0: Offline audit complete. Live qualification deferred to the pre-merge gate.** Phase 0 is not fully complete; the deferred live check does not block Phase 1. Before merge, the opted-in live job must pass for the intended final source SHA. A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
 
 ### Live failure diagnostics
 

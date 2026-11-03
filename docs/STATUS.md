@@ -1,12 +1,26 @@
-# Wheelhouse — current Phase 1 WIP status
+# Wheelhouse — Phase 1 active / WIP
 
 **Date:** 2026-11-03 (Asia/Calcutta). **PR:** #2, open/draft. **Branch:** `arena/314fd2af-squeekchain-console`. App rebrand approved; repository name unchanged.
 
-## Qualification gate
+## Phase plan and pre-merge qualification gate
 
-**Phase 0 remains incomplete.** The new real-browser `npm run test:live` check was attempted once after the RPC/discovery load fixes and failed before contract verification: all three public RPC probes in the **old** endpoint list returned `Failed to fetch`. This is not proof of rate limiting, CORS rejection, TLS failure, current identity mismatch, a frozen frontier, or transaction failure. No live reads qualified in that sandbox attempt and no transactions were submitted. The subsequent user-reported SDK successes below are partial live evidence, not a completed Playwright qualification.
+**Phase 0: Offline audit complete. Live qualification deferred to the pre-merge gate.** Phase 0 is **not fully complete** and no live pass is claimed. Per the updated plan, live qualification does not block Phase 1.
 
-Evidence: [`audit/live-qualification-2026-11-02.json`](audit/live-qualification-2026-11-02.json). The earlier local-run plan is now superseded by the explicit-opt-in **thewheel** CI gate below. Mark Phase 0 complete only after the opted-in live job for the intended source SHA is green, retaining its successful artifacts. The historical jsdom smoke failure is not retried here. Public RPC availability is not a Phase 1 blocker.
+**Phase 1 is active on the same branch and PR #2**: Wheelhouse branding, the light design system and safety fixes. Preserve the existing architecture and every approved safety rule; do not restart or create another phase PR.
+
+| Phase 1 work | Current status |
+|---|---|
+| First task — browser RPC availability/fallback and diagnostics | Implemented in `c128c83d4171bece61d0226f0690abb366110c2f`; offline Node and bundled Chromium regressions pass. Typed cooldown/transport errors fail over, including browser fetch/CORS-style TypeErrors; cause traversal retains trust hard stops. Tool errors expose redacted endpoint, method and cause diagnostics. This is not a verified diagnosis of run `41606508624`. |
+| Wheelhouse branding and light design system | Existing implementation retained: light default/saved override, local fonts, gold/blue palette, responsive layout and keyboard/focus behavior. Offline browser checks pass; final human browser review is pending. |
+| Approved safety fixes | Existing capability gates, same-block graph/two-peer verification, explicit BURN confirmation, fresh simulation and wallet-only signing, profile cancellation/isolation, persistent Activity, API hint validation and key isolation remain unchanged. |
+
+**At the end of Phase 1**, the user will re-trigger `run-live` for the intended final PR head and manually check the app in their browser before merge. The pre-merge live gate must pass; offline tests, SDK probes and manual review do not substitute for that gate. The agent will not retry `test:live` in the sandbox or apply the label. PR #2 remains open/draft/WIP. After each push, report the commit, changes and offline results.
+
+### Historical live evidence (not qualification)
+
+The historical real-browser `npm run test:live` check was attempted once after the RPC/discovery load fixes and failed before contract verification: all three public RPC probes in the **old** endpoint list returned `Failed to fetch`. This is not proof of rate limiting, CORS rejection, TLS failure, current identity mismatch, a frozen frontier, or transaction failure. No live reads qualified in that sandbox attempt and no transactions were submitted. The subsequent user-reported SDK successes below are partial live evidence, not a completed Playwright qualification.
+
+Evidence: [`audit/live-qualification-2026-11-02.json`](audit/live-qualification-2026-11-02.json). The earlier local-run plan is now superseded by the explicit-opt-in **thewheel** CI gate below. Retain successful artifacts from the opted-in live job for the intended final source SHA at the pre-merge gate; do not mark Phase 0 fully complete before live qualification. The historical jsdom smoke failure is not retried here. Public RPC availability is not a Phase 1 blocker.
 
 ## Public RPC availability follow-up
 
@@ -18,7 +32,7 @@ Public endpoints change often; configured roles are availability preferences, no
 - Run **`npm run rpc:probe`** locally for a per-endpoint table: chain ID, a head-minus-12 block/hash, the mining EIP-1967 implementation slot at that block, and an inclusive 10k-block NFT Transfer log query. Requests time out after 15 seconds. Each capability reports independently; a log failure does not disqualify an otherwise healthy snapshot/state peer. This Node diagnostic does not test browser CORS, peer agreement or the full graph and is **not Phase 0 qualification**.
 - Offline regression coverage uses the reported `4444: pruned history unavailable`, `historical state unavailable`, `range too large`, `35: chain is not available on free plan` and `forbidden` payloads; asserts unchanged-range endpoint failover before chunk shrinking, custom/wallet behavior and trust-stop behavior.
 
-**Phase 0 is still incomplete.** The replacement list awaits a green opted-in **thewheel** live job. The old failed evidence is retained, not relabeled as a pass.
+**Live qualification is deferred to the pre-merge gate**, not a Phase 1 blocker. The replacement list still awaits a green opted-in **thewheel** live job. The old failed evidence is retained, not relabeled as a pass.
 
 ## User-reported partial live results and follow-ups
 
@@ -37,9 +51,9 @@ The v6 panel now displays its live settlement frontier and a snapshot-scoped no-
 
 README documents the linux-arm64 Chromium CDN 403 workaround: use x64 or an already-installed supported local Chrome via **`PLAYWRIGHT_CHROMIUM_CHANNEL=chrome npm run test:live`** (`channel: 'chrome'`), or the existing executable-path override. The Chrome-channel config is provided; local Chrome itself was not available/tested in this sandbox.
 
-**Phase 0 remains incomplete until the opted-in thewheel live job for the intended source SHA is green.** PR #2 stays open/draft/WIP.
+**Phase 0 offline audit is complete; live qualification remains deferred to the pre-merge gate.** PR #2 stays open/draft/WIP while Phase 1 proceeds.
 
-## Opt-in CI live gate (pending run-live label)
+## Opt-in CI live gate (user re-triggers at the end of Phase 1)
 
 Added **thewheel** (`.github/workflows/live.yml`), triggered by **`workflow_dispatch` or `pull_request: types: [labeled]`**, with the live job gated on explicit dispatch or the event's **`run-live`** label. Other labels skip the job; pushes/PR synchronization never run the live tests automatically. It uses `ubuntu-latest`, Node 22 from `.nvmrc`, a **15-minute** timeout and read-only repository permissions; runs `npm ci`, Chromium install with OS dependencies, `rpc:probe`, then `test:live`; and always attempts to upload Playwright HTML/report data plus fresh `live-qualification/live-qualification.json` evidence. No configured secrets or keeper/signing variables are used. Empty/skipped/incomplete suites cannot qualify; failures are not marked continue-on-error. The old non-blocking live option was removed from ordinary offline CI to leave one clearly named manual live gate.
 
@@ -47,11 +61,11 @@ No sandbox `test:live` retry was performed for this change. Its last blocked att
 
 The workflow can now run directly from **PR #2 by adding `run-live`**; no default-branch bootstrap or WIP merge is required for that trigger. `actions/checkout` pins `github.event.pull_request.head.sha` on PR events (selected event SHA on dispatch). Both the initial JSON and live reporter use **`LIVE_SOURCE_COMMIT`** set to that exact head SHA, not the PR merge-commit `GITHUB_SHA`. If the explicit source variable is absent, the reporter uses checked-out HEAD (or unknown if Git is unavailable), never the synthetic merge-commit `GITHUB_SHA`. Read-only permissions and concurrency group **`thewheel-live-sepolia`** are unchanged; **no `pull_request_target`** or secrets are used.
 
-The user will apply the label; the agent has not labeled/dispatched or rerun live tests. Re-add the label after later commits if a new head needs qualification. **Phase 0 remains incomplete until that opted-in live job actually passes for the intended source SHA**, with successful artifacts; a skipped job is not qualification. No automatic phase transition is performed by the workflow. Actions-tab `workflow_dispatch` remains available only once the workflow exists on the default branch.
+The user will remove/re-add the label at the end of Phase 1; the agent has not labeled/dispatched or rerun live tests. Qualify the intended final PR head before merge. **Live qualification remains deferred, not passed**; a skipped job is not qualification. No automatic phase transition is performed by the workflow. Actions-tab `workflow_dispatch` remains available only once the workflow exists on the default branch.
 
 ## Failed live gate 41606508624: diagnostics hardening
 
-The [run on `be43b9d`](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41606508624) failed at the live step; GitHub run metadata confirms build/setup/probe steps succeeded and artifacts uploaded. The user reports browser CORS/block agreement passed, then `squeek_network_status` returned an unknown RPC error; the same SDK call passed 3/3 in Node. **Phase 0 remains incomplete.**
+The [run on `be43b9d`](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41606508624) failed at the live step; GitHub run metadata confirms build/setup/probe steps succeeded and artifacts uploaded. The user reports browser CORS/block agreement passed, then `squeek_network_status` returned an unknown RPC error; the same SDK call passed 3/3 in Node. **No live qualification is claimed; the gate is deferred until pre-merge.**
 
 Artifact **`thewheel-live-41606508624-1`** exists (ID `13217570445`), but this sandbox cannot download it: GitHub redirects artifact bytes to an unallowed Azure Blob host, and run logs to an unallowed results-receiver host; both requests ended in EOF. Therefore **`verified-network-snapshot.json` and `trace.zip` were not inspected**. The exact failing endpoint, RPC method, HTTP status, and CORS/429/JSON-RPC category remain **unknown**. An uploaded ZIP or the next gate's new diagnostic attachments is needed; do not claim a verified CI root cause.
 
