@@ -32,7 +32,7 @@ const net = {
 };
 const adapter = {
   networkStatus: async () => net,
-  verify: async () => ({ ok: !verifyFails, problems: verifyFails ? ['Identity mismatch'] : [] }),
+  verify: async () => ({ ok: !verifyFails, trusted: !verifyFails, problems: verifyFails ? ['Identity mismatch'] : [] }),
   walletStatus: async () => ({ owner, ethBalance: { eth: '0.1' },
     totals: { count: 1, deposited: 0, claimable: { sqk: '1' } },
     squeeks: [{ tokenId: '1', level: 1, nextMergeHeight: '2', deposited: false }] }),
@@ -95,6 +95,7 @@ try {
   await api.connect();
   assert.equal($('wallet-chip'),null);assert.match($('btn-connect').textContent,/0x5989/);
   assert.match($('wallet-eth').textContent, /0\.100 ETH/);
+  assert.equal($('profile-status').classList.contains('bad'),false,'successful baseline must be trusted before testing failure');
   verifyFails = true; await api.refresh();
   assert.equal($('profile-status').classList.contains('bad'), true);
   // jsdom does not lay out responsive viewports. Check the applicable CSS declarations

@@ -7,7 +7,7 @@ const other='0x1111111111111111111111111111111111111111';
 const actions={checkpoint:'checkpoint',claim:'claim',merge:'merge',deposit:'deposit',withdraw:'withdraw',merge_deposited:'mergeDeposited',claim_and_stake:'claimAndStake',stake:'stake',unstake:'unstake'};
 for(const [name,action] of Object.entries(actions)) for(const profile of (['checkpoint','claim','merge'].includes(name)?['sepolia-v6','sepolia-v9']:['sepolia-v9'])) test(`agent request ${name} / ${profile}: simulation and human wallet only`,async({page})=>{
   await installV9Fixture(page);await page.evaluate(()=>squeek.connect());
-  if(profile==='sepolia-v6')await page.getByTestId('profile-select').selectOption(profile);
+  if(profile==='sepolia-v6'){await page.getByTestId('profile-select').selectOption(profile);expect(await page.evaluate(()=>v9.adapterProfiles)).toContain('sepolia-v6');}
   const input={survivor:'41',donor:'42',confirm:'BURN-42',tokenIds:['87'],amount:'1000000000000000000'};
   if(name.includes('merge')) {
     const refused=await page.evaluate(([name,input])=>squeek.callTool(name,{...input,confirm:''}),[`squeek_request_${name}`,input]);
@@ -78,7 +78,7 @@ test('Trust checklist tracks verified, stopped and unknown; Developers wallet pe
   await page.evaluate(async()=>{v9.net.verification.trusted=false;await squeek.refresh();});await expect(page.getByTestId('trust-checklist')).toHaveAttribute('data-state','stopped');await expect(page.getByTestId('verified-chip')).toHaveText('Stopped');
   await page.getByTestId('profile-select').selectOption('mainnet');await expect(page.getByTestId('trust-checklist')).toHaveAttribute('data-state','unknown');
   await expect(page.getByTestId('developer-surfaces').locator('tbody tr').nth(1)).toContainText('Your wallet popup');
-  await expect(page.getByTestId('developer-surfaces').locator('tbody tr').nth(0)).toContainText('No');await expect(page.getByTestId('developer-surfaces').locator('tbody tr').nth(2)).toContainText('No');
+  await expect(page.getByTestId('developer-surfaces').locator('tbody tr').nth(0)).toContainText('No');await expect(page.getByTestId('developer-surfaces').getByRole('row').filter({has:page.getByRole('rowheader',{name:'SDK',exact:true})})).toContainText('No');
   await expect(page.getByTestId('developer-surfaces').locator('tfoot')).toHaveText('Agents never see a private key.');await page.evaluate(()=>squeek.destroy());
 });
 

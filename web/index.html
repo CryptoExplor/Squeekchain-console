@@ -208,7 +208,7 @@
             Read tools return JSON. <code>request_*</code> tools open a wallet popup, so a human still approves every
             signature. Agents never see a private key.
           </p>
-          <div class="table-wrap"><table data-testid="developer-surfaces"><thead><tr><th scope="col">Surface</th><th scope="col">Access</th><th scope="col">Signs?</th></tr></thead><tbody><tr><th scope="row">MCP</th><td>Read / prepare</td><td>No</td></tr><tr><th scope="row">window.squeek / same-origin postMessage</th><td>Read / prepare / request</td><td>Your wallet popup</td></tr><tr><th scope="row">SDK</th><td>Read / prepare</td><td>No</td></tr></tbody><tfoot><tr><td colspan="3">Agents never see a private key.</td></tr></tfoot></table></div>
+          <div class="table-wrap"><table data-testid="developer-surfaces"><thead><tr><th scope="col">Surface</th><th scope="col">Access</th><th scope="col">Signs?</th></tr></thead><tbody><tr><th scope="row">MCP</th><td>Read / prepare</td><td>No</td></tr><tr><th scope="row">window.squeek</th><td>Read / prepare / request</td><td>Your wallet popup</td></tr><tr><th scope="row">postMessage</th><td>Same-origin: read / prepare / request. Cross-origin: five explicit-owner read tools only.</td><td>Same-origin wallet popup only</td></tr><tr><th scope="row">SDK</th><td>Read / prepare</td><td>No</td></tr></tbody><tfoot><tr><td colspan="3">Agents never see a private key.</td></tr></tfoot></table></div>
           <div class="row">
             <select aria-label="Agent tool" id="tool-call" data-testid="tool-call"></select>
             <button class="btn" id="btn-run-tool" data-testid="btn-run-tool">Run</button>

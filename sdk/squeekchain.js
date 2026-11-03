@@ -13,7 +13,7 @@ import { throwIfAborted } from "./cancellation.js";
  * Every method returns JSON-serializable data (bigints become decimal strings),
  * so the same call works in a browser, over MCP, or in a Node script.
  */
-import { encodeFunctionData, getAddress, formatEther } from "viem";
+import { encodeFunctionData, getAddress, formatEther, multicall3Abi } from "viem";
 import { sepolia } from "viem/chains";
 import { coreAbi, miningAbi, nftAbi, tokenAbi } from "./abi.js";
 
@@ -239,7 +239,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
   async function readWalletStatus(address, { force } = {}) {
     const [ids, ethBalance, sqkBalance, net] = await Promise.all([
       discoverTokenIds(address, { force }),
-      client.getBalance({ address, blockNumber: activeSnapshot.blockNumber }),
+      client.readContract({address:sepolia.contracts.multicall3.address,abi:multicall3Abi,functionName:'getEthBalance',args:[address],blockNumber:activeSnapshot.blockNumber}),
       read("token", tokenAbi, "balanceOf", [address]),
       networkStatus(),
     ]);

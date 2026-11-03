@@ -3,7 +3,7 @@
   "fixture": "2 wallet + 2 staked NFTs",
   "coldNetwork": 15,
   "warmNetwork": 13,
-  "coldWallet": 21,
-  "warmWallet": 15,
+  "coldWallet": 20,
+  "warmWallet": 14,
   "limit": 25
 }

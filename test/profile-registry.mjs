@@ -39,3 +39,8 @@ for(const legacySource of ['storage','hash']) {
  } finally {app.destroy();win.close();}
 }
 console.log('PASS canonical profile input migration, no legacy runtime lookups, Unknown-safe autopick, and exact SDK/JSON/window/MCP registry parity');
+
+for(const action of ['deposit','withdraw','merge_deposited','approve_nft','approve_all','approve_sqk','claim_and_stake','stake','unstake'])for(const name of [`squeek_${action}_preview`,`squeek_prepare_${action}`,`squeek_request_${action}`]) {
+ const spec=TOOL_SPECS.find(tool=>tool.name===name);if(spec)assert.deepEqual(spec.inputSchema.properties.profile.enum,['sepolia-v9']);
+}
+console.log('PASS staking-only tools advertise v9, not an unsupported v6 adapter');

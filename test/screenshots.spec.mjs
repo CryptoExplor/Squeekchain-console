@@ -32,7 +32,8 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
     if (view === 'info') {
       await page.getByTestId('tab-info').click();
       await expect(page.getByTestId('panel-info')).toBeVisible();
-      await expect(page.getByTestId('policy-table').locator('tbody tr')).toHaveCount(10);
+      const rows=page.getByTestId('policy-table').locator('tbody tr');await expect(rows).toHaveCount(10);
+      for(let i=0;i<10;i++)await expect(rows.nth(i).locator('td')).toHaveText([String(i+1),String((i+1)*1000),String(i===9?0:2*(i+1))]);
       await expect(page.getByTestId('trust-block')).toHaveText('12101024');
     }
     if (view === 'settings') await page.getByTestId('settings-open').click();
@@ -47,6 +48,10 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
     if (view === 'mainnet') {
       await page.getByTestId('profile-select').selectOption('mainnet');
       await expect(page.getByTestId('not-deployed')).toBeVisible();
+      await expect(page.getByTestId('tab-info')).toHaveAttribute('aria-selected','true');
+      await expect(page.getByTestId('panel-info')).toBeVisible();
+      await expect(page.locator('[role=tab][aria-selected=true]')).toHaveCount(1);
+      await expect(page.getByTestId('trust-block')).toHaveText('Unknown');
       await expect(page.getByTestId('deployment-content')).toBeHidden();
       await expect(page.getByTestId('wallet-button')).toBeVisible();
       await expect(page.getByTestId('btn-menu-connect')).toBeHidden();
@@ -54,7 +59,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
     }
     await expect(page.locator('.hero, .page-intro, .network-strip, .action-grid, .eyebrow')).toHaveCount(0);
     await expect(page.getByTestId('activity-drawer')).toBeHidden();
-    await expect(page.getByTestId('capability-grid'))[view === 'info' ? 'toBeVisible' : 'toBeHidden']();
+    await expect(page.getByTestId('capability-grid'))[['info','mainnet'].includes(view) ? 'toBeVisible' : 'toBeHidden']();
     await expect(page.getByRole('contentinfo')).toContainText('Independent community console · not affiliated with Squeekchain · Sepolia only · not investment advice');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.evaluate(() => window.reviewCounters)).toEqual({ simulations: 0, sends: 0 });
@@ -90,12 +95,12 @@ async function assertCompactHeader(page, width, connected) {
   expect(new Set(geometry.map(c => c.radius)).size).toBe(1);
   for (const control of geometry) { expect(control.height, control.id).toBe(36); expect(control.x, control.id).toBeGreaterThanOrEqual(0); expect(control.right, control.id).toBeLessThanOrEqual(width); }
   for (const chip of await header.locator('.chip:visible').all()) expect(await chip.evaluate(node => node.scrollHeight <= node.clientHeight)).toBe(true);
+  await page.getByTestId('wallet-button').focus();
   for (const id of ['btn-theme', 'btn-refresh', 'settings-open']) {
     const icon = page.getByTestId(id);
     expect((await icon.boundingBox()).width).toBe(36);
     await expect(icon.locator('svg')).toHaveAttribute('width', '18');
     await page.keyboard.press("Tab");
-    await icon.focus();
     await expect(icon).toBeFocused();
     expect(await icon.evaluate(node => parseFloat(getComputedStyle(node).outlineWidth))).toBeGreaterThanOrEqual(3);
   }
@@ -120,7 +125,7 @@ for (const width of [900, 1024]) test(`header: single desktop row at ${width}px,
   await page.getByTestId('profile-select').selectOption('sepolia-v9');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
-  await expect(page.getByTestId('verified-chip')).toHaveAttribute('title', /Pinned identities fully verified/);
+  await expect(page.getByTestId('verified-chip')).toHaveAttribute('title', /Pinned identities fully verified at block 12101025/);
   await assertCompactHeader(page, width, true); await page.evaluate(() => window.squeek.destroy());
 });
 

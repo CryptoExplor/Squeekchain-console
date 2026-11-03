@@ -9,6 +9,7 @@ import { IMPLEMENTATION_SLOT, ADMIN_SLOT } from '../sdk/verify.js';
 import { createRpcContext } from '../sdk/rpc.js';
 import { core9Abi, issuance9Abi, nft9Abi, staking9Abi, token9Abi } from '../sdk/abi-v9.js';
 import { createDiscoveryStore } from '../sdk/discovery.js';
+import { isRpcAvailabilityError } from '../sdk/rpc-errors.js';
 import { runReadTool, STAKING_ACTIONS } from '../sdk/tool-runtime.js';
 const profile=structuredClone(PROFILES['sepolia-v9']);
 const codes=new Map();let next=1;
@@ -48,6 +49,7 @@ function fake() {
  if(fn==='mergesOpen')return flags.mergesOpen;
  if(fn==='cooldownBlocks')return BigInt(args[0])*3n;
  if(fn==='basePower')return 1000n*BigInt(args[1]);
+ if(fn==='getEthBalance')return 10n**18n;
  if(fn==='balanceOf')return flags.empty?0n:same(address,profile.addresses.nft)?2n:100n;
  if(fn==='ownerOf')return BigInt(args[0])<3n?owner:profile.addresses.staking;
  if(fn==='depositor'){assert.ok(same(args[0],profile.addresses.nft));return flags.wrongDepositor?other:owner;}
@@ -146,6 +148,23 @@ for(const [survivor,donor] of [['1','3'],['3','1']])for(const action of ['merge'
 }
 console.log('PASS v9 cache-hit mutable wiring/slots/layout/version rejection, cross-profile code reuse, fresh paused reads, mixed custody guidance and simulation FeeLimitExceeded');
 for(const [key]of Object.entries(STAKING_ACTIONS)){const inputs={owner,amount:'10',tokenId:'1',tokenIds:['1'],survivor:'3',donor:'4',confirm:'BURN-4'};const adapter={actionPreview:async(_owner,action)=>({action})};assert.equal((await runReadTool(adapter,`squeek_${key}_preview`,inputs)).action,STAKING_ACTIONS[key]);assert.equal((await runReadTool(adapter,`squeek_prepare_${key}`,inputs)).action,STAKING_ACTIONS[key]);}
+{
+ const {f:t,sdk:x}=make();const original=t.client.readContract;
+ t.client.readContract=async req=>{if(req.functionName==='tokenURI'&&req.args[0]===2n)throw new Error('One token reverted');return original(req);};
+ const batch=await x.artBatch(['1','2','3']);assert.equal(batch.length,3);assert.equal(batch[0].tokenId,'1');assert.equal(batch[0].error,undefined);assert.match(batch[1].error,/Token URI/);assert.equal(batch[2].error,undefined);
+ assert.equal(t.calls.filter(c=>c.name==='multicall'&&c.contracts.every(call=>call.functionName==='tokenURI')).length,1,'one allowFailure multicall preserves valid tokens');
+}
+{
+ const {f:t,sdk:x}=make();const original=t.client.readContract;
+ t.client.readContract=async req=>req.functionName==='accountPower'?[0n,0n]:original(req);
+ const emptyStaked=await x.walletStatus(owner);assert.equal(emptyStaked.totals.deposited,0);
+ assert.equal(t.calls.some(c=>c.name==='getContractEvents'&&c.eventName==='Deposited'),false,'proven zero NFT power skips deposit history, not wallet NFTs');
+ assert.equal(emptyStaked.squeeks.length,2);
+}
+{
+ const cache=new Map(),{f:t,sdk:x}=make(fake(),{verificationCache:cache});t.client.request=async()=>[];
+ await assert.rejects(x.walletStatus(owner),isRpcAvailabilityError,'positive NFT power with empty confirmed history is unavailable, never a zero staked count');assert.equal(cache.size,0,'incomplete inventory cannot commit verification');
+}
 console.log('PASS v9 offline ABI calldata, every action/approval, fee/deadline guard, actual claim payout, custody, policy, snapshot identity/cache rejection and shared tool dispatch');
 
 // Count actual JSON-RPC requests through viem batching + production snapshot/chain guards.
@@ -177,7 +196,7 @@ try {
  const network=await x.networkStatus();assert.equal(network.snapshot.timestamp,'1000');assert.equal(network.core.roundDuration,'600');const coldNetwork=wire.length;const coldBatches=wire.filter(Array.isArray);assert.equal(coldBatches.length,2);assert.ok(coldBatches.every(batch=>batch.some(r=>r.method==='eth_getCode')&&batch.filter(r=>r.method==='eth_getStorageAt').length===12&&batch.every(r=>r.params.at(-1)===toHex(at))));wire.length=0;
  await x.networkStatus();const warmNetwork=wire.length;assert.equal(wire.filter(Array.isArray).length,2);assert.ok(wire.filter(Array.isArray).every(batch=>batch.length===12&&batch.every(r=>r.method==='eth_getStorageAt')));assert.ok(warmNetwork<=25,'warm network '+warmNetwork);wire.length=0;
  await x.walletStatus(owner);const coldWallet=wire.length;wire.length=0;
- const wallet=await x.walletStatus(owner);const warmWallet=wire.length;assert.equal(wallet.totals.count,4);assert.ok(warmWallet<=25,'warm wallet '+warmWallet);
+ const wallet=await x.walletStatus(owner);const warmWallet=wire.length;assert.equal(wallet.ethBalance.eth,'1');assert.equal(wire.some(r=>r.method==='eth_getBalance'),false,'ETH joins contract reads through Multicall3');assert.equal(wallet.totals.count,4);assert.ok(warmWallet<=25,'warm wallet '+warmWallet);
  const v6Budget=JSON.parse(fs.readFileSync('docs/audit/v6-request-budget.json'));assert.ok(coldNetwork<=v6Budget.coldNetwork+8);assert.ok(coldWallet<=v6Budget.wallet+8);
  const budget={profile:'sepolia-v9',fixture:'2 wallet + 2 staked NFTs',coldNetwork,warmNetwork,coldWallet,warmWallet,limit:25};
  fs.writeFileSync('docs/audit/v9-request-budget.json',JSON.stringify(budget,null,2)+'\n');console.log('PASS v9 actual wire budget: '+JSON.stringify(budget));

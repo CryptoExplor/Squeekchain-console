@@ -14,10 +14,19 @@ export async function readIdentityBatch(peer, requests, { signal, fetcher = glob
   onResponse?.(response,url);
   let body; try { body = await response.json(); } catch { body = null; }
   throwIfAborted(signal);
+  const httpError=()=>new RpcAvailabilityError(Object.assign(new Error('Identity batch HTTP failure'),{status:response.status}),{endpoint:url,method:requests[0].method,status:response.status,kind:'http'});
+  if(!response.ok&&[429,503,401].includes(response.status))throw httpError();
   const rejectedEntries=Array.isArray(body)&&body.length>0&&body.every(item=>[-32600,-32601].includes(item?.error?.code));
-  const unsupported = rejectedEntries || [400,413,415,501].includes(response.status) || (response.ok && !Array.isArray(body)) || /batch.*(?:not supported|disabled|not allowed)/i.test(body?.error?.message??'');
+  const unsupported = rejectedEntries || [400,403,404,405,413,415,422,501].includes(response.status) || (response.ok && !Array.isArray(body) && [-32600,-32601].includes(body?.error?.code)) || /batch.*(?:not supported|disabled|not allowed)/i.test(body?.error?.message??'');
   if (unsupported) { capabilities.set(url,false); return single(); }
-  if (!response.ok) throw new RpcAvailabilityError(Object.assign(new Error('Identity batch HTTP failure'), {status:response.status}), { endpoint:url,method:'eth_getStorageAt',status:response.status });
+  // Transient batch HTTP failure can still leave checked single calls usable.
+  // Respect rate-limit cooldowns; never fan out after 429/503. Do not mark a
+  // transient gateway failure as a permanent lack of batch support.
+  if(!response.ok&&response.status>=500){
+    try{return await single();}
+    catch(error){throw new RpcAvailabilityError(error,{endpoint:url,method:requests[0].method,priorError:httpError(),kind:'http'});}
+  }
+  if (!response.ok) throw httpError();
   if (!Array.isArray(body) || body.length !== payload.length) throw new RpcTrustError('Identity batch response length mismatch');
   const byId = new Map();
   for (const item of body) {

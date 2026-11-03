@@ -34,6 +34,27 @@ assert.throws(() => activity.record('not-a-hash', 'invalid'), /Invalid Sepolia/)
 activity.clear();
 assert.deepEqual(activity.list(), []);
 assert.equal(JSON.parse([...saved.values()][0]).length, 0);
+assert.deepEqual(changes.at(-1),[],'clear notifies the Activity badge');
 for (const tracker of [activity, reloaded, bad, failure]) tracker.destroy();
 assert.ok(changes.length > 1);
 console.log('PASS Activity: immediate persistent broadcast, hash dedup, mined/final/revert status, reload recheck, unavailable receipts and private-mode fallback; no submission path');
+
+// Legacy history belongs to v6, whereas an explicit legacy profile is migrated.
+const KEY='wheelhouse:pending-transactions:v1';
+const entry={hash,label:'Legacy checkpoint',chainId:11155111,time:new Date().toISOString()};
+storage.set(KEY,JSON.stringify([entry]));
+const legacy=createActivity({storage,receiptReader:reader});assert.equal(legacy.list()[0].profile,'sepolia-v6');legacy.destroy();
+storage.set(KEY,JSON.stringify([{...entry,profile:'sepolia'}]));
+const explicit=createActivity({storage,receiptReader:reader});assert.equal(explicit.list()[0].profile,'sepolia-v9');explicit.destroy();
+let release;
+storage.set(KEY,JSON.stringify([entry]));
+const stale=createActivity({storage,receiptReader:()=>new Promise(resolve=>{release=resolve;})});
+const clearing=createActivity({storage,receiptReader:reader});
+const inFlight=stale.refresh();clearing.clear();release(null);await inFlight;
+assert.deepEqual(stale.list(),[]);assert.deepEqual(JSON.parse(storage.get(KEY)),[],'receipt refresh in another tab cannot restore cleared history');
+const events=new EventTarget();let notified;
+const observed=createActivity({storage,eventTarget:events,onChange:list=>{notified=list;},receiptReader:reader});
+clearing.record(hash,'New broadcast');const event=new Event('storage');event.key=KEY;events.dispatchEvent(event);
+assert.equal(notified.length,1);clearing.clear();events.dispatchEvent(event);assert.deepEqual(notified,[]);
+for(const tracker of [stale,clearing,observed])tracker.destroy();
+console.log('PASS legacy Activity v6 migration, explicit alias migration, cross-tab clear during an awaited receipt and storage-event synchronization');

@@ -44,8 +44,10 @@ export function initSettings({$,state,store,fetcher,captureLoad,assertCurrent,is
     } catch { if (isCurrent(load)) { state.adapter = buildAdapter(state.profileKey); $('cache-result').textContent = 'Could not clear the log cache. No ownership or trust checks were bypassed.'; } }
   };
   $('btn-clear-activity').onclick = async () => {
+    const load=captureLoad();
     closeSheet();
     const confirmed = await confirmModal({ title: 'Clear Activity?', body: 'Remove the Activity list saved in this browser, including pending entries. This does not cancel transactions. Check your wallet before retrying any action.', confirmLabel: 'Clear Activity' });
+    if(!isCurrent(load))return;
     if (confirmed) activity.clear();
     if (!destroyed()) openSheet('settings-sheet');
   };

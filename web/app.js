@@ -24,7 +24,7 @@ import {
   rpcToolError,
   ACTION_REASONS,
   PUBLIC_RPC_ENDPOINTS,
-  runReadTool, runPublicReadTool, toolProfile, settlementStatus, requireBurn,
+  readToolResult, runPublicReadTool, toolProfile, settlementStatus, requireBurn,
   profileBalances, chooseProfile, profileFromHash, profileInput, parseEther, formatEther, profileHeld, profileCountLabel, unstakeQuoteError,
 } from "./bundle.js";
 
@@ -211,7 +211,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const chainCache = new Map();
   const discoveryCache = createDiscoveryStore(win.indexedDB);
   let receiptContext, receiptRpcUrl;
-  const activity = createActivity({ storage: store, onChange: renderActivity, receiptReader: activityReader ?? (async (item, { signal }) => {
+  const activity = createActivity({ storage: store, eventTarget:win, onChange: renderActivity, receiptReader: activityReader ?? (async (item, { signal }) => {
     const rpcUrl = store.get('wheelhouse:rpc') || undefined;
     if (!receiptContext || rpcUrl !== receiptRpcUrl) {
       receiptContext = createRpcContext({ rpcUrl, chainCache, signal, provider: () => state.account ? provider() : null });
@@ -241,7 +241,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       link.href = `${EXPLORER}/tx/${item.hash}`; link.target = '_blank'; link.rel = 'noreferrer';
       link.textContent = `${item.label} · ${item.hash.slice(0, 10)}…`;
       const detail = doc.createElement('span');
-      detail.textContent = `${item.chain ?? 'Sepolia'} · ${item.status}${item.receiptStatus === 'reverted' && item.status === 'mined' ? ' (reverted)' : ''} · ${item.time}${item.lastError ? ` · ${item.lastError}` : ''}`;
+      detail.textContent = `${getProfile(item.profile).label} · ${item.chain ?? 'Sepolia'} · ${item.status}${item.receiptStatus === 'reverted' && item.status === 'mined' ? ' (reverted)' : ''} · ${item.time}${item.lastError ? ` · ${item.lastError}` : ''}`;
       row.append(link, detail);
       return row;
     }));
@@ -1070,7 +1070,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         return requestAction({merge_deposited:'mergeDeposited',claim_and_stake:'claimAndStake'}[action]??action,args);
       }
       const adapter=selected.key===state.profileKey?state.adapter:buildAdapter(selected.key);
-      return runReadTool(adapter,spec.name,{...args,owner:ownerOrDefault(args),from:args.from??state.account});
+      return readToolResult(adapter,spec.name,{...args,owner:ownerOrDefault(args),from:args.from??state.account});
     }}]));
   }
 
@@ -1103,6 +1103,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     let [name, section] = String(route).split('/');
     if (!['squeeks', 'art', 'network', 'info'].includes(name)) name = state.account || state.inspected ? 'squeeks' : 'network';
     const deployed = Boolean(getProfile(state.profileKey).addresses);
+    if(!deployed)name='info';
     doc.querySelectorAll('a[href^="#info/"], a[data-info-route]').forEach(link => { const route = link.dataset.infoRoute ?? link.getAttribute('href').slice(1); link.dataset.infoRoute = route; link.href = `#${state.profileKey}/${route}`; });
     el.tabs.forEach(t => { t.setAttribute('aria-selected', String(t.dataset.tab === name)); t.tabIndex = t.dataset.tab === name ? 0 : -1; });
     el.panels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== name || (!deployed && name !== 'info')));

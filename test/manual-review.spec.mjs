@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
+import {installReviewFixture} from './review-fixture.mjs';
 import {installV9Fixture} from './v9-fixture.mjs';
 const availability='RPC unavailable. Verified reads need two independent Sepolia peers. Nothing was signed.';
 const trustFailure='Wallet read failed: Snapshot block hash mismatch. Nothing was signed.';
@@ -40,4 +41,52 @@ test('refreshes coalesce per generation, not across profile changes',async({page
  // Existing rapid-switch tests cover aborted old-generation reads; ensure a new
  // profile still starts a refresh rather than reusing an old flight.
  await page.evaluate(()=>squeek.switchProfile('sepolia-v6'));await expect(page.getByTestId('profile-select')).toHaveValue('sepolia-v6');await page.evaluate(()=>squeek.destroy());
+});
+for(const width of [1280,390])test(`actual wallet log-range failure is availability, not a trust mismatch / ${width}`,async({page},info)=>{
+ await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);await page.evaluate(()=>squeek.connect());
+ await page.evaluate(async()=>{v9.walletError={name:'RpcRequestContextError',message:'JSON-RPC request failed',endpoint:'wallet',method:'eth_getLogs',cause:{message:'getLogs request exceeded max allowed range'}};await squeek.refresh();});
+ await expect(page.getByTestId('banner')).toHaveText(availability);await expect(page.getByTestId('profile-status')).toHaveText('Unavailable');await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('trust-block')).toHaveText('Unknown');await expect(page.getByTestId('trust-time')).toHaveText('Unknown');
+ expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.reason)).toBe('Log range limit');expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.method)).toBe('eth_getLogs');expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.endpoint)).toBe('wallet');
+ await capture(page,info,`staking-log-range-unavailable-light-${width}.png`);expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
+});
+test('profile change discards the pending Clear Activity confirmation without reopening Settings',async({page})=>{
+ await installV9Fixture(page);await page.evaluate(()=>squeek.activity.record('0x'+'ab'.repeat(32),'Mock pending checkpoint',11155111,'sepolia-v9'));
+ await expect(page.getByTestId('activity-list')).toContainText('Sepolia v9');
+ await page.getByTestId('settings-open').click();await page.getByTestId('btn-clear-activity').click();await expect(page.getByTestId('modal')).toBeVisible();
+ await page.evaluate(()=>squeek.switchProfile('sepolia-v6'));await expect(page.getByTestId('settings-sheet')).toBeHidden();await expect(page.getByTestId('modal')).toBeHidden();expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);await page.evaluate(()=>squeek.destroy());
+});
+test('explicit other-profile tool errors retain the serving adapter diagnostics',async({page})=>{
+ await installV9Fixture(page);
+ const result=await page.evaluate(async()=>{v9.networkError={name:'TypeError',message:'Failed to fetch'};return squeek.callTool('squeek_network_status',{profile:'sepolia-v6'});});
+ expect(result.diagnostics.attempts).toEqual([{endpoint:'https://v6-rpc.test',method:'eth_call'}]);expect(await page.getByTestId('profile-select').inputValue()).toBe('sepolia-v9');await page.evaluate(()=>squeek.destroy());
+});
+test('another tab cannot restore Activity after Clear, even with an in-flight receipt read',async({page})=>{
+ await installV9Fixture(page);
+ const result=await page.evaluate(async()=>{
+  const {createActivity}=await import('/activity.js');const storage={get:key=>localStorage.getItem(key),set:(key,value)=>localStorage.setItem(key,value)};
+  const stale=createActivity({storage,receiptReader:()=>new Promise(resolve=>{window.releaseReceipt=resolve;})});
+  squeek.activity.record('0x'+'ab'.repeat(32),'Mock pending checkpoint',11155111,'sepolia-v9');const refreshing=stale.refresh();squeek.activity.clear();releaseReceipt(null);await refreshing;
+  const result={persisted:JSON.parse(localStorage.getItem('wheelhouse:pending-transactions:v1')),stale:stale.list()};stale.destroy();return result;
+ });expect(result).toEqual({persisted:[],stale:[]});await page.evaluate(()=>squeek.destroy());
+});
+
+test('minified dist scripts render and retain wallet safety with lazy Settings and Developers',async({page})=>{
+ const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ const scripts=await installReviewFixture(page,{built:true});await page.evaluate(()=>squeek.connect());await expect(page.getByTestId('holder-count')).toHaveText('3');
+ await page.getByTestId('settings-open').click();await expect(page.getByTestId('settings-sheet')).toBeVisible();await page.keyboard.press('Escape');
+ await page.getByTestId('tab-info').click();await page.getByTestId('info-link-developers').click();await page.getByTestId('btn-copy-manifest').click();
+ for(const script of ['/app.js','/bundle.js','/activity.js','/components.js','/settings.js','/developers.js'])expect(scripts.has(script),script+' must load from dist').toBe(true);
+ expect(errors).toEqual([]);expect(await page.evaluate(()=>reviewCounters.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
+});
+for(const profile of ['sepolia-v6','sepolia-v9'])test(`saved custom RPC reaches production ${profile} adapter without a fixture factory`,async({page})=>{
+ const custom=[];await page.route('**/*',route=>{
+  const url=new URL(route.request().url());if(url.hostname==='127.0.0.1')return route.continue();
+  if(url.origin==='https://saved-rpc.test'){const request=route.request().postDataJSON();custom.push(request);return route.fulfill({json:{jsonrpc:'2.0',id:request.id,result:request.method==='eth_chainId'?'0xaa36a7':'0xb7c6a0'}});}
+  return route.abort();
+ });
+ await page.addInitScript(profile=>{window.__squeekMounted=true;localStorage.setItem('squeekchain:profile',profile);},profile);await page.goto('/');
+ await page.evaluate(async()=>{const {mount}=await import('/app.js');window.squeek=mount({fetcher:async()=>{throw new Error('Offline API');}});await squeek.refresh();});
+ await page.getByTestId('settings-open').click();await page.getByTestId('rpc-url').fill('https://saved-rpc.test');await page.getByTestId('btn-save-rpc').click();
+ await expect.poll(()=>custom.filter(request=>request.method==='eth_chainId').length).toBeGreaterThan(0);expect(await page.evaluate(()=>localStorage.getItem('wheelhouse:rpc'))).toBe('https://saved-rpc.test');
+ await expect(page.getByTestId('profile-status')).not.toHaveText('Verified');await page.evaluate(()=>squeek.destroy());
 });

@@ -1,3 +1,4 @@
+import { rpcToolError } from './rpc-errors.js';
 import { profileInput } from './profile-input.js';
 import { PROFILES, DEFAULT_PROFILE, getProfile } from './deployments.js';
 export function toolProfile(key=DEFAULT_PROFILE) {
@@ -20,4 +21,10 @@ export async function runReadTool(adapter,name,args={}) {
   if(!action)throw new Error('Unknown read/prepare tool');
   if(!adapter.actionPreview)return {ok:false,reason:'This deployment does not expose the requested staking contract action'};
   return adapter.actionPreview(owner(args),action,args);
+}
+
+// Keep diagnostics attached to the adapter that actually served this call.
+export async function readToolResult(adapter,name,args={}) {
+  try {return await runReadTool(adapter,name,args);}
+  catch(error){return rpcToolError(error,adapter.rpcDiagnostics?.()??[]);}
 }

@@ -3,18 +3,18 @@
   "scripts": [
     {
       "file": "activity.js",
-      "rawBytes": 2707,
-      "gzipBytes": 1332
+      "rawBytes": 3074,
+      "gzipBytes": 1492
     },
     {
       "file": "app.js",
-      "rawBytes": 46387,
-      "gzipBytes": 15716
+      "rawBytes": 46445,
+      "gzipBytes": 15742
     },
     {
       "file": "bundle.js",
-      "rawBytes": 488474,
-      "gzipBytes": 135327
+      "rawBytes": 489545,
+      "gzipBytes": 135705
     },
     {
       "file": "components.js",
@@ -28,8 +28,8 @@
     },
     {
       "file": "settings.js",
-      "rawBytes": 2991,
-      "gzipBytes": 1502
+      "rawBytes": 3021,
+      "gzipBytes": 1509
     },
     {
       "file": "telemetry.js",
@@ -42,6 +42,6 @@
       "gzipBytes": 224
     }
   ],
-  "totalGzipBytes": 157707,
+  "totalGzipBytes": 158278,
   "budgetBytes": 250000
 }

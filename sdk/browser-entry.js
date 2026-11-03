@@ -17,7 +17,7 @@ export { PUBLIC_RPC_ENDPOINTS } from './rpc.js';
 export { profileBalances, chooseProfile, profileFromHash, profileHeld, profileCountLabel } from './profile-selection.js';
 export { parseEther, formatEther } from 'viem';
 
-export { runReadTool, toolProfile } from "./tool-runtime.js";
+export { runReadTool, readToolResult, toolProfile } from "./tool-runtime.js";
 
 export { profileInput } from './profile-input.js';
 

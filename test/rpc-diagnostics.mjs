@@ -154,3 +154,10 @@ console.log('PASS live network evidence: HTTP/JSON-RPC vs browser network failur
  }finally{globalThis.fetch=original;}
 }
 console.log('PASS network fetch/CORS-like failures: shared 30s cooldown, no hot re-probes, bounded recovery (not CORS attribution)');
+
+const {readToolResult}=await import('../sdk/tool-runtime.js');
+const selectedAttempts=[{endpoint:'https://selected-profile.test',method:'eth_call',availability:true}];
+const toolFailure=await readToolResult({networkStatus:async()=>{throw new RpcAvailabilityError(new Error('RPC unavailable'),{endpoint:'https://selected-profile.test',method:'eth_call'});},rpcDiagnostics:()=>selectedAttempts},'squeek_network_status');
+assert.deepEqual(toolFailure.diagnostics.attempts,selectedAttempts);
+assert.equal(toolFailure.diagnostics.endpoint,'https://selected-profile.test');
+console.log('PASS shared browser/MCP tool errors retain the serving adapter diagnostics');

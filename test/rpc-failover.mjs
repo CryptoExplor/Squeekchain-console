@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { encodeEventTopics, toHex } from 'viem';
 import { createRpcContext, PUBLIC_RPCS, PUBLIC_RPC_ENDPOINTS, RpcTrustError } from '../sdk/rpc.js';
-import { isRpcAvailabilityError, isLogRangeError } from '../sdk/rpc-errors.js';
+import { isRpcAvailabilityError, isLogRangeError, rpcErrorDiagnostics } from '../sdk/rpc-errors.js';
 import { createDiscoveryStore, discoverOwnedIds } from '../sdk/discovery.js';
 import { DEPLOYMENT } from '../sdk/record.js';
 import { nftAbi } from '../sdk/abi.js';
@@ -19,6 +19,7 @@ const payloads = [
   { code: -32005, message: 'range too large' },
   { code: 35, message: 'chain is not available on free plan' },
   { code: -32000, message: 'forbidden' },
+  { code: -32000, message: 'getLogs request exceeded max allowed range' },
 ];
 const realFetch = globalThis.fetch;
 let calls = [], route = () => null;
@@ -38,6 +39,7 @@ globalThis.fetch = async (url, init) => {
   return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, ...(routed ?? { result: success(method, params) }) }), { headers: { 'content-type': 'application/json' } });
 };
 try {
+  assert.equal(rpcErrorDiagnostics({cause:payloads[5]}).reason,'Log range limit','exact provider wording survives safe diagnostic classification');
   for (const error of payloads) {
     assert.equal(isRpcAvailabilityError({ cause: error }), true);
     calls = [];
@@ -113,7 +115,7 @@ try {
   assert.deepEqual(walletCalls, ['eth_chainId', 'eth_getStorageAt']);
   assert.equal(calls.length, 0);
   wallet.request = async ({ method, params }) => {
-    if (method === 'eth_getLogs') throw Object.assign(new Error(payloads[0].message), payloads[0]);
+    if (method === 'eth_getLogs') throw Object.assign(new Error('JSON-RPC request failed'), {cause:{details:payloads[5].message,code:-32000}});
     return success(method, params);
   };
   await walletContext.client.getContractEvents({ address: DEPLOYMENT.nft, abi: nftAbi, eventName: 'Transfer', fromBlock: 1n, toBlock: 45_000n });
@@ -146,7 +148,7 @@ try {
   route = call => {
     if (call.method !== 'eth_getLogs') return null;
     const query = call.params[0], from = BigInt(query.fromBlock), to = BigInt(query.toBlock);
-    if (to - from + 1n > 22_500n) return { error: call.url === first ? payloads[0] : payloads[2] };
+    if (to - from + 1n > 22_500n) return { error: call.url === first ? payloads[0] : payloads[5] };
     return { result: from === 1n && query.topics[2] ? [{
       address: DEPLOYMENT.nft, blockNumber: '0x1', blockHash: hash, transactionHash: hash,
       transactionIndex: '0x0', logIndex: '0x0', data: '0x', removed: false,

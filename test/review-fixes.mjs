@@ -18,7 +18,7 @@ function log(eventName,args,index=0) {
   return {address:profile.addresses.staking,blockNumber:toHex(snapshot.blockNumber),logIndex:toHex(index),removed:false,
     topics:encodeEventTopics({abi:staking9Abi,eventName,args}),data:encodeAbiParameters(fields,fields.map(input=>args[input.name]??0n))};
 }
-async function inventory({v6=0n,wallet=0n,power=987654n,historyFail=false,accountSource=null,logs,wrongDepositor=false,badFinal=false}={}) {
+async function inventory({v6=0n,wallet=0n,power=987654n,historyFail=false,accountSource=null,logs,maxRange,wrongDepositor=false,badFinal=false}={}) {
   let guarded=false;const calls=[];
   const client={
     multicall:async request=>{
@@ -34,7 +34,9 @@ async function inventory({v6=0n,wallet=0n,power=987654n,historyFail=false,accoun
     },
     request:async request=>{
       calls.push(request);assert.equal(request.method,'eth_getLogs');
-      const [q]=request.params;assert.equal(q.toBlock,toHex(snapshot.blockNumber));
+      const [q]=request.params;assert.ok(BigInt(q.toBlock)<=snapshot.blockNumber);
+      if(maxRange&&BigInt(q.toBlock)-BigInt(q.fromBlock)+1n>maxRange)throw Object.assign(new Error('JSON-RPC request failed'),{cause:{details:'getLogs request exceeded max allowed range'}});
+      if(BigInt(q.toBlock)<snapshot.blockNumber)return [];
       assert.equal(q.topics[0].length,3);assert.equal(q.topics[1],pad(owner));assert.equal(q.topics[2],pad(profile.addresses.nft));
       if(historyFail)throw new RpcAvailabilityError(new Error('Historical logs unavailable'));
       return logs??[log('Deposited',{tokenId:1n},0),log('Deposited',{tokenId:2n},1),log('Deposited',{tokenId:3n},2),log('Withdrawn',{tokenId:2n},3)];
@@ -64,13 +66,15 @@ const unconfirmed=await inventory({wrongDepositor:true});assert.equal(unconfirme
 assert.equal(profileHeld({wallet:'0',nftPower:'0',staked:'99'}),false,'hint count must not decide auto-pick');
 await assert.rejects(inventory({badFinal:true}),/hash mismatch/);
 let sourceCalls=0;
-const fast=await inventory({accountSource:async q=>{sourceCalls++;assert.equal(q.custody,'staking');assert.equal(q.snapshot,snapshot);return [4n,5n,5n];}});
-assert.equal(sourceCalls,1);assert.equal(fast.counts['sepolia-v9'].staked,'2');assert.equal(fast.calls.filter(c=>c.method==='eth_getLogs').length,0);
+const fast=await inventory({accountSource:async q=>{sourceCalls++;assert.equal(q.custody,'staking');assert.equal(q.snapshot,snapshot);return [1n];}});
+assert.equal(sourceCalls,0,'staking hints cannot prove completeness; do not waste an API read');assert.equal(fast.counts['sepolia-v9'].staked,'2');assert.ok(fast.calls.some(c=>c.method==='eth_getLogs'),'even nonempty hints cannot replace complete history');
 const fallback=await inventory({accountSource:async()=>{throw new Error('API unavailable');}});assert.equal(fallback.counts['sepolia-v9'].staked,'2');
 const apiPage={schemaVersion:2,status:'available',account:owner,chain:{target:'sepolia',chainId:'11155111',safeThroughBlock:String(snapshot.blockNumber),safeBlockHash:snapshot.blockHash},identities:{genesis:profile.addresses.nft},release:{id:'hint-not-authority'},tokens:[{tokenId:'4',custody:'staking'},{tokenId:'5',custody:'wallet'}],nextCursor:null};
 const api=createAccountTokenSource({fetcher:async()=>response(apiPage)});
 assert.deepEqual(await api({owner,nft:profile.addresses.nft,custody:'staking',snapshot}),[4n]);
 await assert.rejects(api({owner,nft:profile.addresses.nft,custody:'staking',snapshot:{...snapshot,blockNumber:snapshot.blockNumber+1n}}),/requested snapshot/);
+const limited=await inventory({maxRange:1n});assert.equal(limited.counts['sepolia-v9'].staked,'2');assert.ok(limited.calls.filter(c=>c.method==='eth_getLogs').length<20,'shrink the attempted interval, not a stale 45k target');
+const partialUnavailable=await inventory({historyFail:true,accountSource:async()=>[1n]});assert.equal(partialUnavailable.counts['sepolia-v9'].staked,null,'incomplete hints cannot turn unavailable history into a count');
 console.log('PASS staked-aware selection: same-block balance/power, API hints + indexed history, one depositor/custody multicall, real counts, Unknown and final guard');
 
 const requests=[{method:'eth_getStorageAt',params:[owner,'0x'+'00'.repeat(32),'0x10']},{method:'eth_getCode',params:[owner,'0x10']}];
@@ -79,7 +83,7 @@ let singles=0,batches=0;
 const peer={identityUrl:'https://rpc.example/',request:async request=>{singles++;return results[requests.findIndex(item=>item.method===request.method)];}};
 const good=async(_url,init)=>{batches++;const body=JSON.parse(init.body);assert.deepEqual(body.map(({method,params})=>({method,params})),requests);return response(body.map((r,i)=>({jsonrpc:'2.0',id:r.id,result:results[i]})).reverse());};
 assert.deepEqual(await readIdentityBatch(peer,requests,{fetcher:good,capabilities:new Map()}),results);assert.equal(batches,1);assert.equal(singles,0);
-for(const reject of [()=>response({jsonrpc:'2.0',error:{code:-32600,message:'Batch unsupported'}}),()=>new Response('',{status:415}),body=>response(body.map(r=>({jsonrpc:'2.0',id:r.id,error:{code:-32600,message:'Batch disabled'}})))]) {
+for(const reject of [()=>response({jsonrpc:'2.0',error:{code:-32600,message:'Batch unsupported'}}),... [403,405,415].map(status=>()=>new Response('',{status})),body=>response(body.map(r=>({jsonrpc:'2.0',id:r.id,error:{code:-32600,message:'Batch disabled'}})))]) {
   const capabilities=new Map();singles=0;batches=0;
   const fetcher=async(_url,init)=>{batches++;return reject(JSON.parse(init.body));};
   assert.deepEqual(await readIdentityBatch(peer,requests,{fetcher,capabilities}),results);
@@ -91,7 +95,23 @@ for(const mutate of [body=>[body[0],body[0]],body=>body.slice(0,1),body=>body.ma
   await assert.rejects(readIdentityBatch(peer,requests,{capabilities:new Map(),fetcher:async(_url,init)=>{const body=JSON.parse(init.body).map((r,i)=>({jsonrpc:'2.0',id:r.id,result:results[i]}));return response(mutate(body));}}),isTrustError);
   assert.equal(singles,0,'corrupt response is NOT an unsupported-batch fallback');
 }
-await assert.rejects(readIdentityBatch(peer,requests,{capabilities:new Map(),fetcher:async()=>new Response('',{status:429})}),error=>isRpcAvailabilityError(error)&&!isTrustError(error));
+for(const malformed of [new Response('not JSON'),response({result:'0x00'}),response(null)]) {
+ singles=0;await assert.rejects(readIdentityBatch(peer,requests,{capabilities:new Map(),fetcher:async()=>malformed}),isTrustError);assert.equal(singles,0);
+}
+for(const status of [401,429,503]) {
+  singles=0;
+  await assert.rejects(readIdentityBatch(peer,requests,{capabilities:new Map(),fetcher:async()=>new Response(JSON.stringify({error:{message:'batch not supported'}}),{status})}),error=>isRpcAvailabilityError(error)&&!isTrustError(error)&&error.httpStatus===status&&error.kind==='http');
+  assert.equal(singles,0,'auth/rate-limit cooldowns must not trigger single-call fanout');
+}
+for(const status of [500,502,504]) {
+  const capabilities=new Map();singles=0;batches=0;
+  const fetcher=async()=>{batches++;return new Response('',{status});};
+  assert.deepEqual(await readIdentityBatch(peer,requests,{capabilities,fetcher}),results);
+  assert.deepEqual(await readIdentityBatch(peer,requests,{capabilities,fetcher}),results);
+  assert.equal(batches,2);assert.equal(singles,4);assert.notEqual(capabilities.get(peer.identityUrl),false,'gateway failure is not proof that batch is unsupported');
+}
+const gateway=async()=>new Response('',{status:502});
+await assert.rejects(readIdentityBatch({...peer,request:async()=>{throw new RpcTrustError('Chain mismatch');}},requests,{capabilities:new Map(),fetcher:gateway}),error=>isTrustError(error)&&!isRpcAvailabilityError(error)&&error.priorError.httpStatus===502);
 console.log('PASS identity batch: one request, snapshot preservation, reordered IDs, unsupported fallback + capability reuse, corrupt IDs stop, HTTP availability not trust');
 const data=encodeErrorResult({abi:staking9Abi,errorName:'FeeLimitExceeded',args:[3n,2n]});
 for(const error of [{cause:{data}},{code:-32000,data:{originalError:{data}}},{cause:{data:{errorName:'FeeLimitExceeded',args:[3n,2n]}}}])assert.deepEqual(feeLimitExceeded(error),{reasonCode:'feeRose',reason:'Fee rose',fee:'3',maxFee:'2'});

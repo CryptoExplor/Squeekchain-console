@@ -1,10 +1,9 @@
 import { getAddress, encodeEventTopics, decodeEventLog, pad, toHex } from 'viem';
 import { throwIfAborted } from './cancellation.js';
-import { accountTokenIds } from './account-discovery.js';
-import { RpcAvailabilityError, isTrustError, isRpcAvailabilityError, isLogRangeError } from './rpc-errors.js';
+import { RpcAvailabilityError, isLogRangeError } from './rpc-errors.js';
 import { staking9Abi, nft9Abi } from './abi-v9.js';
 // Indexed owner events, incremental/reorg-aware like wallet discovery. No API custody trust.
-export async function depositedIds({ client, snapshot, profile, owner, store, signal, accountSource = accountTokenIds }) {
+export async function depositedIds({ client, snapshot, profile, owner, store, signal }) {
   owner = getAddress(owner.toLowerCase());
   const { staking, nft } = profile.addresses, at = snapshot.blockNumber;
   const key = `${profile.identities.release}:deposits:${staking}:${owner}`.toLowerCase();
@@ -33,17 +32,9 @@ export async function depositedIds({ client, snapshot, profile, owner, store, si
     }
     return result.sort((a,b)=>a<b?-1:a>b?1:0);
   }
-  // API custody/history is candidate discovery only. It cannot supply ownership,
-  // runtime pins or calldata. A different API snapshot falls back to filtered logs.
-  // Do not seed a canonical log cursor from an API list (it can omit IDs).
-  if(cursor===profile.startBlock && accountSource) {
-    try {
-      const candidates=await accountSource({owner,nft,signal,custody:'staking',snapshot});
-      const confirmed=await confirm(candidates);
-      // Empty/stale hints are not evidence of an empty staking history.
-      if(confirmed.length && confirmed.length===new Set(candidates.map(String)).size){throwIfAborted(signal);return confirmed;}
-    } catch(error) {throwIfAborted(signal);if(isTrustError(error)||(error instanceof TypeError&&!isRpcAvailabilityError(error)))throw error; /* Optional untrusted hint: logs establish the fallback. */}
-  }
+  // A confirmed API subset proves custody, not completeness. No onchain NFT
+  // count exists here, so only canonical indexed history establishes the full
+  // deposit set. Never return a hint subset or seed a log cursor from it.
   let size = 45000n;
   while (cursor <= at) {
     throwIfAborted(signal);
@@ -53,7 +44,7 @@ export async function depositedIds({ client, snapshot, profile, owner, store, si
       const topics=['Deposited','Withdrawn','DepositedMerge'].map(eventName=>encodeEventTopics({abi:staking9Abi,eventName})[0]);
       const raw=await client.request({method:'eth_getLogs',params:[{address:staking,fromBlock:toHex(cursor),toBlock:toHex(end),topics:[topics,pad(owner),pad(nft)]}]});
       logs=raw.map(log=>({...log,blockNumber:log.blockNumber==null?null:BigInt(log.blockNumber),logIndex:log.logIndex==null?null:Number(BigInt(log.logIndex)),...decodeEventLog({abi:staking9Abi,topics:log.topics,data:log.data,strict:true})}));
-    } catch (error) { if (size > 1000n && isLogRangeError(error)) { size /= 2n; continue; } throw error; }
+    } catch (error) { if (end>cursor && isLogRangeError(error)) { size=(end-cursor+1n)/2n; continue; } throw error; }
     logs.sort((a, b) => a.blockNumber < b.blockNumber ? -1 : a.blockNumber > b.blockNumber ? 1 : a.logIndex - b.logIndex);
     for (const log of logs) {
       if (log.address?.toLowerCase()!==staking.toLowerCase() || log.removed || log.blockNumber == null || log.logIndex == null || log.blockNumber < cursor || log.blockNumber > end || log.args.account?.toLowerCase() !== owner.toLowerCase()) throw new RpcAvailabilityError(new Error('Non-canonical deposit history'));

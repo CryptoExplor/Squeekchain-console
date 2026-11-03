@@ -132,7 +132,8 @@ const requestSpecs=walletActions.map(action=>{
     inputSchema:{...source.inputSchema,required:(source.inputSchema.required??[]).filter(key=>key!=='owner')},
     surfaces:['web'],sideEffects:'wallet-popup'};
 });
-export const TOOL_SPECS = [...unsignedSpecs,...requestSpecs].map(spec=>({...spec,surfaces:spec.sideEffects==='wallet-popup'?['web']:['web','mcp'],inputSchema:{...spec.inputSchema,properties:{...spec.inputSchema.properties,profile:profileArg}}}));
+const v9ToolNames=new Set([...stakingSpecs.map(spec=>spec.name),...walletActions.filter(action=>!['checkpoint','claim','merge'].includes(action)).map(action=>`squeek_request_${action}`)]);
+export const TOOL_SPECS = [...unsignedSpecs,...requestSpecs].map(spec=>({...spec,surfaces:spec.sideEffects==='wallet-popup'?['web']:['web','mcp'],inputSchema:{...spec.inputSchema,properties:{...spec.inputSchema.properties,profile:v9ToolNames.has(spec.name)?{...profileArg,enum:['sepolia-v9']}:profileArg}}}));
 
 /** Tool manifest published as web/tools.json and advertised by the MCP server. */
 export function buildManifest({ surface } = {}) {

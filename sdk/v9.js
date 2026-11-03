@@ -2,13 +2,15 @@ import { accountTokenIds } from './account-discovery.js';
 import { unstakeQuoteError } from './fee-error.js';
 import { ACTION_REASONS, blocked } from './capabilities.js';
 /** Equal-profile v9 adapter. Expected identities are dated pins, never API authority. */
-import { getAddress, formatEther, encodeFunctionData } from 'viem';
+import { getAddress, formatEther, encodeFunctionData, multicall3Abi } from 'viem';
 import { core9Abi, issuance9Abi, nft9Abi, staking9Abi, token9Abi } from './abi-v9.js';
+import { sepolia } from 'viem/chains';
 import { getProfile } from './deployments.js';
 import { sqkAmount, requireBurn } from './squeekchain.js';
 import { discoverOwnedIds, createDiscoveryStore } from './discovery.js';
 import { depositedIds } from './deposits.js';
 import { createRpcContext } from './rpc.js';
+import { RpcAvailabilityError } from './rpc-errors.js';
 import { createV9Verifier } from './verify-v9.js';
 import { throwIfAborted } from './cancellation.js';
 import { parseSqueekMetadata } from './metadata.js';
@@ -106,11 +108,14 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
   const idsOwned = owner => discoverOwnedIds({ client, snapshot: activeSnapshot, nft: addr.nft, abi: nft9Abi, owner, startBlock: profile.startBlock, namespace: profile.identities.release, store: discoveryCache, signal });
   async function walletStatus(owner) {
     owner = getAddress(owner.toLowerCase());
+    const powerRead=read('staking',staking9Abi,'accountPower',[owner]);
+    const stakedRead=powerRead.then(([nftPower])=>nftPower===0n?[]:depositedIds({client,snapshot:activeSnapshot,profile,owner,store:discoveryCache,signal}));
     const [walletIds, stakedIds, net, claimable, power, balance, eth, principal] = await Promise.all([
-      idsOwned(owner), depositedIds({ client, snapshot: activeSnapshot, profile, owner, store: discoveryCache, signal, accountSource }), networkStatus(),
-      read('staking',staking9Abi,'claimable',[owner]), read('staking',staking9Abi,'accountPower',[owner]),
-      read('token',token9Abi,'balanceOf',[owner]), client.getBalance({ address: owner, blockNumber: activeSnapshot.blockNumber }), read('staking',staking9Abi,'stakeOf',[owner]),
+      idsOwned(owner), stakedRead, networkStatus(),
+      read('staking',staking9Abi,'claimable',[owner]), powerRead,
+      read('token',token9Abi,'balanceOf',[owner]), client.readContract({address:sepolia.contracts.multicall3.address,abi:multicall3Abi,functionName:'getEthBalance',args:[owner],blockNumber:activeSnapshot.blockNumber}), read('staking',staking9Abi,'stakeOf',[owner]),
     ]);
+    if(power[0]>0n&&!stakedIds.length)throw new RpcAvailabilityError(new Error('Staked discovery unavailable: positive NFT power with no confirmed deposits'));
     const tokens=[...walletIds.map(id=>({id,deposited:false})),...stakedIds.map(id=>({id,deposited:true}))];
     const contracts=tokens.flatMap(({id})=>['level','nextMergeHeight'].map(functionName=>({address:addr.nft,abi:nft9Abi,functionName,args:[id]})));
     const values=contracts.length?await client.multicall({contracts,allowFailure:false,blockNumber:activeSnapshot.blockNumber}):[];
@@ -218,6 +223,10 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
     actionPreview:(owner,action,input={})=>{ if(['merge','mergeDeposited'].includes(action))requireBurn(input.donor,input.confirm);return run(()=>actionPreview(owner,action,input)); },
     mergePreview:(owner,survivor,donor,options={})=>{requireBurn(donor,options.confirm);return run(()=>actionPreview(owner,'merge',{survivor,donor,...options}));},
     mergePlan:owner=>run(async()=>plan(await walletStatus(owner))),claimPreview:owner=>run(()=>claimPreview(owner)),checkpointPreview:owner=>run(()=>actionPreview(owner,'checkpoint')),
-    art:id=>run(()=>art(id)),artBatch:(ids,limit=24)=>run(()=>Promise.all(ids.slice(0,Math.min(limit,24)).map(art))),
+    art:id=>run(()=>art(id)),artBatch:(ids,limit=24)=>run(async()=>{
+      const selected=ids.slice(0,Math.min(limit,24));if(!selected.length)return [];
+      const values=await client.multicall({contracts:selected.map(id=>({address:addr.nft,abi:nft9Abi,functionName:'tokenURI',args:[positive(id)]})),allowFailure:true,blockNumber:activeSnapshot.blockNumber});
+      return values.map((value,i)=>{try{if(value.status!=='success')throw new Error();return {tokenId:String(selected[i]),...parseSqueekMetadata(value.result)};}catch{return {tokenId:String(selected[i]),error:'Token URI unavailable or invalid'};}});
+    }),
   };
 }

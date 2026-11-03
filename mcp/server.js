@@ -5,7 +5,7 @@ import { rpcToolError } from '../sdk/rpc-errors.js';
  */
 import readline from "node:readline";
 import { profileInput } from "../sdk/profile-input.js";
-import { toolProfile, runReadTool } from "../sdk/tool-runtime.js";
+import { toolProfile, readToolResult } from "../sdk/tool-runtime.js";
 import { createSqueekchain } from "../sdk/squeekchain.js";
 import { createSqueek9 } from "../sdk/v9.js";
 import { getProfile, PROFILES, DEFAULT_PROFILE } from "../sdk/deployments.js";
@@ -27,7 +27,7 @@ const adapters = new Map();
 const handlers = Object.fromEntries(TOOL_SPECS.filter(t=>t.surfaces.includes('mcp')).map(spec=>[spec.name,async args=>{
   const selected=toolProfile(args.profile??profile.key);
   if(!adapters.has(selected.key))adapters.set(selected.key, selected.abiSet==='v9'?createSqueek9({profileKey:selected.key,rpcUrl}):createSqueekchain({rpcUrl,addresses:selected.addresses}));
-  return runReadTool(adapters.get(selected.key),spec.name,args);
+  return readToolResult(adapters.get(selected.key),spec.name,args);
 }]));
 const availableTools = () => [
   ...TOOL_SPECS.filter((t) => t.surfaces.includes("mcp") && handlers[t.name]).map(({ name, description, inputSchema, sideEffects }) => ({
@@ -51,7 +51,7 @@ async function handleToolCall(id, params) {
     const result = await handler(params?.arguments ?? {});
     return reply(id, {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      isError: Boolean(result && result.ok === false && (result.error || result.reason)),
+      isError: Boolean(result && (result.error || result.ok === false && result.reason)),
     });
   } catch (err) {
     const failure = rpcToolError(err, []);
