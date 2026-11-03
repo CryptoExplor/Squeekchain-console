@@ -20,7 +20,7 @@ try {
   for (const value of [0, '0', 0n]) assert.equal(formatNumber(value), '0');
   assert.equal(formatNumber(false), UNKNOWN);
   assert.equal(formatNumber('9007199254740993'), '9,007,199,254,740,993');
-  assert.equal(formatAmount({}), UNKNOWN); assert.equal(formatAmount({ sqk: '0' }), '0 SQK');
+  assert.equal(formatAmount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}),}), UNKNOWN); assert.equal(formatAmount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}), sqk: '0' }), '0 SQK');
 
   const panel = Panel($('profile-panel')), stat = Stat($('net-round').parentElement);
   stat.set(null); panel.setBusy(true);
@@ -57,13 +57,14 @@ try {
   let wallet = { owner, totals: { count: null }, squeeks: [{ tokenId: '41', level: null }] }, failed = false;
   const adapter = { networkStatus: async () => net, verify: async () => ({ ok: true, trusted: true }), walletStatus: async () => { if (failed) throw new Error('RPC offline'); return wallet; } };
   win.ethereum = { request: async ({ method }) => method === 'eth_chainId' ? '0xaa36a7' : [owner], on() {} };
-  const app = mount({ doc, win, adapterFactory: () => adapter, fetcher: async () => { throw new Error('No external requests'); } });
+  win.localStorage.setItem('squeekchain:profile','sepolia-v6');
+  const app = mount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}), doc, win, adapterFactory: () => adapter, fetcher: async () => { throw new Error('No external requests'); } });
   try {
     await app.refresh(); await app.connect();
     for (const id of ['net-round', 'net-blocks', 'net-lag', 'net-issued', 'net-squeeks', 'net-paused', 'holder-count', 'holder-power', 'holder-share', 'holder-claimable']) assert.equal($(id).textContent, UNKNOWN, id);
     assert.equal($('btn-checkpoint').disabled, true); assert.equal($('btn-claim').disabled, true);
-    assert.equal($('profile-status').textContent, 'Supported');
-    assert.match(doc.querySelector('footer').textContent, /independent community console.*not affiliated with Squeekchain/i);
+    assert.equal($('verified-chip').textContent, 'Verified');
+    assert.match(doc.querySelector('footer').textContent, /Independent.*not affiliated with Squeekchain/i);
     net = { core: { settledThroughRound: '0', blockHeight: '0', paused: false }, mining: { lagRounds: '0', minted: { sqk: '0' } }, nft: { totalSupply: '0' }, checkpoint: {} };
     wallet = { owner, totals: { count: 0, power: 0, sharePercent: 0, claimable: { sqk: '0' } }, squeeks: [] };
     await app.refresh();
@@ -72,7 +73,7 @@ try {
     failed = true; await app.refresh();
     assert.equal($('holder-count').textContent, UNKNOWN); assert.equal(app.state.status, null);
     assert.equal($('btn-custom-merge').disabled, true);
-    await app.switchProfile('sepolia'); assert.equal($('profile-status').textContent, 'Read-only');
+    await app.switchProfile('sepolia-v9'); assert.equal($('verified-chip').textContent, 'Verified');
     await app.switchProfile('mainnet'); assert.equal($('profile-status').textContent, 'Not deployed');
     assert.equal($('deployment-content').classList.contains('hidden'), true);
   } finally { app.destroy(); }

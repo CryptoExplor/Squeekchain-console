@@ -1,3 +1,4 @@
+import { ACTION_REASONS, blocked } from './capabilities.js';
 import { throwIfAborted } from "./cancellation.js";
 /**
  * squeekchain SDK — one isomorphic core for the CLI, the browser dApp and the MCP server.
@@ -100,7 +101,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
         await context.check(activeSnapshot);
         throwIfAborted(signal);
         prepared.commit();
-        return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash } } : result;
+        return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash, peers:activeSnapshot.peers?.map(peer=>({label:peer.name,state:'agreed'}))??[] } } : result;
       } catch (error) { throw wrap(error, "Snapshot unavailable"); }
       finally { activeSnapshot = null; verification = null; }
     });
@@ -162,7 +163,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
         nextRound: String(nextRound),
         roundSettled,
         canCheckpoint: !corePaused && roundSettled,
-        reason: corePaused ? "SqueekCore is paused" : roundSettled ? null : "no newly certified round yet",
+        reason: corePaused ? ACTION_REASONS.paused : roundSettled ? null : ACTION_REASONS.unsettled,
       },
       policy: {
         rewardPerBlock: sqkAmount(rewardPerBlock),
@@ -290,7 +291,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
   async function checkpointPreview(from) {
     const [corePaused, nextRound, roundSettled] = await read("mining", miningAbi, "checkpointStatus");
     const checkpoint = { corePaused, nextRound: String(nextRound), roundSettled };
-    if (corePaused || !roundSettled) return { ok: false, checkpoint, reason: corePaused ? "SqueekCore is paused" : `Round ${nextRound} is not settled` };
+    if (corePaused || !roundSettled) return blocked(corePaused?'paused':'unsettled',{checkpoint});
     if (!from) return { ok: false, checkpoint, reason: "Supply a caller address to simulate checkpoint" };
     await client.simulateContract({ address: addr.mining, abi: miningAbi, functionName: "checkpoint", account: getAddress(from), blockNumber: activeSnapshot.blockNumber });
     const tx = buildCheckpoint();

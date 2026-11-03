@@ -2,27 +2,29 @@
 
 A static, browser-first Squeekchain holder console. The app is branded **Wheelhouse**; the GitHub repository remains **CryptoExplor/Squeekchain-console**.
 
-**Phase 3 structure ready for draft review.** [PR #3](https://github.com/CryptoExplor/Squeekchain-console/pull/3) now includes the holder-first shell, with the user's approval to extend the current draft rather than create a separate branch. Phase 1 merged in PR #2; Phase 0 remains complete from its historical qualified source. This head has not run `test:live`. Offline tests are not live qualification. See [status and validation](docs/STATUS.md).
+**Equal-profile / subtract pass ready for draft review.** [PR #3](https://github.com/CryptoExplor/Squeekchain-console/pull/3) now includes the holder-first shell, with the user's approval to extend the current draft rather than create a separate branch. Phase 1 merged in PR #2; Phase 0 remains complete from its historical qualified source. This head has not run `test:live`. Offline tests are not live qualification. See [status and validation](docs/STATUS.md).
 
 The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
 
-[Review the 32 mocked screenshots](docs/screenshots/README.md): Squeeks, Network, Info, Settings, Merge dialog and not-deployed Mainnet, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **150,497 bytes gzipped**, below the build-enforced 200,000-byte budget ([breakdown](docs/audit/phase1-js-size.json)).
+[Review the 44 mocked screenshots](docs/screenshots/README.md): Squeeks, Network, Info, Settings, Merge dialog and not-deployed Mainnet, v9 Unstake, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **152,951 bytes gzipped**, below the build-enforced 250,000-byte budget, including lazy Developers/Settings modules ([breakdown](docs/audit/phase2-js-size.json)).
 
 ## Deployments and safety
 
+Old `sepolia` inputs migrate once at hash/storage/MCP boundaries. Internal SDK, Activity and cache keys use canonical profile keys only. Mainnet is never guessed.
+
 | Profile | Status |
 |---|---|
-| `sepolia-v6` (default) | **Supported**, docs-pinned v6. Transactions require verified identities, live ownership/eligibility and successful simulation. No hardcoded settlement frontier or claimability. |
-| `sepolia` | Observed v9, **read-only (unverified)**. No published record/ABIs for supported actions. All transaction paths, including transfer and checkpoint, are absent/disabled. |
+| `sepolia-v6` | Sepolia v6. Published identity pins; verified reads and simulated owner actions. |
+| `sepolia-v9` (default) | Sepolia v9. Dated two-peer identity pins; verified NFT/staking/issuance reads and simulated owner actions. |
 | `mainnet` | **Not deployed**. No chain data/action panels. Saved Sepolia transaction Activity remains visible. |
 
 - Sepolia is `11155111` / `0xaa36a7`. A connected Sepolia EIP-1193 wallet is preferred; otherwise reads go browser-direct to five role-aware public RPCs or a browser-local custom HTTPS RPC in Settings. No server proxy, paid RPC key or backend.
 - Every snapshot requires block-hash agreement with two independent RPC peers (public endpoints plus any supplied RPC), checked again after the reads. Any disagreement makes the result unavailable.
-- Full v6 verification checks the published implementations, runtime hashes, layout digests, admins/owners, versions, configuration and wiring at one block. The result is cached **in memory for the session/profile, keyed by implementation addresses and proxy admins**. Each later snapshot re-reads all four EIP-1967 slots; changed slots trigger full verification and fail closed if they do not match the published record. Output distinguishes the full-verification block from the current slot-check block. Cached verification is committed only after the final block-hash check succeeds.
+- Full v6 verification checks the published implementations, runtime hashes, layout digests, admins/owners, versions, configuration and wiring at one block. v9 applies equivalent checks to the export-pinned six-contract graph, with twelve slot reads per operation (staking admin from storage). The result is cached **in memory for the session/profile, keyed by implementation addresses and proxy admins**. Each later snapshot re-reads all four EIP-1967 slots; changed slots trigger full verification and fail closed if they do not match the published record. Output distinguishes the full-verification block from the current slot-check block. Cached verification is committed only after the final block-hash check succeeds.
 - Chain ID is probed once per transport, with concurrent probes shared; errors and wallet `chainChanged` invalidate it. Verification/status/art contract reads use multicall at the snapshot block. Several artwork IDs share one run/snapshot, in batches of up to 24.
 - Public peers: Tenderly, PublicNode, Nodies, OnFinality and 0xRPC. State reads try Tenderly/PublicNode/Nodies first; history scans try **Tenderly → 0xRPC → OnFinality** before reducing the block range. Nodies is snapshot/state-only (its log range is capped at 50 blocks). HTTP 429/503 triggers a shared per-endpoint cooldown honoring `Retry-After` (positive seconds or HTTP date up to 300s; otherwise 30s), without delaying healthy fallbacks. Pruned/history/range/plan errors are availability failures; identity/hash mismatches still stop immediately. A custom RPC is tried first for state/log reads and joins the peers; a Sepolia wallet remains preferred. Public endpoints change often: use `npm run rpc:probe` for current capabilities.
 - NFT discovery uses **owner-filtered incoming and outgoing Transfer events**. IndexedDB stores `{lastScannedBlock, lastScannedHash, ids}` per chain/release/NFT/owner. Subsequent reads scan only new blocks, detect reorged checkpoints, and confirm the final set using `balanceOf` and multicall `ownerOf` at the snapshot. Storage is never an ownership oracle. Node/private mode has an in-memory fallback. Tenderly is currently the only consistently reliable full-range log source in the user's checks, so preserving the incremental cache is especially important. When all log endpoints fail, the official account API can provide paginated **candidate wallet IDs only**. Candidates must match the configured NFT/account/chain context, their unique count must equal snapshot `balanceOf`, and every ID must pass multicall `ownerOf` at that same block before use or caching. Invalid/unavailable hints never become an empty balance; smaller-range logs are still tried where applicable.
-- Claims deduplicate/sort IDs, batch at 32, verify every owner and show the simulated payout. Each batch is re-previewed after human review; changed amounts stop the flow.
+- v6 claims deduplicate/sort NFT IDs in batches of 32. v9 claims account rewards, including SQK-only stakers, and supports claimAndStake. Both show simulated payout and re-preview after review; changed outcomes stop. v9 deposit/withdraw/mergeDeposited require confirmed depositor/custody; NFT and exact SQK approvals are separate explicit steps. Unstake reviews fee/net/maxFee/deadline and rejects a changed quote.
 - Merges require **`BURN-<donorId>` before call construction**, then simulation, human review, a fresh verified simulation, and the owner's wallet signature. No automatic donor selection/submission. Address comparisons are case-insensitive.
 - CLI/MCP hold **no owner keys** and never sign/submit transactions. The optional keeper is isolated in `keeper/`, off by default, and can only call `checkpoint()` after explicit dual opt-in.
 
@@ -38,7 +40,7 @@ npm run web                    # build + local static file server, port 5173
 npm run rpc:probe              # endpoint capability table; diagnostic, not live qualification
 npm test                       # deterministic offline regressions, safety, RPC budget, discovery and Activity
 npx playwright install --with-deps chromium
-npm run test:browser            # real Chromium, injected/offline data: components, profile races, persistence, and the 32 mocked screenshot states
+npm run test:browser            # real Chromium, injected/offline data: components, profile races, persistence, and the 44 mocked screenshot states
 npm run test:live               # real Chromium + public Sepolia RPCs; no RPC mocks or signatures
 ```
 
@@ -100,11 +102,11 @@ Pages publishes `dist/` automatically. `dist/` is generated, ignored and **not c
 
 ## Holder-first navigation
 
-- **Squeeks · Art · Network · Info**, with URL hashes (`#squeeks`, `#info/trust`, etc.). New sessions default to Network; connecting a wallet or viewing an address selects Squeeks. Explicit hashes survive reload and browser history. Legacy `selectTab('holdings'|'overview'|'agent')` API calls remain display-only aliases.
+- **Squeeks · Art · Network · Info**, with URL hashes (`#sepolia-v9/squeeks`, `#sepolia-v6/info/trust`, etc.). New sessions default to Network; connecting a wallet or viewing an address selects Squeeks. Explicit hashes survive reload and browser history. Legacy `selectTab('holdings'|'overview'|'agent')` API calls remain display-only aliases.
 - Profile status opens **Info › Trust**. The wallet menu has copy address, Activity with a pending count, and disconnect. Saved Activity remains reachable without reconnecting, including on Mainnet, where the menu cannot connect or submit.
 - **Settings**: browser-local custom HTTPS RPC save/test/remove, IndexedDB log-cache clear, confirmed Activity clear, and light/dark/system theme. RPC tests show chainId/block but do not establish two-peer trust.
-- **Info**: How it works, Trust, Status, Contracts, Developers (existing console, tools.json and local MCP snippet), About. Trust lists configured RPC peers honestly; the SDK does not expose which endpoint served each individual read.
-- Existing claim/merge inputs and BURN/simulation/signing behavior are unchanged. Selection actions, merge planner and per-Squeek pages are Phase 4, not implemented here. Staking stays **Coming when documented**.
+- **Info**: How it works, Trust, Status, Contracts, Developers (existing console, tools.json and local MCP snippet), About. Trust lists snapshot hash peers as Agreed and unsampled configured peers as Not sampled; it does not invent per-read provenance.
+- Existing claim/merge inputs and BURN/simulation/signing behavior are unchanged. Selection actions, merge planner and per-Squeek pages are Phase 4, not implemented here. v9 staking actions are integrated; policy reads follow the active profile.
 - The Genesis referral link now lives in Info › About, unchanged. Hero, introductory/section eyebrows, network strip and action/capability cards on Squeeks are removed.
 
 ## Unsigned CLI and MCP
@@ -121,7 +123,7 @@ npm run mcp
 
 Replace the illustrative addresses with real public addresses. Owner actions return unsigned calls for the owner's wallet. No `--live`, private-key option, unattended owner automation or `mine` command exists.
 
-MCP defaults to `SQUEEK_PROFILE=sepolia-v6`; `sepolia` exposes only unverified observations/art. Shared schemas are in `sdk/tools.js`, published as `web/tools.json`. Browser tools are available through `window.squeek.callTool(name, args)`; cross-origin messages cannot request wallet actions.
+MCP defaults to `SQUEEK_PROFILE=sepolia-v9`; every read/prepare tool accepts `profile: "sepolia-v6" | "sepolia-v9"`. Shared names/descriptions/schemas live only in `sdk/tools.js`, published as `web/tools.json` and checked against MCP/browser metadata. Browser tools use `window.squeek.callTool(name, args)`. All agent surfaces are unsigned read/prepare only; wallet prompts belong to the human UI. The CLI commands above remain v6 helpers.
 
 For an operator-run checkpoint keeper, read `keeper/checkpoint.mjs`: both `CHECKPOINT_KEEPER_ENABLED=true` and `--submit-checkpoint` are required, with a dedicated low-value keeper account supplied outside the app. Its target, calldata and value are fixed/checked; it is not exposed through CLI/MCP and is not enabled by any package script. Never supply an owner key.
 

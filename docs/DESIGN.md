@@ -1,45 +1,31 @@
-# Wheelhouse design contract — Phase 3
+# Wheelhouse design contract
 
-An independent browser-first holder utility, network second. Repository remains **Squeekchain-console**; deployment target is Vercel. No official affiliation, backend, RPC proxy or architecture restart.
+Browser-first Squeekchain holder utility. Preserve `sdk/`, `mcp/`, `src/`, `test/`, `build.mjs`, `wrangler.toml`; no architecture restart or RPC backend. Vercel target; `thewheel` workflow and repository name unchanged.
 
+## Equal profiles
 
-## Profile decision — 2026-11-03 (Phase 2 registry)
+**Sepolia v6 / Sepolia v9** are equal user choices. Canonical keys: `sepolia-v6` / `sepolia-v9`. Legacy `sepolia` migrates only at hash, saved-storage and MCP input boundaries; adapters and caches never receive it. Default v9, then saved choice. Hashes include profile. Connect probes both collection balances: one held selects it, both held shows counts/choice, neither retains selection; Unknown never silently selects another profile. Mainnet is Not deployed.
 
-**v6 and v9 are equal profiles. The user chooses; no version-based restriction.** This supersedes “v9 read-only, transactions disabled” and “staking only when documented.” The intended profiles are **Sepolia v6** and **Sepolia v9**. Mainnet remains **Not deployed**. Both versions use identical fail-closed identity/peer checks, simulation and authorization safeguards; no verified badge or signing with missing pins.
+Every operation uses the same fail-closed chain/snapshot/identity/slot/runtime/layout/version/wiring protection. Verification or stopped badges reflect runtime checks, not version policy. v9 expected identities come from the exact dated two-peer export, not an API configuration feed. Official-dApp-derived `sdk/abi-v9.js` is unchanged. Staking admin is a storage-slot check, not an invented ABI method; staking.launch zero is normal.
 
-First visit without a wallet defaults to v9; later visits restore the user's last choice. Hash routes include the profile. At connection, read both NFT balances: select the only held collection, ask with both counts when both are held, retain the current choice when neither is held. Failed/unknown counts must not become zero or silently auto-pick. Both options stay visible with connected-wallet counts.
+## Subtract standard
 
-Remove supported/read-only/unverified product labels after migration. The status badge shows live verification or a stopped state, never optimism based on the version. Reward pause/mining status comes from live readiness/advancement; one unchanged sample is not proof of a permanent freeze.
+Remove taglines, helper copy and secondary labels where layout or behavior can carry the information. Keep operational states, irreversible-action warnings, meaningful labels and Unknown. The footer has one non-affiliation/testnet/advice line. Checkpoint explains itself once in How it works; its card shows state/button. Art provenance lives in How it works and Contracts, not a gallery paragraph.
 
-Use the existing official-dApp-derived `sdk/abi-v9.js`, not handwritten ABI fragments. Contracts must disclose v6 published-record provenance and v9 official-bundle provenance with the verified staking source. Both wallet-held and confirmed staked Squeeks appear together with Wallet/Staked tags. Deposits have a separate explained approval step; per-token approval is preferred and broader approval requires an explicit choice. Both merge paths require exact BURN-<donorId>. Unstake shows quoteUnstake fee/net and uses the quoted fee as maxFee with a deadline. Every wallet prompt requires simulation; claims are freshly previewed before signing. The same action names/profile arguments and burn rules apply to tools.json and local unsigned MCP.
+Data panels use small chain/API icons with accessible names/tooltips. Trust is one verification/block/age line plus peers with Agreed/Not sampled states; never imply all configured endpoints served a read. A local age timer performs no RPC. Policy comes from the active profile's on-chain reads and clears to Unknown on failure/switch. Cooldowns are labelled in blocks. Pause explanation renders only for a true pause; mining-live requires observed round advancement.
 
-**Not implemented yet:** registry migration, v9 actions, agent schemas, new fixtures/budgets/screenshots and the unexecuted v9 live gate extension. Source audit found the requested local ABI entries, but complete same-block on-chain pins cannot yet be established with this environment's available networking/tools. API observations and verified constructor arguments are not substituted for current storage/code/wiring reads. See the [STATUS blocker/checklist](STATUS.md) and [candidate-only evidence](audit/profile-registry-evidence-2026-11-03.json). Current UI/code still reflects the legacy baseline below; it must not be described as the completed equal-profile design.
+Squeeks empty state has connection and watch-address controls, not instructions. Staking action fields appear only when relevant. Approval scope is explicit, with one-NFT approval preferred and all-current/future approval a separate choice. RPC-secret warnings appear inline only for key-like URL paths/queries. Activity rows retain their own receipt state and originating canonical profile across navigation.
 
-## Foundations
+## Safety and agents
 
-- Light by default; explicit light/dark/system saved preference wins. System follows OS changes. Theme metadata/state, local fonts and pre-paint selection retained.
-- Local Barlow Condensed headings, Quicksand body and IBM Plex Mono labels/data. Neutral panels with gold primary controls, blue focus/links, semantic danger colors; readable 11px operational labels and tabular numbers.
-- Header controls 36px, common radius and 8px gaps; theme/refresh/gear have authored 18px glyphs. Action/dialog controls remain 44px. Visible 3px focus, reduced motion, skip link, keyboard tab/menu navigation, sheet and confirmation focus traps/restoration.
-- Existing selected text/background contrast checks require at least 4.5:1 in light and dark; not a blanket WCAG or Lighthouse certification.
+Both wallet and staked merges require exact BURN-<donorId> before construction/simulation. The input's label gives the instruction; the dialog retains the permanent-burn safety line. Fresh simulation precedes every wallet prompt. Claims re-preview actual payout and recipient; changed outcomes stop. Unstake uses a labelled amount/fee-maxFee/net/deadline/gas review, and reuses the reviewed cap/deadline on re-preview. Agents read or prepare unsigned calls only: the same registry in `sdk/tools.js` drives generated JSON, local stdio MCP and browser tools. Human UI owns wallet prompts; there are no agent wallet-popup tools or owner keys.
 
-## Existing Phase 3 structure (registry migration pending)
+## Structure and accessibility
 
-Squeeks · Art · Network · Info use URL hashes. Network defaults without a wallet/watch; connecting or viewing an address selects Squeeks. Explicit deep links survive reload/history. No hero, page intro, section eyebrows, network strip or next-move cards. Holdings capability cards move to Info › Status. Watch input sits at the top of Squeeks with its existing read-only inspection behavior. Existing claim/merge inputs remain until Phase 4.
+Squeeks · Art · Network · Info, profile-qualified hash routes, back/deep-link support. Info contains How it works, Trust, Status, Contracts, Developers and About; Contracts exposes both address graphs and source provenance. Wallet menu: copy, Activity and disconnect. Settings: HTTPS RPC save/test/remove, discovery-cache clear, confirmed Activity clear, light/dark/system. Developers and Settings code stay lazy-loaded.
 
-Status opens Info › Trust. Wallet menu has copy, Activity/pending count and disconnect; saved Activity remains reachable across profiles and after disconnection. Mainnet exposes no connection/signing through that menu. Activity drawer and Settings sheet close with Escape/backdrop and restore focus. Activity monitoring remains in-tab.
+Light default; saved light/dark/system override. Local Barlow Condensed, Quicksand, IBM Plex Mono; warm panels, gold primary and blue focus/links. Header controls remain 36px/common radius/8px gap/18px glyphs; body/dialog action controls 44px. Visible 3px focus, keyboard tab/menu navigation, modal/sheet traps and focus restoration, reduced motion and skip link. Artwork remains an isolated image. Unknown is not an invented zero.
 
-Settings holds custom HTTPS RPC save/test/remove, discovery-cache clear, confirmed Activity clear and light/dark/system theme. RPC diagnostic chainId/block is not a verification pass. Custom peers join, never replace, two-peer snapshot checks. Cache clear does not erase ownership checks, deployment pins or unrelated storage.
+## Evidence
 
-Info anchors: How it works, Trust, Status, Contracts, Developers, About. Policy table is display-only published v6 data. Actual readiness, pauses and cooldown eligibility still come from verified live reads. Trust shows the snapshot/check time, configured peers and mismatch stop rationale without inventing per-read endpoint provenance. The existing tool console, tools.json and local stdio MCP snippet live in Developers; no tool/signing expansion. About retains source/non-affiliation/testnet copy and the user's Genesis referral URL under Discover Genesis.
-
-## Components and safety
-
-Existing Panel, Stat, Table, TokenCard, ConfirmDialog, Toast and Skeleton architecture stays intact. Mobile holdings remain labelled cards from the same table cells; artwork stays an isolated image. Unknown remains visible, known zero stays zero, unavailable readings do not masquerade as live data. Modal BURN-<id>, fresh simulation and wallet-only signing are unchanged. The legacy implementation still withholds v9/staking actions pending the pin/registry migration described above; this is no longer the desired version policy. Mainnet actions stay unavailable. Footer non-affiliation remains.
-
-## Acceptance
-
-[32 mocked captures](screenshots/README.md), covering Squeeks/Network/Info/Settings/Merge/Mainnet in light/dark at 1280/390 plus connected/disconnected header crops. Production contains no mocked-review ribbon; fixtures inject it only for review evidence.
-
-11 offline scripts and 48 mocked Chromium checks pass. Build checks static parity and independently gzips all five JS responses: **150,497 bytes**, below 200,000 ([report](audit/phase1-js-size.json)). Fonts/CSS are not JavaScript. Wire budgets remain 22 cold / 12 warm / 15 wallet; no new background RPC polling.
-
-No live rerun or automatic qualification trigger. Phase 0 historical evidence is preserved; it does not qualify this source head. Phase 4 selection/planner/per-token work, later slim Network/Genesis decision, agent expansion and Phase 7 Vercel CSP/Lighthouse work remain deferred.
+See [STATUS](STATUS.md) for exact current results and limits, [44 mocked captures](screenshots/README.md), [gzip report](audit/phase2-js-size.json), and both request-budget reports. Total external JavaScript is **152,951 bytes / 250,000 cap**, independently gzipped including lazy scripts. Offline tests are not live qualification. No live suite, signing, workflow dispatch, keeper, merge or deploy was run. Phase 4 planner/per-token redesign remains deferred.

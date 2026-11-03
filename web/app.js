@@ -2,8 +2,8 @@
  * Wheelhouse — a Squeekchain holder console.
  *
  * Profile-driven: each deployment profile maps onto an adapter with the same surface
- * (verify / networkStatus / walletStatus / optional owner actions / optional art).
- *   sepolia      → live graph, issuance v9 + staking + new NFT  (reads + art; owner actions gated)
+ * (verify / networkStatus / walletStatus / capability-driven actions / art).
+ *   sepolia-v9   → pinned issuance v9 + staking + NFT graph (guarded reads/actions)
  *   sepolia-v6   → the docs-pinned SqueekMining v6 graph        (reads + checkpoint/claim/merge)
  *   mainnet      → no deployment
  *
@@ -22,8 +22,10 @@ import {
   createDiscoveryStore,
   createRpcContext,
   rpcToolError,
-  SQUEEKS_POLICY,
+  ACTION_REASONS,
   PUBLIC_RPC_ENDPOINTS,
+  runReadTool, toolProfile,
+  profileBalances, chooseProfile, profileFromHash, profileInput, parseEther, formatEther,
 } from "./bundle.js";
 
 import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
@@ -33,7 +35,7 @@ import { createTelemetry, telemetryView } from "./telemetry.js";
 const EXPLORER = "https://eth-sepolia.blockscout.com";
 const THEME_KEY = "squeekchain:theme";
 
-export function mount({ doc = document, win = window, adapterFactory, fetcher = globalThis.fetch, activityReader } = {}) {
+export function mount({ doc = document, win = window, adapterFactory, fetcher = globalThis.fetch, activityReader, profileBalanceReader } = {}) {
   const $ = (id) => doc.getElementById(id);
   const el = {
     profileSelect: $("profile-select"),
@@ -58,7 +60,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       notice: $("profile-notice"),
       settlement: $("settlement-notice"),
     },
-    cp: { button: $("btn-checkpoint"), reason: $("cp-reason"), out: $("cp-result"), explain: $("cp-explain") },
+    cp: { button: $("btn-checkpoint"), reason: $("cp-reason"), out: $("cp-result") },
     holder: {
       owner: $("holder-owner"),
       body: $("holder-body"),
@@ -110,7 +112,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
 
   const state = {
-    profileKey: getProfile(store.get("squeekchain:profile") ?? DEFAULT_PROFILE).key,
+    profileKey: profileFromHash(win.location.hash) ?? profileInput(store.get("squeekchain:profile")),
+    profileCounts: {},
     adapter: null,
     account: null,
     chainId: null,
@@ -166,7 +169,6 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const themeMedia = win.matchMedia?.('(prefers-color-scheme: dark)');
   const onSystemTheme = () => { if (store.get(THEME_KEY) === 'system') applyTheme('system'); };
   themeMedia?.addEventListener?.('change', onSystemTheme);
-  $('theme-choice').onchange = () => applyTheme($('theme-choice').value);
   el.theme.onclick = () => applyTheme(doc.documentElement.dataset.theme === "dark" ? "light" : "dark");
 
   // ── profile switching ──────────────────────────────────────────────────────
@@ -238,19 +240,23 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       ...Object.values(PROFILES).map((p) => {
         const option = doc.createElement("option");
         option.value = p.key;
-        option.textContent = p.label;
+        const count = state.profileCounts[p.key];
+        option.textContent = p.label + (state.account && p.addresses ? ` · ${count ?? "Unknown"} Squeeks` : "");
         // Mainnet remains selectable as an honest launch-status view.
         return option;
       }),
     );
     el.profileSelect.value = state.profileKey;
-    const profile = getProfile(state.profileKey), badge = $("profile-status");
-    badge.textContent = profile.kind === 'supported' ? 'Supported' : profile.addresses ? 'Read-only' : 'Not deployed';
-    badge.className = `chip ${profile.kind === 'supported' ? 'ok' : 'warn'}`;
-    badge.setAttribute('aria-label', `${badge.textContent}: open Info Trust`);
+    const badge = $('profile-status');
+    badge.setAttribute('aria-label', 'Live verification: open Info Trust');
+    $('profile-choice').classList.toggle('hidden', !state.account || !(BigInt(state.profileCounts['sepolia-v6'] ?? 0) > 0n && BigInt(state.profileCounts['sepolia-v9'] ?? 0) > 0n));
+    $('profile-choice').textContent = `You hold ${state.profileCounts['sepolia-v6'] ?? 'Unknown'} v6 and ${state.profileCounts['sepolia-v9'] ?? 'Unknown'} v9 Squeeks. Choose either profile in the selector.`;
   }
 
-  async function switchProfile(profileKey) {
+  async function switchProfile(profileKey, { preserveWallet = false } = {}) {
+    preserveWallet = preserveWallet && Boolean(getProfile(profileKey).addresses);
+    const account = preserveWallet ? state.account : null;
+    const chainId = preserveWallet ? state.chainId : null;
     // Navigation ALWAYS wins, including while a simulation or wallet prompt is pending.
     loadController.abort();
     generation++;
@@ -260,7 +266,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     closeWalletMenu();
     state.profileKey = getProfile(profileKey).key;
     state.adapter = null;
-    state.account = state.chainId = state.inspected = null;
+    state.account = state.inspected = account; state.chainId = chainId;
     state.net = state.status = state.plan = null;
     state.receipts = [];
     state.art.clear();
@@ -304,11 +310,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $("not-deployed").classList.toggle("hidden", deployed);
     $("not-deployed-note").textContent = deployed ? "" : getProfile(state.profileKey).notes;
     el.refresh.classList.toggle("hidden", !deployed);
-    el.verified.classList.toggle('hidden', !deployed);
+    el.verified.classList.remove('hidden');
     selectTab(currentRoute());
   }
 
-  const capabilities = () => getProfile(state.profileKey).capabilities;
+  const capabilities = () => ({...getProfile(state.profileKey).capabilities,reasons:ACTION_REASONS});
 
   function renderNetworkPlaceholder() {
     const profile = getProfile(state.profileKey);
@@ -318,55 +324,73 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.net.paused.parentElement.className = "stat";
     el.cp.button.disabled = true;
     el.cp.reason.textContent = profile.addresses ? "Waiting for verified chain state." : "Unavailable until a mainnet deployment is published and verified.";
-    el.verified.textContent = profile.addresses ? "verifying…" : "not deployed";
-    el.verified.className = "chip";
+    el.verified.textContent = profile.addresses ? "Checking…" : "Not deployed";
+    el.verified.className = "";
+    $("profile-status").className = "chip";
     renderTrust(null);
+    renderPolicy(null);
     renderContracts(profile);
     renderCapabilities(profile);
     el.net.chain.textContent = profile.chainId === CHAIN.id ? "Sepolia" : "Ethereum";
-    el.net.kind.textContent = profile.kind;
+    el.net.kind.textContent = profile.label;
     el.net.release.textContent = profile.identities?.release ?? (profile.addresses ? "docs-pinned v6" : "no deployment");
-    el.net.notice.textContent = profile.notes ?? "";
-    el.net.notice.className = `notice ${profile.kind === "supported" ? "" : "warn"}`;
+    el.net.notice.textContent = "";
+    el.net.notice.className = "notice hidden";
   }
 
   function renderCapabilities(profile) {
     $('capability-profile').textContent = profile.label;
-    const cards = [['Claim', 'claim'], ['Merge', 'merge'], ['Checkpoint', 'checkpoint'], ['Art', 'art'], ['Staking', 'deposit'], ['v9', null]];
+    const cards = [['Claim', 'claim'], ['Merge', 'merge'], ['Checkpoint', 'checkpoint'], ['Art', 'art'], ['Staking', 'deposit']];
     $('capability-grid').replaceChildren(...cards.map(([title, cap]) => {
       const row = doc.createElement('div'); row.className = 'capability';
       const heading = doc.createElement('h3'); heading.textContent = title;
       const badge = doc.createElement('span'); badge.className = `chip ${cap && profile.capabilities[cap] ? 'ok' : 'warn'}`;
-      badge.textContent = !profile.addresses ? 'Not deployed' : cap && profile.capabilities[cap] ? 'Supported' : 'Coming when documented';
+      badge.textContent = !profile.addresses ? 'Not deployed' : cap && profile.capabilities[cap] ? 'Available' : capabilities().reasons.unavailable;
       row.append(heading, badge); return row;
     }));
   }
 
   function renderContracts(profile) {
-    $('contracts-release').textContent = profile.identities?.release ?? (profile.addresses ? 'squeeks-sepolia-core3-mining6-001' : 'Not deployed');
-    $('contracts-list').replaceChildren(...Object.entries(profile.addresses ?? {}).map(([name, address]) => {
-      const row = doc.createElement('li'), link = doc.createElement('a');
-      link.textContent = `${name}: ${address}`; link.href = `${EXPLORER}/address/${address}`;
-      link.target = '_blank'; link.rel = 'noopener noreferrer'; row.append(link); return row;
+    if(!profile.addresses) { $('contracts-release').textContent='Not deployed'; $('contracts-list').replaceChildren(); return; }
+    $('contracts-release').textContent=profile.addresses?profile.identities?.release??'squeeks-sepolia-core3-mining6-001':'Not deployed';
+    const sources=[['v6 · Published deployment','https://docs.squeekchain.com/assets/deployments/sepolia.json'],['v9 · Official dApp ABI','https://github.com/CryptoExplor/Squeekchain-console/blob/arena/417b8688-squeekchain-console/sdk/abi-v9.js'],['Staking · Verified source',`${EXPLORER}/address/${PROFILES['sepolia-v9'].addresses.staking}?tab=contract`],['Identity pins · 2026-11-03','https://github.com/CryptoExplor/Squeekchain-console/blob/arena/417b8688-squeekchain-console/docs/audit/v9-identity-2026-11-03.json']];
+    const link=(label,url)=>{const node=doc.createElement('a');node.textContent=label;node.href=url;node.target='_blank';node.rel='noopener noreferrer';return node;};
+    $('contracts-list').replaceChildren(...sources.map(([label,url])=>{const row=doc.createElement('li');row.append(link(label,url));return row;}),...Object.values(PROFILES).filter(p=>p.addresses).map(candidate=>{
+      const row=doc.createElement('li'),details=doc.createElement('details'),summary=doc.createElement('summary'),list=doc.createElement('ul');summary.textContent=candidate.label;details.open=candidate.key===state.profileKey;
+      const seen=new Set();for(const[name,address]of Object.entries(candidate.addresses)) {if(seen.has(address.toLowerCase()))continue;seen.add(address.toLowerCase());const item=doc.createElement('li');item.append(link(`${name}: ${address}`,`${EXPLORER}/address/${address}`));list.append(item);}details.append(summary,list);row.append(details);return row;
     }));
   }
 
   let lastVerificationTime = null;
+  function updateTrustAge() {
+    const age=lastVerificationTime == null ? null : Math.max(0,Math.floor((Date.now()-lastVerificationTime)/1000));
+    $('trust-time').textContent=age==null?UNKNOWN:`${age} s ago`;
+    $('verification-age').textContent=age==null?'':` · ${age}s`;
+  }
   function renderTrust(v) {
-    $('trust-block').textContent = valueText(v?.blockNumber ?? state.net?.snapshot?.blockNumber);
-    if (v) lastVerificationTime = new Date().toISOString();
-    else lastVerificationTime = null;
-    $('trust-time').textContent = valueText(lastVerificationTime);
-    $('trust-result').textContent = v ? v.trusted === false ? 'Read-only · unverified; all transactions disabled' : v.ok ? 'Published identities verified; two peer hashes agree' : 'Mismatch: stop' : 'Unknown — no current verified snapshot';
-    const customRpc = store.get('wheelhouse:rpc');
-    const peers = [...(customRpc ? ['Custom HTTPS peer (browser-local URL hidden)'] : []), ...PUBLIC_RPC_ENDPOINTS.map(peer => new URL(peer.url).hostname)];
-    $('info-reward-status').textContent = state.net?.core?.paused === true ? 'Rewards paused: live Core reads stop new checkpoints and issuance. Already-funded rewards may still be claimable.' : state.net?.core?.paused === false ? `Live Core reads: not paused. ${el.net.settlement.textContent}` : 'Live reward state: Unknown.';
-    $('trust-rpcs').textContent = getProfile(state.profileKey).addresses ? `${state.account ? 'Connected Sepolia wallet preferred; ' : ''}${peers.join(' · ')}` : 'None — Mainnet is not deployed';
+    lastVerificationTime=v?Date.now():null;
+    $('trust-block').textContent=valueText(v?.blockNumber ?? state.net?.snapshot?.blockNumber);
+    $('trust-result').textContent=v ? v.ok && v.trusted ? 'Verified' : capabilities().reasons.mismatch : UNKNOWN;
+    updateTrustAge();
+    $('core-pause-note').classList.toggle('hidden',state.net?.core?.paused!==true);
+    $('info-reward-status').textContent=el.net.settlement.textContent || UNKNOWN;
+    const peers = [...(store.get('wheelhouse:rpc')?['Custom RPC']:[]),...PUBLIC_RPC_ENDPOINTS.map(peer=>new URL(peer.url).hostname)];
+    const checked=state.net?.snapshot?.peers??[];
+    $('trust-rpcs').replaceChildren(...(getProfile(state.profileKey).addresses?peers:[]).map(label=>{
+      const item=doc.createElement('li');item.textContent=`${label} · ${checked.some(peer=>peer.label===label&&peer.state==='agreed')?'Agreed':'Not sampled'}`;return item;
+    }));
+  }
+  function renderPolicy(policy) {
+    const levels=policy?.levels;
+    $('policy-levels').replaceChildren(...(levels?.length?levels:[null]).map(level=>{
+      const row=doc.createElement('tr');
+      for(const value of level?[level.level,level.weight??level.basePower,level.cooldownBlocks]:[null,null,null]) {const cell=doc.createElement('td');cell.textContent=valueText(value);row.append(cell);}return row;
+    }));
   }
 
   async function refreshTelemetry({ reset = true } = {}) {
     const load = captureLoad();
-    const enabled = state.profileKey === "sepolia";
+    const enabled = state.profileKey === "sepolia-v9";
     if (reset || !enabled) {
       for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = UNKNOWN;
       $("wheel-state").textContent = enabled ? "Loading" : "Unavailable";
@@ -376,7 +400,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     try {
       const view = telemetryView(await viewAwait(load, () => telemetry.read({ signal: load.signal })));
       if (!isCurrent(load)) return;
-      $("wheel-state").textContent = view.state;
+      $("wheel-state").textContent = `${view.state}${view.age==null?"":` · ${view.age}s`}`;
       $("wheel-rpm").textContent = view.rpm;
       $("wheel-speed").textContent = view.speed;
       $("wheel-distance").textContent = view.distance;
@@ -437,6 +461,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         if (!state.account || !state.adapter || destroyed) return;
         dialog.close();
         state.account = accs?.[0] ?? null;
+        state.profileCounts = {}; renderProfileOptions();
         state.inspected = state.account;
         state.status = null;
         renderWalletChip();
@@ -446,6 +471,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       walletListenersRegistered = true;
       }
       hideBanner();
+      try {
+        const counts = await viewAwait(load, () => profileBalanceReader ? profileBalanceReader(state.account) : profileBalances(state.account, { rpcUrl: store.get('wheelhouse:rpc') || undefined, provider: () => provider(), chainCache, signal: load.signal }));
+        state.profileCounts = counts;
+      } catch (err) { if (!isCurrent(load)) return null; state.profileCounts = {}; }
+      renderProfileOptions();
+      const chosen = chooseProfile(state.profileKey, state.profileCounts);
+      if (chosen !== state.profileKey) { await switchProfile(chosen, { preserveWallet: true }); selectTab('squeeks'); return state.account; }
       renderWalletChip();
       selectTab('squeeks');
       await refreshWallet();
@@ -488,7 +520,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       // A profile switch cannot cancel this wallet popup or an already-broadcast transaction.
       hash = await p.request({ method: "eth_sendTransaction", params: [{ from: owner, to: tx.to, data: tx.data, value: `0x${BigInt(tx.value ?? 0).toString(16)}` }] });
       // Persist BEFORE checking profile generation. Even a late wallet response belongs in Activity.
-      activity.record(hash, label, CHAIN.id);
+      activity.record(hash, label, CHAIN.id, load.profileKey);
       void activity.refresh();
     } finally {
       state.busy = false;
@@ -509,23 +541,19 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   // ── rendering ─────────────────────────────────────────────────────────────
+  const observedRounds = new Map();
   function renderNetwork(net) {
+    const previous = observedRounds.get(state.profileKey);
+    const round = net.core?.settledThroughRound;
+    if (/^\d+$/.test(String(round))) observedRounds.set(state.profileKey, BigInt(round));
     state.net = net;
-    renderNetworkPlaceholder();
-    const core = net.core ?? {}, mining = net.mining ?? {}, checkpoint = net.checkpoint ?? {};
-    setStat(el.net.round, core.settledThroughRound);
-    if (getProfile(state.profileKey).abiSet === "v6" && /^\d+$/.test(String(core.settledThroughRound))) {
-      let note = `Settlement frontier at round ${core.settledThroughRound}.`;
-      if (checkpoint.canCheckpoint === false && checkpoint.roundSettled === false && String(mining.lagRounds) === "0") {
-        note += " No new rewards are being issued on this deployment at this snapshot: the next round is not settled. Existing rewards may still be claimable.";
-      } else if (checkpoint.canCheckpoint === true) {
-        note += " Settled rounds are available to checkpoint; new rewards may be issued after a successful checkpoint.";
-      } else {
-        note += " Reward issuance depends on live settlement and checkpoint readiness; this reading does not establish a permanent freeze.";
-      }
-      el.net.settlement.textContent = note;
-      el.net.settlement.classList.remove("hidden");
-    }
+    const core=net.core??{},mining=net.mining??{},checkpoint=net.checkpoint??{};
+    setStat(el.net.round,core.settledThroughRound);
+    const hasRound=/^\d+$/.test(String(round));
+    const readiness=core.paused===true?capabilities().reasons.paused:checkpoint.canCheckpoint===true?`Round ${checkpoint.nextRound} ready to checkpoint.`:checkpoint.roundSettled===false?capabilities().reasons.unsettled:'Awaiting the next live advancement reading.';
+    const advancement=hasRound&&previous!=null&&BigInt(round)>previous&&core.paused!==true?' Mining live: rounds advanced.':'';
+    el.net.settlement.textContent=hasRound?`Settled through round ${round}. ${readiness}${advancement}`:'';
+    el.net.settlement.classList.toggle('hidden',!hasRound);
     setStat(el.net.blocks, core.blockHeight, num);
     setStat(el.net.lag, mining.lagRounds, value => num(value) === UNKNOWN ? UNKNOWN : `${num(value)} round(s)`);
     setStat(el.net.issued, mining.issued ?? mining.minted, sqk);
@@ -540,9 +568,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       ? checkpoint.canCheckpoint
         ? `next round ${valueText(checkpoint.nextRound)} is settled — a checkpoint will fund it`
         : checkpoint.reason ?? UNKNOWN
-      : `${checkpoint.contract ?? "issuance"} checkpoint is read-only here: v9 flows are undocumented, so this build will not guess. Status: ${checkpoint.reason ?? UNKNOWN}.`;
-    el.cp.explain.textContent =
-      "Turns settled rounds into issued SQK. Holders cannot claim until someone checkpoints, so this is the job a wallet without Squeeks can do.";
+      : caps.reasons.unavailable;
+    renderPolicy(net.policy);
   }
 
   function renderWalletChipStats(status) {
@@ -556,8 +583,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       ? [
           { key: "tokenId", label: "token" },
           { key: "level", label: "level" },
-          { key: "nextMergeHeight", label: "next merge" , num: true },
-          { key: "deposited", label: "deposited" },
+          { key: 'cooldown', label: 'Cooldown (blocks)', num:true },
+          { key: "custody", label: "custody" },
           { key: "art", label: "art" },
         ]
       : [
@@ -565,7 +592,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
           { key: "level", label: "level" },
           { key: "activeWeight", label: "power", num: true },
           { key: "pendingRound", label: "pending" },
-          { key: "nextMergeBlock", label: "merge @", num: true },
+          {key:'cooldown',label:'Cooldown (blocks)',num:true},
           { key: "claimable", label: "claimable SQK", num: true },
           { key: "art", label: "art" },
         ];
@@ -583,7 +610,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!status) {
       for (const node of [el.holder.count, el.holder.power, el.holder.share, el.holder.claimable]) setStat(node, null);
       el.holder.tbody.replaceChildren(); el.holder.head.replaceChildren(); el.holder.mergeList.replaceChildren();
-      el.holder.claim.disabled = true; $("btn-custom-merge").disabled = true; return;
+      el.holder.claim.disabled = true; $("btn-custom-merge").disabled = true; $("v9-actions").classList.add("hidden"); return;
     }
     const totals = status.totals ?? {};
 
@@ -596,18 +623,22 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.holder.hint.textContent = num(totals.count) === UNKNOWN ? "Holdings count Unknown; actions remain disabled." : !has
       ? "this address owns no Squeeks — it can still run checkpoints"
       : !caps.claim
-        ? "v9 claims are staking-side and undocumented — this build stays read-only for owner actions"
+        ? caps.reasons.unavailable
         : signerOwns
           ? totals.estimatedSqkPerDay
             ? `≈${num(totals.estimatedSqkPerDay)} SQK/day at current share`
             : ""
-          : "read-only view: connect this wallet to claim or merge";
-    el.holder.claim.disabled = state.busy || !has || !signerOwns || !caps.claim;
+          : "Connect owner wallet";
+    el.holder.claim.disabled = state.busy || (!has && !isV9) || !signerOwns || !caps.claim;
     $("btn-custom-merge").disabled = state.busy || !has || !signerOwns || !caps.merge;
-    $("claim-ids").disabled = !caps.claim;
+    $("claim-ids").disabled = !caps.claim || isV9;
+    $("claim-ids").classList.toggle("hidden", isV9);
+    $("v9-actions").classList.toggle("hidden", !isV9);
+    $("v9-review").disabled = !signerOwns || state.busy;
     el.holder.watchRow.classList.toggle("hidden", Boolean(state.account));
 
     Table({ head: el.holder.head, body: el.holder.tbody, columns: columnsForProfile(), rows: status.squeeks ?? [], cell: (s, c) => {
+      if(c.key==='cooldown') {const until=s.nextMergeHeight??s.nextMergeBlock, height=status.net?.core?.blockHeight??state.net?.core?.blockHeight;return until==null||height==null?UNKNOWN:String(BigInt(until)>BigInt(height)?BigInt(until)-BigInt(height):0n);}
       if (c.key === 'claimable') return s.claimable ? num(s.claimable.sqk, 4) : UNKNOWN;
       if (c.key === 'deposited') return s.deposited == null ? UNKNOWN : s.deposited ? 'yes' : 'no';
       if (c.key === 'pendingRound') return s.pendingRound == null ? UNKNOWN : String(s.pendingRound) === '0' ? 'None' : `r${s.pendingRound}`;
@@ -623,12 +654,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     // merge plan
     el.holder.mergeList.replaceChildren();
     el.holder.mergeNote.textContent = !caps.merge
-      ? "Merge planning is disabled on this profile: v9 merges run on SqueekNFT.merge(survivor, donor) and are not documented yet."
-      : (plan?.note ?? "Same-level pairs that already satisfy every onchain precondition.");
+      ? caps.reasons.unavailable
+      : "Merging burns the donor NFT permanently and raises the survivor one level.";
     for (const pair of plan?.pairs ?? []) {
       const li = doc.createElement("li");
       const text = doc.createElement("span");
-      text.textContent = `keep #${pair.survivor} · burn #${pair.donor} · L${pair.level}→L${pair.nextLevel} · power ${pair.powerBefore}→${pair.powerAfter} (+${pair.powerGainPercent}%)`;
+      text.textContent = `Keep #${pair.survivor} · burn #${pair.donor} · L${pair.level}→L${pair.nextLevel}${pair.deposited?" · Staked":""}${pair.powerBefore==null?"":` · power ${pair.powerBefore}→${pair.powerAfter}`}`;
       if (signerOwns && caps.merge) {
         const button = doc.createElement("button");
         button.className = "btn btn-danger";
@@ -648,9 +679,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   // ── refresh ───────────────────────────────────────────────────────────────
   function renderVerification(v) {
       renderTrust(v);
-      el.verified.textContent = v.trusted === false ? "Unverified" : v.ok ? "verified ✓" : `${v.problems?.length ?? 1} problem(s)`;
-      el.verified.className = `chip ${v.trusted === false ? "warn" : v.ok ? "ok" : "bad"}`;
-      el.verified.title = v.trusted === false ? "Read-only (unverified): observed identities are not published trust pins. All transactions disabled." : v.ok ? `Published identities fully verified at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; proxy slots checked at ${v.blockNumber ?? "unknown"}. Two public RPC block hashes agree for this snapshot.` : (v.problems ?? []).join("; ");
+      el.verified.textContent = v.ok && v.trusted ? "Verified" : "Stopped";
+      el.verified.className = ""; $("profile-status").className = `chip ${v.ok && v.trusted ? "ok" : "bad"}`;
+      el.verified.title = v.ok && v.trusted ? `Pinned identities fully verified at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; proxy slots checked at ${v.blockNumber ?? "unknown"}. Two public RPC block hashes agree for this snapshot.` : (v.problems ?? []).join("; ");
   }
 
   async function refreshNetwork() {
@@ -668,9 +699,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (!isCurrent(load)) return null;
       state.net = null;
       renderNetworkPlaceholder();
-      el.verified.textContent = "read failed";
-      el.verified.className = "chip bad";
-      $('trust-result').textContent = 'Read failed: stop. No current verified snapshot.';
+      el.verified.textContent = "Stopped";
+      el.verified.className = ""; $("profile-status").className = "chip bad";
+      renderTrust({ok:false,trusted:false});
+      $('trust-result').textContent='Stopped';
       showBanner(`Read failed: ${errorMessage(err)}. Nothing was signed.`, "bad");
       return null;
     } finally {
@@ -731,7 +763,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   async function requestCheckpoint() {
     const load = captureLoad(), owner = state.account;
     const caps = capabilities();
-    if (!caps.checkpoint) throw new Error("checkpoint is read-only on this profile (v9 flows undocumented)");
+    if (!caps.checkpoint) throw new Error(capabilities().reasons.unavailable);
     const preview = await readFor(load, "checkpointPreview", owner ?? undefined);
     showOut(el.cp.out, preview);
     if (!preview.ok) {
@@ -750,7 +782,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   async function requestClaim(tokenIds) {
     const load = captureLoad();
     const caps = capabilities();
-    if (!caps.claim) throw new Error("claims are read-only on this profile (v9 staking flows undocumented)");
+    if (!caps.claim) throw new Error(capabilities().reasons.unavailable);
     const owner = state.inspected ?? state.account;
     const preview = await readFor(load, "claimPreview", owner, tokenIds);
     showOut(el.holder.claimOut, preview);
@@ -764,7 +796,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     const confirmed = await confirmModal({
       title: "Claim SQK",
-      body: `Claim ${preview.total.sqk} SQK across ${preview.batches.length} transaction(s)? Simulated successfully; your wallet asks next.`,
+      body: `Claim ${preview.total.sqk} SQK · ${preview.batches.length} transaction(s)${preview.recipient?` · Recipient ${preview.recipient}`:""}.`,
       confirmLabel: "Sign claim",
     });
     if (!confirmed) return { ok: false, reason: "cancelled" };
@@ -773,7 +805,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for (const batch of preview.batches) {
       if (!isCurrent(load) || state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet or profile changed. Stopped.");
       const fresh = await readFor(load, "claimPreview", owner, batch.tokenIds);
-      if (!fresh.ok || fresh.batches.length !== 1 || fresh.batches[0].amount.base !== batch.amount.base) throw new Error("Claim outcome changed. Review a fresh preview; no automatic retry.");
+      if (!fresh.ok || fresh.batches.length !== 1 || fresh.batches[0].amount.base !== batch.amount.base || fresh.recipient?.toLowerCase()!==preview.recipient?.toLowerCase()) throw new Error("Claim outcome changed. Review a fresh preview; no automatic retry.");
       receipts.push(await sendTransaction(fresh.batches[0].tx, `claim(${batch.tokenIds.length} ids)`, owner, load));
     }
     await refreshAll();
@@ -781,13 +813,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   async function requestMerge(pair) {
-    if (!capabilities().merge) throw new Error("Merges are not supported on this profile.");
+    if (!capabilities().merge) throw new Error(capabilities().reasons.unavailable);
     const owner = state.account ?? state.inspected;
     const load = captureLoad();
     const confirm = `BURN-${BigInt(pair.donor)}`;
     const confirmed = await confirmModal({
       title: `Keep #${pair.survivor} · burn #${pair.donor}`,
-      body: `#${pair.donor} is BURNED permanently and cannot be restored. #${pair.survivor} survives. Type ${confirm} before we build or simulate this call. You will review the simulation before your wallet opens.`,
+      body: "Merging burns the donor NFT permanently and raises the survivor one level.",
       requireText: confirm,
       confirmLabel: "Acknowledge burn & simulate",
     });
@@ -801,11 +833,47 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     // Fresh verification, ownership, eligibility and simulation after human review.
     const fresh = await readFor(load, "mergePreview", owner, pair.survivor, pair.donor, { confirm });
     if (!fresh.ok) return fresh;
+    if(fresh.nextLevel!==preview.nextLevel)throw new Error("Outcome changed. Review a fresh preview.");
     const result = await sendTransaction(fresh.tx, `merge(${pair.survivor} ← ${pair.donor})`, owner, load);
     await refreshAll();
     return { ok: true, ...result };
   }
 
+  async function requestAction(action, input = {}) {
+    if (!capabilities().deposit) throw new Error(capabilities().reasons.unavailable);
+    const load = captureLoad(), owner = state.account;
+    if (!owner || owner.toLowerCase() !== state.inspected?.toLowerCase()) throw new Error('Connect the inspected owner wallet');
+    if (action === 'mergeDeposited') {
+      const burn = `BURN-${BigInt(input.donor)}`;
+      if (!await confirmModal({ title: 'Merge staked Squeeks', body: "Merging burns the donor NFT permanently and raises the survivor one level.", requireText: burn, confirmLabel: 'Acknowledge burn & simulate' })) return {ok:false,reason:'cancelled'};
+      input = {...input,confirm:burn};
+    }
+    const preview = await readFor(load,'actionPreview',owner,action,input);
+    showOut($('v9-result'),preview);
+    if (!preview.ok) { showBanner(preview.reason,'warn'); return preview; }
+    const body=action==='unstake'?'The quoted exit fee is burned.':`${preview.warning??action}. ${preview.amount?.sqk?'Rewards: '+preview.amount.sqk+' SQK.':''}`;
+    const details=action==='unstake'?[['Amount',`${formatEther(BigInt(preview.amount))} SQK`],['Fee / maxFee',`${preview.fee.sqk} SQK`],['You receive',`${preview.net.sqk} SQK`],['Deadline',new Date(Number(preview.deadline)*1000).toUTCString()],['Gas estimate',preview.gas]]:[['Gas estimate',preview.gas]];
+    if (!await confirmModal({title:action==='unstake'?'Review unstake fee':`Review ${action}`,body,details,confirmLabel:'Review in wallet'})) return {ok:false,reason:'cancelled'};
+    assertCurrent(load);
+    if (state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error('Wallet changed');
+    const fresh = await readFor(load,'actionPreview',owner,action,{...input,...(action==='unstake'?{maxFee:preview.maxFee,deadline:preview.deadline}:{})});
+    if (!fresh.ok || (action==='mergeDeposited' && fresh.nextLevel!==preview.nextLevel) || (preview.amount?.base != null && fresh.amount?.base !== preview.amount.base) || (action==='unstake' && (fresh.maxFee!==preview.maxFee || fresh.net.base!==preview.net.base))) throw new Error('Outcome or fee changed. Review a fresh preview; no automatic retry.');
+    const result=await sendTransaction(fresh.tx,action,owner,load);await refreshAll();return result;
+  }
+  function renderActionFields() {
+    const action=$('v9-action').value;
+    for(const [id,visible] of [['v9-ids',['deposit','withdraw'].includes(action)],['v9-token',action==='approveNft'],['v9-amount',['stake','unstake','approveSqk'].includes(action)],['v9-survivor',action==='mergeDeposited'],['v9-donor',action==='mergeDeposited']]) {
+      $(id).closest('label').classList.toggle('hidden',!visible); if(!visible)$(id).value='';
+    }
+    $('approval-scope').classList.toggle('hidden',!['approveAll','approveNft','approveSqk'].includes(action));
+    $('approval-scope').textContent=action==='approveAll'?'Allows ALL current and future NFTs.':action==='approveNft'?'Allows only this NFT (preferred).':'Allows exactly this SQK amount.';
+  }
+  $('v9-action').onchange=renderActionFields;renderActionFields();
+  $('v9-review').onclick = () => viewTask(() => {
+    const input = {tokenIds:$('v9-ids').value.split(/[\s,]+/).filter(Boolean),tokenId:$('v9-token').value,survivor:$('v9-survivor').value,donor:$('v9-donor').value};
+    const raw=$('v9-amount').value.trim(); if(raw) { if(!/^\d+(?:\.\d{1,18})?$/.test(raw))throw new Error('Use up to 18 decimal places'); input.amount=String(parseEther(raw)); }
+    return requestAction($('v9-action').value,input);
+  });
   // ── art ───────────────────────────────────────────────────────────────────
   async function loadArt(tokenIds) {
     const load = captureLoad();
@@ -898,62 +966,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   function buildTools() {
     if (!state.adapter) return {};
-    const caps = capabilities();
-    const tools = {
-      squeek_network_status: {
-        description: "Network state for the active deployment: rounds, block height, checkpoint status, issuance, supply.",
-        run: async () => ({ profile: state.profileKey, ...(await state.adapter.networkStatus()) }),
-      },
-      squeek_verify: {
-        description: "Verify implementations, versions and the wiring between contracts for the active deployment.",
-        run: async () => state.adapter.verify(),
-      },
-      squeek_wallet_status: {
-        description: "Holdings for an address: Squeeks, levels, cooldowns, power, claimable SQK.",
-        run: async (args) => state.adapter.walletStatus(requireOwner(args)),
-      },
-    };
-    if (state.adapter.art) {
-      tools.squeek_art = {
-        description: "Onchain DotGrid art + traits for a Squeek token (metadata + SVG data URI).",
-        run: async (args) => {
-          if (!args.tokenId) throw new Error("tokenId is required");
-          return state.adapter.art(args.tokenId);
-        },
-      };
-    }
-    if (caps.checkpoint) {
-      tools.squeek_checkpoint_preview = { description: "Whether checkpoint() can advance now, with unsigned tx + gas.", run: async args => state.adapter.checkpointPreview(args.from ?? state.account ?? undefined) };
-      tools.squeek_request_checkpoint = { description: "Open the wallet popup to submit checkpoint(). Works for any wallet.", run: async () => requestCheckpoint() };
-    }
-    if (caps.claim) {
-      tools.squeek_claim_preview = {
-        description: "Simulated claim: total SQK and 32-ID batches with gas.",
-        run: async (args) => state.adapter.claimPreview(requireOwner(args), args.tokenIds),
-      };
-      tools.squeek_request_claim = { description: "Open the wallet popup to claim SQK.", run: async (args) => requestClaim(args.tokenIds) };
-    }
-    if (caps.merge) {
-      tools.squeek_merge_plan = { description: "Same-level merge pairs that satisfy every onchain precondition.", run: async (args) => state.adapter.mergePlan(requireOwner(args)) };
-      tools.squeek_merge_preview = {
-        description: "Simulate one merge (gas + irreversibility warning).",
-        run: async (args) => state.adapter.mergePreview(requireOwner(args), args.survivor, args.donor, { confirm: args.confirm }),
-      };
-      tools.squeek_request_merge = {
-        description: "Open the wallet popup to merge a pair. Requires confirm: 'BURN-<donor>'.",
-        run: async (args) => {
-          if (!args.survivor || !args.donor) throw new Error("survivor and donor are required");
-          if (args.confirm !== `BURN-${args.donor}`) throw new Error(`refusing to merge without confirm: "BURN-${args.donor}"`);
-          const owner = requireOwner(args);
-          const load = captureLoad();
-          const plan = await readFor(load, "mergePlan", owner);
-          const pair = plan.pairs.find((p) => p.survivor === String(args.survivor) && p.donor === String(args.donor));
-          if (!pair) throw new Error("that pair is not currently mergeable");
-          return requestMerge(pair);
-        },
-      };
-    }
-    return tools;
+    return Object.fromEntries(TOOL_SPECS.map(spec=>[spec.name,{description:spec.description,run:args=>{
+      const selected=toolProfile(args.profile??state.profileKey);
+      const adapter=selected.key===state.profileKey?state.adapter:buildAdapter(selected.key);
+      return runReadTool(adapter,spec.name,{...args,owner:ownerOrDefault(args),from:args.from??state.account});
+    }}]));
   }
 
   const tools = () => buildTools();
@@ -974,7 +991,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // Routes are display-only; legacy API tab names remain aliases for integrations.
   function currentRoute() {
-    const hash = win.location.hash.slice(1);
+    const parts = win.location.hash.slice(1).split('/');
+    if (profileFromHash(win.location.hash)) parts.shift();
+    const hash = parts.join('/');
     return /^(squeeks|art|network|info)(\/|$)/.test(hash) ? hash : (state.account || state.inspected ? 'squeeks' : 'network');
   }
   function selectTab(route) {
@@ -983,24 +1002,25 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     let [name, section] = String(route).split('/');
     if (!['squeeks', 'art', 'network', 'info'].includes(name)) name = state.account || state.inspected ? 'squeeks' : 'network';
     const deployed = Boolean(getProfile(state.profileKey).addresses);
+    doc.querySelectorAll('a[href^="#info/"], a[data-info-route]').forEach(link => { const route = link.dataset.infoRoute ?? link.getAttribute('href').slice(1); link.dataset.infoRoute = route; link.href = `#${state.profileKey}/${route}`; });
     el.tabs.forEach(t => { t.setAttribute('aria-selected', String(t.dataset.tab === name)); t.tabIndex = t.dataset.tab === name ? 0 : -1; });
     el.panels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== name || (!deployed && name !== 'info')));
-    const hash = `#${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers', 'about'].includes(section) ? '/' + section : ''}`;
+    const hash = `#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers', 'about'].includes(section) ? '/' + section : ''}`;
     // replaceState avoids hashchange loops, while tab clicks below create history entries.
     if (win.location.hash !== hash) win.history.replaceState(null, '', hash);
     if (name === 'info' && section) $("info-" + section)?.scrollIntoView?.({ block: 'start' });
   }
-  const onHashChange = () => selectTab(currentRoute());
+  const onHashChange = () => { const key = profileFromHash(win.location.hash); if (key && key !== state.profileKey) void switchProfile(key); else selectTab(currentRoute()); };
   win.addEventListener('hashchange', onHashChange);
   for (const tab of el.tabs) {
-    tab.onclick = () => { win.location.hash = tab.dataset.tab; selectTab(tab.dataset.tab); };
+    tab.onclick = () => { win.location.hash = `${state.profileKey}/${tab.dataset.tab}`; selectTab(tab.dataset.tab); };
     tab.onkeydown = event => {
       const index = el.tabs.indexOf(tab);
       const next = event.key === 'ArrowRight' ? (index + 1) % el.tabs.length : event.key === 'ArrowLeft' ? (index + el.tabs.length - 1) % el.tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? el.tabs.length - 1 : -1;
       if (next >= 0) { event.preventDefault(); el.tabs[next].click(); el.tabs[next].focus(); }
     };
   }
-  $('profile-status').onclick = () => { win.location.hash = 'info/trust'; selectTab('info/trust'); $('info-trust').focus(); };
+  $('profile-status').onclick = () => { win.location.hash = `${state.profileKey}/info/trust`; selectTab('info/trust'); $('info-trust').focus(); };
 
   let activeSheet = null, sheetFocus = null;
   function closeSheet() {
@@ -1017,8 +1037,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     sheet.querySelector('[data-close-sheet]').onclick = closeSheet;
     sheet.onclick = event => { if (event.target === sheet) closeSheet(); };
   }
-  $('btn-settings').onclick = () => openSheet('settings-sheet');
-  doc.querySelectorAll('[data-open-settings]').forEach(button => { button.onclick = () => openSheet('settings-sheet'); });
+  $('holder-connect').onclick = () => viewTask(connect);
+  $('btn-settings').onclick = showSettings;
+  doc.querySelectorAll('[data-open-settings]').forEach(button => { button.onclick = showSettings; });
   function closeWalletMenu() { $('wallet-menu').classList.add('hidden'); el.connect.setAttribute('aria-expanded', 'false'); }
   const onDocumentClick = event => { if (!$('wallet-menu').contains(event.target) && !el.connect.contains(event.target)) closeWalletMenu(); };
   const onSheetFocus = event => { if (activeSheet && !$('modal').classList.contains('hidden')) return; if (activeSheet && !activeSheet.contains(event.target)) activeSheet.querySelector('[data-close-sheet]').focus(); };
@@ -1044,7 +1065,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   doc.addEventListener('click', onDocumentClick);
   doc.addEventListener('keydown', onOverlayKey);
   doc.addEventListener('focusin', onSheetFocus);
-  el.profileSelect.onchange = () => switchProfile(el.profileSelect.value);
+  el.profileSelect.onchange = () => switchProfile(el.profileSelect.value, { preserveWallet: true });
   el.connect.onclick = async () => {
     if (!state.account && !Number(el.connect.dataset.activityCount) && getProfile(state.profileKey).addresses) return viewTask(connect);
     const open = $('wallet-menu').classList.contains('hidden');
@@ -1058,7 +1079,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
   $('btn-open-activity').onclick = () => openSheet('activity-drawer');
   $('btn-disconnect').onclick = () => {
-    closeWalletMenu(); state.account = state.inspected = state.status = null;
+    closeWalletMenu(); state.account = state.inspected = state.status = null; state.profileCounts={}; renderProfileOptions();
     renderWalletChip(); renderHolder(null); selectTab('network'); el.connect.focus();
   };
   el.refresh.onclick = () => { void refreshTelemetry({ reset: false }); return viewTask(refreshAll); };
@@ -1096,26 +1117,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     viewTask(() => loadArt(ids));
   };
 
-  el.agent.run.onclick = async () => {
-    let args = {};
-    try {
-      args = el.agent.args.value.trim() ? JSON.parse(el.agent.args.value) : {};
-    } catch {
-      return showOut(el.agent.out, { error: "args must be valid JSON" });
-    }
-    const load = captureLoad();
-    const result = await viewTask(() => callTool(el.agent.select.value, args));
-    if (isCurrent(load)) showOut(el.agent.out, result);
-  };
-  el.agent.copy.onclick = async () => {
-    const text = json(manifest());
-    try {
-      await win.navigator.clipboard.writeText(text);
-      toast("manifest copied", "ok");
-    } catch {
-      showOut(el.agent.out, text);
-    }
-  };
+  let developersReady;
+  const developerUI = async () => { developersReady ??= import('./developers.js').then(module => module.initDevelopers({el,win,json,toast,showOut,viewTask,callTool,captureLoad,isCurrent,manifest})); await developersReady; };
+  el.agent.run.onclick = async () => { await developerUI(); return el.agent.run.onclick(); };
+  el.agent.copy.onclick = async () => { await developerUI(); return el.agent.copy.onclick(); };
 
   win.addEventListener("message", async (event) => {
     const msg = event.data;
@@ -1139,62 +1144,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     );
   }
 
-  // Custom RPC is browser-local; never sent to our server. Public peers still cross-check every snapshot.
-  $("rpc-url").value = store.get("wheelhouse:rpc") ?? "";
-  function customRpcValue() {
-    const value = $('rpc-url').value.trim();
-    if (value) { const url = new URL(value); if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Use an HTTPS RPC URL without embedded credentials'); }
-    return value;
+  let settingsReady;
+  async function showSettings() {
+    settingsReady ??= import('./settings.js').then(module => module.initSettings({$,state,store,fetcher,captureLoad,assertCurrent,isCurrent,getProfile,switchProfile,discoveryCache,buildAdapter,refreshAll,resetLoad:()=>{loadController.abort();generation++;loadController=new AbortController();},closeSheet,confirmModal,activity,destroyed:()=>destroyed,openSheet,showBanner,errorMessage,applyTheme}));
+    await settingsReady; if (!destroyed) openSheet('settings-sheet');
   }
-  $('btn-test-rpc').onclick = async () => {
-    const load = captureLoad(), output = $('rpc-test-result');
-    try {
-      if (!getProfile(state.profileKey).addresses) throw new Error('Mainnet is not deployed; no RPC reads');
-      const url = customRpcValue(); if (!url) throw new Error('Enter a custom RPC to test');
-      output.textContent = 'Testing…';
-      const rpc = async (method, id) => {
-        const timeout = AbortSignal.timeout(15000);
-        const response = await fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id, method, params: [] }), signal: AbortSignal.any([load.signal, timeout]) });
-        assertCurrent(load); if (!response.ok) throw new Error('RPC test unavailable');
-        const value = await response.json(); assertCurrent(load);
-        if (value.error || !/^0x[0-9a-f]+$/i.test(value.result ?? '')) throw new Error('RPC returned an invalid response');
-        return BigInt(value.result);
-      };
-      const chain = await rpc('eth_chainId', 1), block = await rpc('eth_blockNumber', 2);
-      output.textContent = `chainId ${chain} · block ${block}${chain !== 11155111n ? ' · Wrong chain: Sepolia required' : ''}. Diagnostic only; not two-peer verification.`;
-    } catch { if (isCurrent(load)) output.textContent = 'RPC test failed. Use an available HTTPS Sepolia endpoint. No trust check was bypassed.'; }
-  };
-  $('btn-remove-rpc').onclick = async () => { $('rpc-url').value = ''; store.set('wheelhouse:rpc', ''); await switchProfile(state.profileKey); };
-  $('btn-clear-cache').onclick = async () => {
-    if (state.busy) { $('cache-result').textContent = 'Wait for the wallet request to finish before clearing cache.'; return; }
-    loadController.abort(); generation++; loadController = new AbortController();
-    const load = captureLoad();
-    try {
-      await discoveryCache.clear();
-      if (!isCurrent(load)) return;
-      state.adapter = buildAdapter(state.profileKey);
-      await refreshAll();
-      if (isCurrent(load)) $('cache-result').textContent = 'Log cache cleared. Ownership rechecked onchain where available.';
-    } catch { if (isCurrent(load)) { state.adapter = buildAdapter(state.profileKey); $('cache-result').textContent = 'Could not clear the log cache. No ownership or trust checks were bypassed.'; } }
-  };
-  $('btn-clear-activity').onclick = async () => {
-    closeSheet();
-    const confirmed = await confirmModal({ title: 'Clear Activity?', body: 'Remove the Activity list saved in this browser, including pending entries. This does not cancel transactions. Check your wallet before retrying any action.', confirmLabel: 'Clear Activity' });
-    if (confirmed) activity.clear();
-    if (!destroyed) openSheet('settings-sheet');
-  };
-  $('policy-levels').replaceChildren(...SQUEEKS_POLICY.map(level => {
-    const row = doc.createElement('tr'); for (const value of [level.level, level.weight, level.cooldownBlocks]) { const cell = doc.createElement('td'); cell.textContent = String(value); row.append(cell); } return row;
-  }));
-  $("btn-save-rpc").onclick = async () => {
-    try {
-    const value = customRpcValue();
-    store.set("wheelhouse:rpc", value);
-    await switchProfile(state.profileKey);
-    } catch (err) { $("rpc-test-result").textContent = "Use an HTTPS RPC URL without embedded credentials."; showBanner(errorMessage(err), "bad"); }
-  };
-
   // ── boot ──────────────────────────────────────────────────────────────────
+  store.set("squeekchain:profile", state.profileKey);
   applyTheme(store.get(THEME_KEY) ?? "light");
   renderProfileOptions();
   renderWalletChip();
@@ -1205,6 +1161,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   void refreshTelemetry();
   renderActivity(activity.list());
   void activity.refresh();
+  const ageTimer=win.setInterval?.(updateTrustAge,1000);
   const activityTimer = win.setInterval?.(() => { if (!destroyed) void activity.refresh(); }, 15_000);
 
   const telemetryTimer = win.setInterval?.(() => { if (!destroyed) void refreshTelemetry({ reset: false }); }, 15_000);
@@ -1228,11 +1185,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     refresh: refreshAll,
     switchProfile,
     loadArt,
+    requestAction: (action,input) => viewTask(()=>requestAction(action,input)),
     requestCheckpoint: () => viewTask(requestCheckpoint),
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
+    destroy: () => { dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(ageTimer); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
   };
 }
 

@@ -1,3 +1,4 @@
+import { profileInput, getProfile, DEFAULT_PROFILE } from './bundle.js';
 // Broadcast transactions outlive profile navigation. Storage is local/display-only;
 // it is never used to construct or resubmit a transaction.
 const KEY = 'wheelhouse:pending-transactions:v1';
@@ -10,7 +11,7 @@ export function createActivity({ storage, receiptReader, onChange = () => {}, no
     const saved = JSON.parse(storage?.get(KEY) ?? '[]');
     if (Array.isArray(saved)) items = saved.filter(item => validHash(item.hash) && item.chainId === 11155111
       && typeof item.label === 'string' && item.label.length <= 200 && Number.isFinite(Date.parse(item.time)))
-      .map(item => ({ ...item, status: 'pending' })); // re-read receipts after reload, even if previously mined
+      .map(item => ({ ...item, profile: profileInput(item.profile), status: 'pending' })); // re-read receipts after reload, even if previously mined
   } catch { /* malformed/disabled storage is not chain state */ }
   const list = () => items.map(item => ({ ...item }));
   function save() {
@@ -20,10 +21,11 @@ export function createActivity({ storage, receiptReader, onChange = () => {}, no
     try { storage?.set(KEY, JSON.stringify(items)); } catch { /* current-tab activity still works */ }
     if (!controller.signal.aborted) onChange(list());
   }
-  function record(hash, label, chainId = 11155111) {
+  function record(hash, label, chainId = 11155111, profile = DEFAULT_PROFILE) {
+    if(getProfile(profile).chainId!==chainId)throw new Error('Activity profile/chain mismatch');
     if (!validHash(hash) || chainId !== 11155111) throw new Error('Invalid Sepolia transaction hash');
     if (!items.some(item => item.hash.toLowerCase() === hash.toLowerCase())) {
-      items.unshift({ hash, label: String(label).slice(0, 200), chain: 'Sepolia', chainId, time: new Date(now()).toISOString(), status: 'pending' });
+      items.unshift({ hash, profile, label: String(label).slice(0, 200), chain: 'Sepolia', chainId, time: new Date(now()).toISOString(), status: 'pending' });
       save();
     }
     return items.find(item => item.hash.toLowerCase() === hash.toLowerCase());

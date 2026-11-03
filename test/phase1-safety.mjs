@@ -89,12 +89,13 @@ function fakeClient({ alter = (_request, value) => value } = {}) {
   return client;
 }
 
-assert.equal(DEFAULT_PROFILE, 'sepolia-v6');
-assert.equal(PROFILES['sepolia-v6'].kind, 'supported');
-assert.equal(PROFILES.sepolia.kind, 'read-only (unverified)');
-for (const action of ['claim', 'merge', 'checkpoint', 'transfer', 'deposit']) assert.equal(PROFILES.sepolia.capabilities[action], false);
+assert.equal(DEFAULT_PROFILE, 'sepolia-v9');
+assert.equal(PROFILES['sepolia-v6'].label, 'Sepolia v6');
+assert.equal(PROFILES['sepolia-v9'].label, 'Sepolia v9');
+for (const action of ['claim','merge','checkpoint','deposit','withdraw','stake','unstake']) assert.equal(PROFILES['sepolia-v9'].capabilities[action],true);
 const v9 = createSqueek9();
-for (const name of ['buildTransfer', 'buildCheckpoint', 'buildMerge', 'claimPreview', 'mergePreview']) assert.equal(v9[name], undefined);
+for (const name of ['claimPreview','mergePreview','actionPreview']) assert.equal(typeof v9[name],'function');
+assert.throws(()=>v9.mergePreview(owner,'1','2'),/BURN-2/);
 assert.ok(PUBLIC_RPCS.length >= 3);
 assert.throws(() => requireSepolia(1), /Sepolia/);
 requireSepolia('0xaa36a7');
@@ -104,7 +105,7 @@ for (const confirm of [undefined, '', '2', 'burn-2', 'BURN-1']) assert.throws(()
 requireBurn('2', 'BURN-2');
 assert.throws(() => createSqueekchain().mergePreview(owner, '1', '2'), /BURN-2/);
 assert.ok(TOOL_SPECS.find(tool => tool.name === 'squeek_merge_preview').inputSchema.required.includes('confirm'));
-console.log('PASS gates: supported default v6; all v9 transaction paths absent; BURN guard before network/calldata; no verification bypass');
+console.log('PASS gates: equal deployed profiles; v9 guarded action surface present; BURN guard before network/calldata; no verification bypass');
 
 const peer = (blockHash = hash, chainId = 11155111) => ({ getChainId: async () => chainId, getBlock: async ({ blockNumber: at }) => ({ number: at, hash: blockHash }) });
 const primary = { ...peer(), getBlockNumber: async () => blockNumber + 12n };
@@ -277,6 +278,7 @@ try {
   wire.length = 0;
   await wireSdk.walletStatus(owner);
   assert.ok(wire.length <= 25, `Warm wallet page load exceeded RPC budget: ${wire.length}`);
+  fs.writeFileSync('docs/audit/v6-request-budget.json',JSON.stringify({profile:'sepolia-v6',coldNetwork:cold,warmNetwork:warmCount,wallet:wire.length,limit:25},null,2)+'\n');
   console.log(`PASS actual wire budget: cold network ${cold}; warm network ${warmCount}; wallet ${wire.length} requests; art batch one eth_call`);
   const wireFetch = globalThis.fetch, contacted = [];
   globalThis.fetch = async (url, init) => {

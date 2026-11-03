@@ -1,0 +1,7 @@
+{
+  "profile": "sepolia-v6",
+  "coldNetwork": 22,
+  "warmNetwork": 12,
+  "wallet": 15,
+  "limit": 25
+}

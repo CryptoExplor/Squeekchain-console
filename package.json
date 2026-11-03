@@ -2,7 +2,7 @@
   "name": "wheelhouse",
   "version": "1.0.0",
   "private": false,
-  "description": "Wheelhouse \u2014 static, browser-first Squeekchain holder console. Supported docs-pinned Sepolia v6, unverified read-only v9, unsigned CLI/MCP.",
+  "description": "Wheelhouse \u2014 static, browser-first Squeekchain holder console. Equal Sepolia v6/v9 profiles, unsigned CLI/MCP.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -19,10 +19,10 @@
     "checkpoint": "node src/cli.js checkpoint",
     "claim": "node src/cli.js claim",
     "merge": "node src/cli.js merge",
-    "test": "node test/ui.mjs && node test/audit-baseline.mjs && node test/review-regressions.mjs && node test/phase1-safety.mjs && node test/discovery.mjs && node test/activity.mjs && node test/rpc-failover.mjs && node test/account-discovery.mjs && node test/live-ci.mjs && node test/rpc-diagnostics.mjs && node test/components.mjs",
+    "test": "node test/ui.mjs && node test/audit-baseline.mjs && node test/review-regressions.mjs && node test/phase1-safety.mjs && node test/discovery.mjs && node test/activity.mjs && node test/rpc-failover.mjs && node test/account-discovery.mjs && node test/live-ci.mjs && node test/rpc-diagnostics.mjs && node test/components.mjs && node test/profile-registry.mjs && node test/v9-safety.mjs",
     "test:live": "npm run build && playwright test --config playwright.live.config.mjs test/live.spec.mjs",
     "test:audit": "node test/audit-baseline.mjs",
-    "test:browser": "npm run build && playwright test --config playwright.config.mjs test/browser.spec.mjs test/screenshots.spec.mjs",
+    "test:browser": "npm run build && playwright test --config playwright.config.mjs test/browser.spec.mjs test/screenshots.spec.mjs test/v9-browser.spec.mjs",
     "rpc:probe": "node src/rpc-probe.mjs"
   },
   "dependencies": {

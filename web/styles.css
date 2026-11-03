@@ -617,3 +617,15 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
   .info-section .table-wrap { max-width: 100%; }
   .info-section table { min-width: 0; }
 }
+.source-icon { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; color:var(--sqk-gray); flex-shrink:0; }
+.source-icon:focus-visible { outline:3px solid var(--sqk-focus); outline-offset:3px; border-radius:6px; }
+#trust-summary { font-family:var(--sqk-font-data); }
+#verification-age { font-size:10px; white-space:nowrap; }
+#v9-actions .row > input { min-width:0; flex:1 1 140px; }
+#v9-actions .row > label { flex:1 1 140px; min-width:0; }
+#v9-actions input { width:100%; }
+#contracts-list { overflow-wrap:anywhere; }
+
+.confirm-details {display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin:16px 0 0;}
+.confirm-details dt {color:var(--sqk-gray);}
+.confirm-details dd {margin:0;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;}

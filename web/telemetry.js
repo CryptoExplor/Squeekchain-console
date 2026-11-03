@@ -56,6 +56,7 @@ export function telemetryView(data, now = Date.now()) {
     rpm: stale ? 'Unknown' : (m.rpmMilli / 1000).toFixed(1),
     speed: stale ? 'Unknown' : `${(m.speedMmPerSecond / 1000).toFixed(2)} m/s`,
     distance: stale ? 'Unknown' : `${(m.distanceMm / 1_000_000).toFixed(2)} km`,
+    age,
     note: `${stale ? 'Stale device data' : 'Device reading'} · ${age}s ago. Measurement is not settled work.`,
   };
 }

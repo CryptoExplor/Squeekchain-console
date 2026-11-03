@@ -131,15 +131,21 @@ export function ConfirmDialog({ doc, win, elements }) {
     return close;
   }
 
-  function confirmModal({ title, body, requireText = null, confirmLabel = "Confirm" }) {
+  function confirmModal({ title, body, requireText = null, confirmLabel = "Confirm", details = [] }) {
     closeActiveModal?.();
     return new Promise((resolve) => {
       elements.title.textContent = title;
       elements.body.textContent = body;
+      if(details.length) {
+        const list=doc.createElement('dl');list.className='confirm-details';list.dataset.testid='confirm-details';
+        for(const [label,value] of details) {const term=doc.createElement('dt'),definition=doc.createElement('dd');term.textContent=label;definition.textContent=value;list.append(term,definition);}elements.body.append(list);
+      }
       elements.input.value = "";
       elements.input.classList.toggle("hidden", !requireText);
       elements.input.placeholder = requireText ? `type ${requireText}` : "";
-      elements.input.setAttribute("aria-label", requireText ? `Type ${requireText} to acknowledge permanent burn` : "Confirmation");
+      const inputLabel=requireText?`Type ${requireText} to confirm`:"Confirmation";
+      elements.input.setAttribute("aria-label",inputLabel);
+      elements.root.querySelector('[for="modal-input"]').textContent=inputLabel;
       elements.confirm.textContent = confirmLabel;
       elements.confirm.disabled = Boolean(requireText);
       const close = openModal({

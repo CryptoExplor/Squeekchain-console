@@ -148,13 +148,13 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     if (peerOrigins.has(origin)) return false;
     peerOrigins.add(origin);
     return true;
-  }).map(url => createPublicClient({ chain: sepolia, transport: checked.get(url) }));
+  }).map(url => createPublicClient({ name: url===rpcUrl?"Custom RPC":new URL(url).hostname, chain: sepolia, transport: checked.get(url) }));
   // Identity/hash failures always stop, even if a wrapped message mentions limits.
   const shouldThrow = error => signal?.aborted || isTrustError(error) || isRpcProgrammingError(error) || (!isRpcAvailabilityError(error) && rpcCauses(error).some(item => shouldStop(item.error)));
   const stateClient = createPublicClient({ chain: sepolia, transport: fallback(roleUrls('state').map(url => checked.get(url)), {
     rank: false, retryCount: 0, shouldThrow,
   }) });
-  const logPeers = roleUrls('logs').map(url => createPublicClient({ chain: sepolia, transport: checked.get(url) }));
+  const logPeers = roleUrls('logs').map(url => createPublicClient({ name: url===rpcUrl?"Custom RPC":new URL(url).hostname, chain: sepolia, transport: checked.get(url) }));
   const logsClient = createPublicClient({ chain: sepolia, transport: custom({ request: async args => {
     let lastError, rangeFailure;
     for (const peer of logPeers) {

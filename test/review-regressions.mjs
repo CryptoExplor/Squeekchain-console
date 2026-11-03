@@ -50,8 +50,8 @@ win.ethereum = {
   },
   on() {},
 };
-win.localStorage.setItem("squeekchain:profile", "sepolia");
-const api = mount({ doc, win, adapterFactory: () => adapter, fetcher: (...args) => { requests++; return fetchHook(...args); } });
+win.localStorage.setItem("squeekchain:profile", "sepolia-v9");
+const api = mount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}), doc, win, adapterFactory: () => adapter, fetcher: (...args) => { requests++; return fetchHook(...args); } });
 try {
   await api.refresh(); await tick();
   const fields = ['wheel-state', 'wheel-rpm', 'wheel-speed', 'wheel-distance', 'wheel-note'];
@@ -84,7 +84,7 @@ try {
   assert.equal($('wheel-state').textContent, 'Unavailable');
   assert.equal(requests, previousRequests, 'non-Sepolia refreshes never fetch device telemetry');
 
-  const switchingBack = api.switchProfile('sepolia');
+  const switchingBack = api.switchProfile('sepolia-v9');
   assert.equal($('wheel-state').textContent, 'Loading', 'profile change resets rather than reusing old readings');
   assert.equal($('wheel-rpm').textContent, 'Unknown');
   await switchingBack; release(response(measurement(5000))); await tick();
@@ -96,7 +96,7 @@ try {
   assert.match($('wallet-chip').textContent, /0x5989/);
   assert.match($('wallet-chip').textContent, /0\.100 ETH/);
   verifyFails = true; await api.refresh();
-  assert.equal($('verified-chip').classList.contains('bad'), true);
+  assert.equal($('profile-status').classList.contains('bad'), true);
   // jsdom does not lay out responsive viewports. Check the applicable CSS declarations
   // explicitly at each breakpoint; this is not a real-browser visual/layout assertion.
   for (const width of [320, 760, 1050, 1200]) {

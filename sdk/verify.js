@@ -1,3 +1,4 @@
+import { ACTION_REASONS } from './capabilities.js';
 import { getAddress, keccak256, parseAbi } from 'viem';
 import { coreAbi, miningAbi, nftAbi, tokenAbi } from './abi.js';
 import { DEPLOYMENT, CORE_CONFIGURATION } from './record.js';
@@ -7,7 +8,7 @@ export const ADMIN_SLOT = '0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a
 // owner() ABI is also published in the official Quickstart verification example.
 const ownerAbi = parseAbi(['function owner() view returns (address)']);
 const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
-const check = (condition, reason) => { if (!condition) throw new RpcTrustError(`Deployment mismatch: ${reason}`); };
+const check = (condition, reason) => { if (!condition) throw new RpcTrustError(`${ACTION_REASONS.mismatch} ${reason}`); };
 const slotAddress = word => {
   check(/^0x[0-9a-f]{64}$/i.test(word ?? ''), 'missing EIP-1967 slot');
   return getAddress(`0x${word.slice(-40)}`);

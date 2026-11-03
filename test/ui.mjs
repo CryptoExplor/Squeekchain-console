@@ -14,11 +14,11 @@ const html = fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf
 const dom = new JSDOM(html, { url: 'https://console.test/' });
 const { window: win } = dom;
 const $ = id => win.document.getElementById(id);
-win.localStorage.setItem("squeekchain:profile", "sepolia");
+win.localStorage.setItem("squeekchain:profile", "sepolia-v9");
 let rejectNetwork = false, pending, selectedClaim, selectedMerge;
 const adapter = {
   networkStatus: async () => { if (pending) return pending; if (rejectNetwork) throw new Error('RPC offline'); return net; },
-  verify: async () => ({ ok: true, trusted: false }),
+  verify: async () => ({ ok: true, trusted: true }),
   walletStatus: async () => holdings,
   mergePlan: async () => ({ pairs: [] }),
   claimPreview: async (_owner, ids) => { selectedClaim = ids; return { ok: false, batches: [], reason: "Test stops before signing" }; },
@@ -26,7 +26,7 @@ const adapter = {
   art: async tokenId => ({ tokenId, name: 'Test Squeek', attributes: [], image: 'data:image/svg+xml;base64,PHN2Zy8+' }),
 };
 win.ethereum = { request: async ({ method }) => method === 'eth_chainId' ? '0xaa36a7' : [owner], on() {} };
-const api = mount({ doc: win.document, win, adapterFactory: () => adapter, fetcher: async () => response() });
+const api = mount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}), doc: win.document, win, adapterFactory: () => adapter, fetcher: async () => response() });
 await api.refresh();
 assert.equal(win.document.documentElement.dataset.theme, 'light');
 assert.equal($('btn-theme').getAttribute('aria-pressed'), 'false');
@@ -35,31 +35,31 @@ assert.equal($('btn-theme').getAttribute('aria-pressed'), 'true');
 assert.equal($('btn-theme').title, 'Switch to light theme');
 $('btn-theme').click(); assert.equal(win.localStorage.getItem('squeekchain:theme'), 'light');
 assert.equal($('net-round').textContent, '1000');
-assert.equal($('settlement-notice').classList.contains('hidden'), true, 'v9 must not show the v6 settlement notice');
+assert.match($('settlement-notice').textContent, /Awaiting the next live advancement/);
 assert.equal($('btn-checkpoint').disabled, true);
-assert.equal($('capability-grid').children.length, 6);
+assert.equal($('capability-grid').children.length, 5);
 assert.match($('wheel-rpm').textContent, /12.5/);
 win.document.querySelector('[data-testid="tab-squeeks"]').click();
 assert.equal(win.document.querySelector('[data-panel="squeeks"]').classList.contains('hidden'), false);
 await api.connect();
 assert.equal($('squeeks-tbody').children.length, 1);
-assert.equal($('btn-claim').disabled, true);
+assert.equal($('btn-claim').disabled, false);
 assert.ok((await api.callTool('squeek_request_merge')).error);
 await api.loadArt(['1']);
 assert.equal($('art-grid').querySelectorAll('img').length, 1);
 await api.switchProfile('sepolia-v6');
 net.checkpoint.roundSettled = false;
 await api.refresh();
-assert.match($('settlement-notice').textContent, /Settlement frontier at round 1000/);
-assert.match($('settlement-notice').textContent, /No new rewards.*at this snapshot/);
+assert.match($('settlement-notice').textContent, /Settled through round 1000/);
+assert.match($('settlement-notice').textContent, /Next round is not settled/);
 net.core.settledThroughRound = '1001'; net.checkpoint.roundSettled = true; net.checkpoint.canCheckpoint = true;
 await api.refresh();
-assert.match($('settlement-notice').textContent, /Settlement frontier at round 1001/);
-assert.doesNotMatch($('settlement-notice').textContent, /No new rewards/);
+assert.match($('settlement-notice').textContent, /Settled through round 1001/);
+assert.doesNotMatch($('settlement-notice').textContent, /Next round is not settled/);
 net.checkpoint.roundSettled = false; net.checkpoint.canCheckpoint = false;
 assert.equal(api.state.account, null, 'switch clears the connected-wallet view');
 await api.connect();
-assert.ok(Object.keys(api.tools()).includes('squeek_request_merge'));
+assert.ok(Object.keys(api.tools()).includes('squeek_prepare_merge'));
 $('claim-ids').value = '1, 2';
 await $('btn-claim').onclick();
 assert.deepEqual(selectedClaim, ['1', '2']);
@@ -75,7 +75,7 @@ await merging;
 assert.deepEqual(selectedMerge, { survivor: '1', donor: '2' });
 await api.switchProfile('mainnet');
 assert.equal($('profile-select').selectedOptions[0].disabled, false);
-assert.match($('profile-notice').textContent, /no mainnet deployment/);
+assert.match($('not-deployed-note').textContent, /no mainnet deployment/);
 assert.equal($('settlement-notice').textContent, '', 'profile switches clear live frontier warnings');
 assert.equal($('net-round').textContent, 'Unknown');
 assert.equal($('btn-checkpoint').disabled, true);
@@ -86,13 +86,13 @@ assert.equal($('wheel-rpm').textContent, 'Unknown');
 // An in-flight testnet read must never repopulate the mainnet page.
 let release;
 pending = new Promise(resolve => { release = resolve; });
-const switching = api.switchProfile('sepolia');
+const switching = api.switchProfile('sepolia-v9');
 await api.switchProfile('mainnet');
 release(net); await switching; pending = null;
 assert.equal($('net-round').textContent, 'Unknown');
 rejectNetwork = true;
-await api.switchProfile('sepolia');
-assert.equal($('verified-chip').textContent, 'read failed');
+await api.switchProfile('sepolia-v9');
+assert.equal($('verified-chip').textContent, 'Stopped');
 assert.match($('banner').textContent, /Nothing was signed/);
 api.destroy(); win.close();
 console.log('PASS UI: theme, navigation, reads, wallet, gallery, capability gates, mainnet reset, stale-request isolation, RPC failure');

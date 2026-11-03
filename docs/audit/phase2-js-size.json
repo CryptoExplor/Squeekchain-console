@@ -1,0 +1,42 @@
+{
+  "algorithm": "gzip (Node default level)",
+  "scripts": [
+    {
+      "file": "activity.js",
+      "rawBytes": 2707,
+      "gzipBytes": 1332
+    },
+    {
+      "file": "app.js",
+      "rawBytes": 40954,
+      "gzipBytes": 14139
+    },
+    {
+      "file": "bundle.js",
+      "rawBytes": 480075,
+      "gzipBytes": 132402
+    },
+    {
+      "file": "components.js",
+      "rawBytes": 5146,
+      "gzipBytes": 2214
+    },
+    {
+      "file": "developers.js",
+      "rawBytes": 524,
+      "gzipBytes": 342
+    },
+    {
+      "file": "settings.js",
+      "rawBytes": 2991,
+      "gzipBytes": 1502
+    },
+    {
+      "file": "telemetry.js",
+      "rawBytes": 1948,
+      "gzipBytes": 1020
+    }
+  ],
+  "totalGzipBytes": 152951,
+  "budgetBytes": 250000
+}
