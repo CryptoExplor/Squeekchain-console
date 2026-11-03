@@ -8,6 +8,12 @@ const html = fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf
 const dom = new JSDOM(html, { url: 'https://console.test/' });
 const { window: win } = dom, doc = win.document, $ = id => doc.getElementById(id);
 try {
+  const referral = doc.querySelector('.hero-actions a');
+  assert.equal(referral.href, 'https://squeekchain.com/genesis/i/kbxh52st');
+  assert.match(referral.textContent, /referral/i);
+  assert.equal(referral.target, '_blank');
+  assert.ok(referral.relList.contains('noopener'));
+  assert.ok(referral.relList.contains('noreferrer'));
   for (const value of [null, undefined, '', ' ', NaN, Infinity, 'unavailable', '—']) {
     assert.equal(valueText(value), UNKNOWN); assert.equal(formatNumber(value), UNKNOWN);
   }
