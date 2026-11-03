@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import LiveReporter from './live-reporter.mjs';
 import config from '../playwright.live.config.mjs';
 
 const workflow = fs.readFileSync('.github/workflows/live.yml', 'utf8');
 assert.match(workflow, /^name: thewheel$/m);
-assert.match(workflow, /^on:\n  workflow_dispatch:\s*\npermissions:/m);
-assert.doesNotMatch(workflow, /^\s+(push|pull_request|pull_request_target|schedule|workflow_run):/m);
+assert.match(workflow, /^on:\n  workflow_dispatch:\n  pull_request:\n    types: \[labeled\]\s*\npermissions:/m);
+assert.doesNotMatch(workflow, /^\s+(push|pull_request_target|schedule|workflow_run|synchronize|opened|reopened):/m);
+assert.match(workflow, /if: github\.event_name == 'workflow_dispatch' \|\| github\.event\.label\.name == 'run-live'/);
+assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+assert.match(workflow, /LIVE_SOURCE_COMMIT: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+assert.match(workflow, /sourceCommit: process\.env\.LIVE_SOURCE_COMMIT/);
+assert.doesNotMatch(workflow, /process\.env\.GITHUB_SHA/);
+assert.doesNotMatch(fs.readFileSync('test/live-reporter.mjs', 'utf8'), /process\.env\.GITHUB_SHA/);
+assert.match(workflow, /group: thewheel-live-sepolia/);
 assert.match(workflow, /runs-on: ubuntu-latest/);
 assert.match(workflow, /timeout-minutes: 15/);
 assert.match(workflow, /node-version-file: \.nvmrc/);
@@ -23,6 +31,23 @@ assert.ok(config.reporter.some(([name]) => name === './test/live-reporter.mjs'))
 assert.equal(config.testMatch, '**/live.spec.mjs');
 assert.equal(config.retries, 0);
 assert.doesNotMatch(fs.readFileSync('.github/workflows/ci.yml', 'utf8'), /npm run test:live|live_rpc/);
+
+// A pull_request run's GITHUB_SHA is a synthetic merge commit, not the tested head.
+const originalLive = process.env.LIVE_SOURCE_COMMIT, originalGithub = process.env.GITHUB_SHA;
+try {
+  process.env.GITHUB_SHA = 'b'.repeat(40);
+  process.env.LIVE_SOURCE_COMMIT = 'a'.repeat(40);
+  const reporter = new LiveReporter({ outputFile: '.cache/live-reporter-tests/pr-head.json' });
+  reporter.onBegin({}, { allTests: () => [{}] });
+  reporter.onError(new Error('Synthetic setup failure; no live requests'));
+  await reporter.onEnd({ status: 'failed' });
+  assert.equal(JSON.parse(fs.readFileSync(reporter.outputFile)).sourceCommit, 'a'.repeat(40), 'PR head must win over GITHUB_SHA merge commit in failure artifacts');
+  delete process.env.LIVE_SOURCE_COMMIT;
+  assert.equal(new LiveReporter().record.sourceCommit, execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), 'checked-out commit wins over a merge-commit GITHUB_SHA when the explicit source env is missing');
+} finally {
+  if (originalLive === undefined) delete process.env.LIVE_SOURCE_COMMIT; else process.env.LIVE_SOURCE_COMMIT = originalLive;
+  if (originalGithub === undefined) delete process.env.GITHUB_SHA; else process.env.GITHUB_SHA = originalGithub;
+}
 
 const directory = path.resolve('.cache/live-reporter-tests');
 fs.mkdirSync(directory, { recursive: true });
@@ -63,4 +88,4 @@ const reporter = new LiveReporter({ outputFile: path.join(directory, 'before-beg
 reporter.onError(new Error('Configuration failure'));
 await reporter.onEnd({ status: 'failed' });
 assert.equal(JSON.parse(fs.readFileSync(reporter.outputFile)).qualified, false);
-console.log('PASS manual CI gate: dispatch-only, Node pin, 15m timeout, no signing/secrets, required commands, HTML/JSON artifacts; reporter records failure and rejects skipped/empty/incomplete suites (no live requests)');
+console.log('PASS opt-in CI gate: dispatch/run-live label only, exact PR head provenance, Node pin, 15m timeout, no signing/secrets, required commands, HTML/JSON artifacts; reporter records failure and rejects skipped/empty/incomplete suites (no live requests)');

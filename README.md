@@ -38,22 +38,24 @@ npm run test:browser            # real Chromium, injected/offline data: layout, 
 npm run test:live               # real Chromium + public Sepolia RPCs; no RPC mocks or signatures
 ```
 
-The live test records public CORS RPC availability, two-peer block agreement and the published v6 graph/network snapshot. A failure must not be reported as a pass. The earlier sandbox attempt failed on the old three-endpoint list. That list has now been replaced following the user's real-network findings; the new list is **not yet live-qualified**. Run `npm run rpc:probe` and `npm run test:live` locally. The Node probe checks chain ID, a head-minus-12 block, the pinned mining implementation slot at that block, and a 10k-block NFT Transfer log query per endpoint. It does not establish browser CORS, two-peer agreement or full deployment verification. The normal CI workflow installs Chromium **and OS libraries** and runs offline/browser checks only. Live qualification is isolated in the dispatch-only **thewheel** workflow; a failed live check fails that manual gate.
+The live test records public CORS RPC availability, two-peer block agreement and the published v6 graph/network snapshot. A failure must not be reported as a pass. The earlier sandbox attempt failed on the old three-endpoint list. That list has now been replaced following the user's real-network findings; the new list is **not yet live-qualified**. Run `npm run rpc:probe` and `npm run test:live` locally. The Node probe checks chain ID, a head-minus-12 block, the pinned mining implementation slot at that block, and a 10k-block NFT Transfer log query per endpoint. It does not establish browser CORS, two-peer agreement or full deployment verification. The normal CI workflow installs Chromium **and OS libraries** and runs offline/browser checks only. Live qualification is isolated in the explicit-opt-in **thewheel** workflow; a failed live check fails that manual gate.
 
-### Manual CI qualification gate: thewheel
+### Opt-in CI qualification gate: thewheel
 
-`.github/workflows/live.yml` is named **thewheel** and has **only `workflow_dispatch`**: no push, pull-request or scheduled live runs. On `ubuntu-latest`, with Node from `.nvmrc` and a 15-minute job timeout, it runs:
+`.github/workflows/live.yml` is named **thewheel**. It accepts `workflow_dispatch` or `pull_request` **`labeled` only**, with the live job gated on explicit dispatch or the newly added **`run-live`** label. No push, PR-open/synchronize, or scheduled live runs occur; other labels skip the job. On `ubuntu-latest`, with Node from `.nvmrc` and a 15-minute job timeout, it runs:
 
 1. `npm ci`
 2. `npx playwright install --with-deps chromium`
 3. `npm run rpc:probe`
 4. `npm run test:live`
 
-It uses read-only repository permissions and no configured secrets, wallet, keeper or signing variables. Manual runs are serialized to avoid hammering public RPCs. Test failures are not ignored. An always-run artifact upload retains the HTML Playwright report, screenshots/traces/test attachments and **`live-qualification/live-qualification.json`**, including failure evidence. A not-run JSON is seeded before dependency/browser setup so a later setup or probe failure is not mistaken for a pass. The dedicated live reporter rejects empty/skipped/incomplete suites as qualification passes; ordinary browser tests remain separate.
+It uses read-only repository permissions and no configured secrets, wallet, keeper or signing variables. Opted-in runs are serialized under the same concurrency group to avoid hammering public RPCs. Test failures are not ignored. An always-run artifact upload retains the HTML Playwright report, screenshots/traces/test attachments and **`live-qualification/live-qualification.json`**, including failure evidence. A not-run JSON is seeded before dependency/browser setup so a later setup or probe failure is not mistaken for a pass. The dedicated live reporter rejects empty/skipped/incomplete suites as qualification passes; ordinary browser tests remain separate.
 
-**GitHub prerequisite:** a dispatch-only workflow must exist on the **default branch** before GitHub exposes it for manual dispatch. Adding it in PR #2 alone does not register the Actions-tab button. Once the workflow file is registered on the default branch, choose **thewheel → Run workflow → `arena/314fd2af-squeekchain-console`** to qualify this PR's code. This does not authorize merging the full WIP PR before qualification; a workflow-only default-branch bootstrap needs separate approval/action.
+**Run from PR #2 now:** add the **`run-live`** label. The job checks out the event's exact **PR head SHA**, not GitHub's synthetic merge commit. `LIVE_SOURCE_COMMIT` carries that same SHA into both the initial and final qualification JSON. For `workflow_dispatch`, the checkout/evidence use the selected ref's event SHA. No `pull_request_target`, configured secrets or write permissions are used.
 
-**Phase 0 remains incomplete until that manual workflow run is green.** A successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
+Dispatch from the Actions tab still requires the workflow on the default branch; the label trigger avoids that bootstrap requirement. I.e. no merge of this WIP PR is needed to run the label gate. Adding subsequent commits does not rerun live RPC tests automatically: remove and re-add `run-live` to qualify a newer head.
+
+**Phase 0 remains incomplete until the opted-in live job for the intended source SHA actually passes.** A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
 
 ### Chromium downloads and local Chrome
 

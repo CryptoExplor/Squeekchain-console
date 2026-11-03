@@ -3,22 +3,28 @@ run-name: thewheel · Read-only Sepolia live qualification
 
 on:
   workflow_dispatch:
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
 
-# Manual runs only; serialize them to avoid competing public-RPC scans.
+# Explicit dispatch/label opt-in only; serialize runs to avoid competing public-RPC scans.
 concurrency:
   group: thewheel-live-sepolia
   cancel-in-progress: false
 
 jobs:
   live:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-live'
+    env:
+      LIVE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -31,7 +37,7 @@ jobs:
           fs.mkdirSync('live-qualification', { recursive: true });
           fs.writeFileSync('live-qualification/live-qualification.json', JSON.stringify({
             schemaVersion: 1,
-            sourceCommit: process.env.GITHUB_SHA,
+            sourceCommit: process.env.LIVE_SOURCE_COMMIT,
             runUrl: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
             status: 'not-run',
             qualified: false,

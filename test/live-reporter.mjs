@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 
 const describeError = error => ({ message: error.message ?? String(error), stack: error.stack ?? null });
 function commit() {
-  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA;
+  if (process.env.LIVE_SOURCE_COMMIT) return process.env.LIVE_SOURCE_COMMIT;
   try { return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(); }
   catch { return null; }
 }
@@ -21,7 +21,7 @@ export default class LiveQualificationReporter {
       runUrl: process.env.GITHUB_RUN_ID
         ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}` : null,
       network: 'Sepolia', chainId: 11155111, readOnly: true,
-      phase0Gate: 'Only a green manual thewheel workflow satisfies the gate; this report does not change repository phase status.',
+      phase0Gate: 'Only a green opted-in thewheel live job for the recorded source commit satisfies the gate; this report does not change repository phase status.',
       status: 'not-started', qualified: false, expectedTests: 0, tests: [], errors: [],
     };
   }

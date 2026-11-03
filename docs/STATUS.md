@@ -6,7 +6,7 @@
 
 **Phase 0 remains incomplete.** The new real-browser `npm run test:live` check was attempted once after the RPC/discovery load fixes and failed before contract verification: all three public RPC probes in the **old** endpoint list returned `Failed to fetch`. This is not proof of rate limiting, CORS rejection, TLS failure, current identity mismatch, a frozen frontier, or transaction failure. No live reads qualified in that sandbox attempt and no transactions were submitted. The subsequent user-reported SDK successes below are partial live evidence, not a completed Playwright qualification.
 
-Evidence: [`audit/live-qualification-2026-11-02.json`](audit/live-qualification-2026-11-02.json). The earlier local-run plan is now superseded by the dispatch-only **thewheel** CI gate below. Mark Phase 0 complete only after that manual workflow is green, retaining its successful artifacts. The historical jsdom smoke failure is not retried here. Public RPC availability is not a Phase 1 blocker.
+Evidence: [`audit/live-qualification-2026-11-02.json`](audit/live-qualification-2026-11-02.json). The earlier local-run plan is now superseded by the explicit-opt-in **thewheel** CI gate below. Mark Phase 0 complete only after the opted-in live job for the intended source SHA is green, retaining its successful artifacts. The historical jsdom smoke failure is not retried here. Public RPC availability is not a Phase 1 blocker.
 
 ## Public RPC availability follow-up
 
@@ -18,7 +18,7 @@ Public endpoints change often; configured roles are availability preferences, no
 - Run **`npm run rpc:probe`** locally for a per-endpoint table: chain ID, a head-minus-12 block/hash, the mining EIP-1967 implementation slot at that block, and an inclusive 10k-block NFT Transfer log query. Requests time out after 15 seconds. Each capability reports independently; a log failure does not disqualify an otherwise healthy snapshot/state peer. This Node diagnostic does not test browser CORS, peer agreement or the full graph and is **not Phase 0 qualification**.
 - Offline regression coverage uses the reported `4444: pruned history unavailable`, `historical state unavailable`, `range too large`, `35: chain is not available on free plan` and `forbidden` payloads; asserts unchanged-range endpoint failover before chunk shrinking, custom/wallet behavior and trust-stop behavior.
 
-**Phase 0 is still incomplete.** The replacement list awaits a green manual **thewheel** workflow run. The old failed evidence is retained, not relabeled as a pass.
+**Phase 0 is still incomplete.** The replacement list awaits a green opted-in **thewheel** live job. The old failed evidence is retained, not relabeled as a pass.
 
 ## User-reported partial live results and follow-ups
 
@@ -37,15 +37,17 @@ The v6 panel now displays its live settlement frontier and a snapshot-scoped no-
 
 README documents the linux-arm64 Chromium CDN 403 workaround: use x64 or an already-installed supported local Chrome via **`PLAYWRIGHT_CHROMIUM_CHANNEL=chrome npm run test:live`** (`channel: 'chrome'`), or the existing executable-path override. The Chrome-channel config is provided; local Chrome itself was not available/tested in this sandbox.
 
-**Phase 0 remains incomplete until the manual thewheel workflow run is green.** PR #2 stays open/draft/WIP.
+**Phase 0 remains incomplete until the opted-in thewheel live job for the intended source SHA is green.** PR #2 stays open/draft/WIP.
 
-## Manual CI live gate (pending dispatch)
+## Opt-in CI live gate (pending run-live label)
 
-Added **thewheel** (`.github/workflows/live.yml`), triggered **only by `workflow_dispatch`**. It uses `ubuntu-latest`, Node 22 from `.nvmrc`, a **15-minute** timeout and read-only repository permissions; runs `npm ci`, Chromium install with OS dependencies, `rpc:probe`, then `test:live`; and always attempts to upload Playwright HTML/report data plus fresh `live-qualification/live-qualification.json` evidence. No configured secrets or keeper/signing variables are used. Empty/skipped/incomplete suites cannot qualify; failures are not marked continue-on-error. The old non-blocking live option was removed from ordinary offline CI to leave one clearly named manual live gate.
+Added **thewheel** (`.github/workflows/live.yml`), triggered by **`workflow_dispatch` or `pull_request: types: [labeled]`**, with the live job gated on explicit dispatch or the event's **`run-live`** label. Other labels skip the job; pushes/PR synchronization never run the live tests automatically. It uses `ubuntu-latest`, Node 22 from `.nvmrc`, a **15-minute** timeout and read-only repository permissions; runs `npm ci`, Chromium install with OS dependencies, `rpc:probe`, then `test:live`; and always attempts to upload Playwright HTML/report data plus fresh `live-qualification/live-qualification.json` evidence. No configured secrets or keeper/signing variables are used. Empty/skipped/incomplete suites cannot qualify; failures are not marked continue-on-error. The old non-blocking live option was removed from ordinary offline CI to leave one clearly named manual live gate.
 
 No sandbox `test:live` retry was performed for this change. Its last blocked attempt is preserved in [`audit/live-qualification-2026-11-03.json`](audit/live-qualification-2026-11-03.json); the latest user-reported SDK verification passed at block **12050470** in **1.6 seconds**, frontier **1973**, but did not include a full Playwright live-suite pass.
 
-**GitHub dispatch requires the workflow file to exist on the default branch first.** PR-only dispatch workflows are not yet available from the Actions tab. A workflow-only bootstrap onto the default branch needs separate approval/action; the WIP PR was not merged. Once registered, manually dispatch **thewheel** on `arena/314fd2af-squeekchain-console`. **Phase 0 remains incomplete until that manual run is green.** No automatic phase transition is performed by the workflow.
+The workflow can now run directly from **PR #2 by adding `run-live`**; no default-branch bootstrap or WIP merge is required for that trigger. `actions/checkout` pins `github.event.pull_request.head.sha` on PR events (selected event SHA on dispatch). Both the initial JSON and live reporter use **`LIVE_SOURCE_COMMIT`** set to that exact head SHA, not the PR merge-commit `GITHUB_SHA`. If the explicit source variable is absent, the reporter uses checked-out HEAD (or unknown if Git is unavailable), never the synthetic merge-commit `GITHUB_SHA`. Read-only permissions and concurrency group **`thewheel-live-sepolia`** are unchanged; **no `pull_request_target`** or secrets are used.
+
+The user will apply the label; the agent has not labeled/dispatched or rerun live tests. Re-add the label after later commits if a new head needs qualification. **Phase 0 remains incomplete until that opted-in live job actually passes for the intended source SHA**, with successful artifacts; a skipped job is not qualification. No automatic phase transition is performed by the workflow. Actions-tab `workflow_dispatch` remains available only once the workflow exists on the default branch.
 
 ## Implemented in place
 
@@ -67,7 +69,7 @@ No sandbox `test:live` retry was performed for this change. Its last blocked att
 - `npm run test:browser`: **6 passing Chromium tests**: light/saved theme and responsive layout; pending-RPC switch; three rapid switches; pending-simulation switch; late broadcast persistence/receipt tracking across a switch and reload; live-derived v6 frontier messaging/advancement/failure/switch/mobile behavior. RPC/adapters are mocked in this suite; it is not live qualification.
 - `npm run build`: passes; `dist/` output parity is a build check, not tracked generated content.
 - CI includes `npx playwright install --with-deps chromium`. The sandbox used an npm-distributed Chromium with bundled system libraries because browser download hosts are restricted; that temporary package/binary is not a project dependency or committed artifact.
-- `npm run test:live`: the **historical sandbox attempt failed / was unavailable**; the updated full suite is **pending manual CI qualification**. The user-reported SDK checks above do not mark it passed.
+- `npm run test:live`: the **historical sandbox attempt failed / was unavailable**; the updated full suite is **pending opted-in CI qualification**. The user-reported SDK checks above do not mark it passed.
 
 ## Sources and historical evidence
 
