@@ -1,7 +1,7 @@
 import { createPublicClient, custom, fallback, http, shouldThrow as shouldStop } from 'viem';
 import { abortable, throwIfAborted } from './cancellation.js';
 import { sepolia } from 'viem/chains';
-import { isLogRangeError, isRpcAvailabilityError, isTrustError, RpcTrustError, RpcAvailabilityError, rpcCauses, rpcErrorDiagnostics, withRpcContext } from './rpc-errors.js';
+import { isLogRangeError, isRpcAvailabilityError, isRpcProgrammingError, isTrustError, RpcTrustError, RpcAvailabilityError, rpcCauses, rpcErrorDiagnostics, withRpcContext } from './rpc-errors.js';
 export { RpcTrustError } from './rpc-errors.js';
 import { retryAfterMs } from './retry-after.js';
 const sessionCooldowns = new Map();
@@ -51,7 +51,7 @@ export function createSnapshotGuard(client, peers, { signal } = {}) {
         if (selected.length === 2) break;
       } catch (error) {
         throwIfAborted(signal);
-        if (isTrustError(error)) throw error;
+        if (isTrustError(error) || isRpcProgrammingError(error)) throw error;
       }
     }
     if (selected.length < 2) throw new Error('Unavailable: two independent Sepolia RPCs are required');
@@ -84,7 +84,7 @@ export function chainCheckedRequest(request, { key, chainCache = new Map(), sign
     catch (error) {
       chainCache.delete(key);
       throwIfAborted(signal);
-      if (isTrustError(error)) throw error;
+      if (isTrustError(error) || isRpcProgrammingError(error)) throw error;
       // Recheck identity on errors, but never retry a reverted call with changed inputs.
       try { await chainId(); }
       catch (recheckError) {
@@ -150,7 +150,7 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     return true;
   }).map(url => createPublicClient({ chain: sepolia, transport: checked.get(url) }));
   // Identity/hash failures always stop, even if a wrapped message mentions limits.
-  const shouldThrow = error => signal?.aborted || isTrustError(error) || (!isRpcAvailabilityError(error) && rpcCauses(error).some(item => shouldStop(item.error)));
+  const shouldThrow = error => signal?.aborted || isTrustError(error) || isRpcProgrammingError(error) || (!isRpcAvailabilityError(error) && rpcCauses(error).some(item => shouldStop(item.error)));
   const stateClient = createPublicClient({ chain: sepolia, transport: fallback(roleUrls('state').map(url => checked.get(url)), {
     rank: false, retryCount: 0, shouldThrow,
   }) });
@@ -187,6 +187,7 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
       let id;
       try { id = await request({ method: 'eth_chainId' }); }
       catch (error) {
+        if (isRpcProgrammingError(error)) throw error;
         if (isTrustError(error)) {
           chainCache.delete(wallet);
           // An initially non-Sepolia wallet is not a read candidate. Do not

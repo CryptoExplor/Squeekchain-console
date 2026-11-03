@@ -30,8 +30,14 @@ export class RpcTrustError extends Error {
 export function isTrustError(error) {
   return causes(error, item => item instanceof RpcTrustError || item.name === 'RpcTrustError');
 }
+// Match known fetch runtime messages, not a TypeError name or wrapper class.
+// Anchor the whole message so a property named 'failed to fetch' cannot hide a bug.
+const isFetchTypeError = error => /^(?:failed to fetch|fetch failed|load failed|networkerror when attempting to fetch(?: resource)?\.?|network request failed)$/i.test(String(error.message ?? '').trim());
+export function isRpcProgrammingError(error) {
+  return causes(error, item => item.name === 'TypeError' && !isFetchTypeError(item));
+}
 export function isLogRangeError(error) {
-  return !isTrustError(error) && causes(error, item => Number(item.code) === 4444
+  return !isTrustError(error) && !isRpcProgrammingError(error) && !isExecutionError(error) && causes(error, item => Number(item.code) === 4444
     || /pruned history|block range|range.*(?:limit|too large)|too many (?:results|logs)|response.*(?:large|size)/i.test(`${item.message ?? ''} ${item.details ?? ''}`));
 }
 function isExecutionError(error) {
@@ -39,9 +45,10 @@ function isExecutionError(error) {
     || ['UserRejectedRequestError', 'TransactionRejectedRpcError', 'ContractFunctionRevertedError'].includes(item.name));
 }
 export function isRpcAvailabilityError(error) {
-  if (isTrustError(error) || isExecutionError(error)) return false;
+  if (isTrustError(error) || isExecutionError(error) || isRpcProgrammingError(error)) return false;
   return isLogRangeError(error) || causes(error, item => item instanceof RpcAvailabilityError
-    || ['RpcAvailabilityError', 'HttpRequestError', 'TimeoutError', 'TypeError'].includes(item.name)
+    || ['RpcAvailabilityError', 'HttpRequestError', 'TimeoutError'].includes(item.name)
+    || (item.name === 'TypeError' && isFetchTypeError(item))
     || [429, 503].includes(item.status)
     || /historical state|free plan|forbidden|missing trie node|state.*(?:pruned|unavailable)|rate limited|failed to fetch|fetch failed|load failed|network error|RPC.*(?:offline|unavailable)|timed? ?out/i.test(`${item.message ?? ''} ${item.details ?? ''}`));
 }
@@ -76,7 +83,9 @@ function safeCauseMessage(error) {
   if (isTrustError(error)) return /chainId|chain ID/i.test(message) ? 'RPC chain identity mismatch' : /hash/i.test(message) ? 'Snapshot block hash mismatch' : 'Deployment identity/trust verification failed';
   if (error instanceof RpcRequestContextError) return `RPC ${error.kind} failure`;
   if (/execution reverted/i.test(message)) return 'Execution reverted';
-  if (error.name === 'TypeError') return 'Transport TypeError (network/CORS cannot be distinguished from this alone)';
+  if (error.name === 'TypeError') return isFetchTypeError(error)
+    ? 'Transport TypeError (network/CORS cannot be distinguished from this alone)'
+    : 'Non-network TypeError (possible programming error)';
   if (/Retry-After|rate limited/i.test(message)) return 'Rate limited / Retry-After cooldown';
   if (/pruned history/i.test(message)) return 'Pruned history unavailable';
   if (/historical state|missing trie node/i.test(message)) return 'Historical state unavailable';

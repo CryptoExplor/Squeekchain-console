@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { createPublicClient, custom, UnknownRpcError } from 'viem';
 import { createRpcContext, PUBLIC_RPCS } from '../sdk/rpc.js';
-import { RpcAvailabilityError, RpcTrustError, isRpcAvailabilityError, rpcErrorDiagnostics, rpcToolError, withRpcContext } from '../sdk/rpc-errors.js';
+import { RpcAvailabilityError, RpcTrustError, rpcCauses, isRpcAvailabilityError, rpcErrorDiagnostics, rpcToolError, withRpcContext } from '../sdk/rpc-errors.js';
 import { observeLiveRpc } from './live-network.mjs';
 import { EventEmitter } from 'node:events';
 
 const [first, second] = PUBLIC_RPCS;
 const realFetch = globalThis.fetch, word = `0x${'00'.repeat(32)}`;
-let calls = [], failState = false, recheckFailure = false, wrongRecheckChain = false, afterState = false;
+let calls = [], failState = false, recheckFailure = false, wrongRecheckChain = false, afterState = false, programmingError = null;
 globalThis.fetch = async (url, init) => {
   const request = JSON.parse(init.body), endpoint = new URL(url).origin;
   calls.push({ endpoint, method: request.method });
@@ -18,6 +18,7 @@ globalThis.fetch = async (url, init) => {
     else result = '0xaa36a7';
   } else {
     assert.equal(request.method, 'eth_getStorageAt');
+    if (endpoint === first && programmingError) throw programmingError;
     if (endpoint === first && failState) {
       afterState = true;
       if (recheckFailure || wrongRecheckChain) return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, error: { code: 4444, message: 'pruned history unavailable' } }), { headers: { 'content-type': 'application/json' } });
@@ -43,6 +44,22 @@ try {
   assert.deepEqual(calls.filter(call => call.method === 'eth_getStorageAt').map(call => call.endpoint), [first, second]);
   assert.ok(transport.rpcDiagnostics().some(record => record.method === 'eth_getStorageAt' && record.availability && record.causeChain.some(cause => cause.name === 'TypeError')));
 
+  // viem wraps even fetch code bugs in HttpRequestError. This wrapper must not
+  // turn a non-network TypeError into availability or hide it behind another peer.
+  calls = []; programmingError = new TypeError('Cannot read properties of undefined');
+  await assert.rejects(read(createRpcContext({ rpcCooldowns: new Map() })), error => {
+    assert.equal(isRpcAvailabilityError(error), false);
+    assert.ok(rpcCauses(error).some(item => item.error === programmingError));
+    assert.match(rpcToolError(error).error, /Non-network TypeError/);
+    return true;
+  });
+  assert.deepEqual(calls, [{ endpoint: first, method: 'eth_chainId' }, { endpoint: first, method: 'eth_getStorageAt' }],
+    'programming TypeError must stop at the first endpoint without re-probing or falling through');
+  calls = [];
+  await assert.rejects(createRpcContext({ provider: () => ({ request: async () => { throw programmingError; } }) }).client.getBlockNumber());
+  assert.equal(calls.length, 0, 'wallet probe programming TypeError must not fall through to HTTP');
+  programmingError = null;
+
   // A failing identity availability re-probe cannot erase the original method/code.
   calls = []; afterState = false; recheckFailure = true;
   const recheck = createRpcContext({ rpcCooldowns: new Map() });
@@ -66,8 +83,15 @@ try {
   assert.equal(calls.length, 0, 'nested trust failure in wallet identity probe must not fall through to HTTP');
 } finally { globalThis.fetch = realFetch; }
 
-for (const root of [new TypeError('Load failed'), new TypeError('Failed to fetch'), new Error('RPC rate limited; waiting for Retry-After backoff')]) {
+for (const root of [new TypeError('Load failed'), new TypeError('Failed to fetch'), new TypeError('NetworkError when attempting to fetch resource.'), new TypeError('fetch failed'), new Error('RPC rate limited; waiting for Retry-After backoff')]) {
   assert.equal(isRpcAvailabilityError(new UnknownRpcError(new UnknownRpcError(root))), true);
+}
+for (const message of ['Cannot read properties of undefined', "Cannot read properties of undefined (reading 'failed to fetch')", 'Invalid URL', 'unexpected failure']) {
+  const bug = new TypeError(message);
+  const wrapped = new UnknownRpcError(withRpcContext(bug, { endpoint: first, method: 'eth_call' }));
+  assert.equal(isRpcAvailabilityError(wrapped), false, 'non-network TypeErrors stay fatal through nested causes');
+  const misleadingWrapper = new RpcAvailabilityError(bug, { endpoint: first, method: 'eth_call' });
+  assert.equal(isRpcAvailabilityError(misleadingWrapper), false, 'availability wrappers cannot soften a programming TypeError');
 }
 const typed = new RpcAvailabilityError(new TypeError('Load failed'), { endpoint: first, method: 'eth_getStorageAt', kind: 'transport' });
 const customClient = createPublicClient({ transport: custom({ request: async () => { throw typed; } }, { retryCount: 0 }) });
@@ -100,7 +124,7 @@ assert.equal(fatalRecheck.diagnostics.trust, true);
 assert.equal(fatalRecheck.diagnostics.availability, false);
 assert.match(fatalRecheck.error, /chain identity mismatch/);
 assert.equal(fatalRecheck.diagnostics.method, 'eth_chainId');
-console.log('PASS typed RPC errors: first state cooldown/TypeError failover, nested UnknownRpcError causes, original failure + recheck retention, trust/revert stop and redacted endpoint/method/status diagnostics');
+console.log('PASS typed RPC errors: first state cooldown/network TypeError failover, programming TypeError hard stop, nested UnknownRpcError causes, original failure + recheck retention, trust/revert stop and redacted endpoint/method/status diagnostics');
 
 // Passive network observer is exercised without launching a browser or any RPC.
 const page = new EventEmitter(), observer = observeLiveRpc(page, [privateUrl]);

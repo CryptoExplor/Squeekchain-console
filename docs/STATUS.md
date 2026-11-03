@@ -75,6 +75,12 @@ Hardening: viem-BaseError typed availability/context errors retain endpoint orig
 
 The live assertions remain unchanged; the unmocked test now passively attaches **`rpc-network-diagnostics.json`** (actual HTTP status, JSON-RPC code, network failure and explicit browser CORS signals) and, when a tool returns error diagnostics, **`rpc-tool-diagnostics.json`**. These are attached in `finally`, including on assertion failure. The live qualification reporter includes these attachments. `ERR_FAILED`/TypeError alone is explicitly not treated as proof of CORS. Offline Node and Chromium wire regressions exercise first-state-endpoint cooldown/TypeError fallback, typed-error preservation, original + chain-ID recheck errors, trust/revert stops and secret redaction. No sandbox live suite was retried or label applied.
 
+## Phase 1 review: non-network TypeErrors fail closed
+
+Only known fetch-failure TypeError messages (`Failed to fetch`, `Load failed`, `NetworkError when attempting to fetch resource.`, Node `fetch failed`, or `Network request failed`) qualify as transport availability. Other TypeErrors, including `Cannot read properties of undefined`, stop immediately through nested viem/HTTP/availability wrappers; they cannot trigger peer fallback, chain-ID re-probes or log-range shrinking. Snapshot peer selection and wallet probes also preserve this stop. Diagnostics label these as possible programming errors, not CORS failures, without serializing arbitrary provider messages.
+
+The offline first-endpoint regression injects the exact programming TypeError through the real viem HTTP transport, verifies the original cause survives, and asserts no next endpoint or identity re-probe is called. Existing cooldown and recognized fetch-failure fallback tests remain in place. Live qualification and manual review remain deferred until the end of Phase 1.
+
 ## Implemented in place
 
 - **Wheelhouse design:** light-default, saved theme, local Barlow Condensed/Quicksand/IBM Plex Mono, gold/blue, original wheel artwork, responsive wallet/verification visibility, keyboard focus lifecycle and reduced motion. No Lighthouse score or blanket WCAG certification is claimed.
