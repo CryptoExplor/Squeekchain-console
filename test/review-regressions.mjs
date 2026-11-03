@@ -51,7 +51,7 @@ win.ethereum = {
   on() {},
 };
 win.localStorage.setItem("squeekchain:profile", "sepolia-v9");
-const api = mount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}), doc, win, adapterFactory: () => adapter, fetcher: (...args) => { requests++; return fetchHook(...args); } });
+const api = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), doc, win, adapterFactory: () => adapter, fetcher: (...args) => { requests++; return fetchHook(...args); } });
 try {
   await api.refresh(); await tick();
   const fields = ['wheel-state', 'wheel-rpm', 'wheel-speed', 'wheel-distance', 'wheel-note'];

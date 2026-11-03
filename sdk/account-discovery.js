@@ -11,7 +11,8 @@ const same = (a, b) => typeof a === 'string' && a.toLowerCase() === b.toLowerCas
  */
 export function createAccountTokenSource({ fetcher = (...args) => globalThis.fetch(...args), now = Date.now } = {}) {
   let retryAt = 0;
-  return async function accountTokenIds({ owner, nft, signal }) {
+  return async function accountTokenIds({ owner, nft, signal, custody = 'wallet', snapshot }) {
+    if(!['wallet','staking'].includes(custody))throw new Error('Invalid custody hint filter');
     // Cursors may be invalidated by a reorg; restart once, never combine page sets.
     for (let restart = 0; restart < 2; restart++) {
       let cursor = null, context;
@@ -50,12 +51,13 @@ export function createAccountTokenSource({ fetcher = (...args) => globalThis.fet
           || !(data.nextCursor === null || (typeof data.nextCursor === 'string' && /^[A-Za-z0-9_-]{1,512}$/.test(data.nextCursor)))) {
           throw new Error('Invalid official account hint context');
         }
+        if(snapshot && (BigInt(data.chain.safeThroughBlock)!==snapshot.blockNumber || !same(data.chain.safeBlockHash,snapshot.blockHash)))throw new Error('Account hints are not at the requested snapshot');
         const pageContext = `${data.release.id}:${data.chain.safeThroughBlock}:${data.chain.safeBlockHash.toLowerCase()}`;
         if (context && pageContext !== context) throw new Error('Official account pages changed snapshot/release');
         context = pageContext;
         for (const token of data.tokens) {
           if (!decimal(token.tokenId) || BigInt(token.tokenId) === 0n || !['wallet', 'staking'].includes(token.custody)) throw new Error('Invalid official account token hint');
-          if (token.custody === 'wallet') ids.add(String(BigInt(token.tokenId)));
+          if (token.custody === custody) ids.add(String(BigInt(token.tokenId)));
         }
         cursor = data.nextCursor;
         if (cursor === null) return [...ids].map(BigInt);

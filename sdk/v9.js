@@ -1,3 +1,5 @@
+import { accountTokenIds } from './account-discovery.js';
+import { feeLimitExceeded } from './fee-error.js';
 import { ACTION_REASONS, blocked } from './capabilities.js';
 /** Equal-profile v9 adapter. Expected identities are dated pins, never API authority. */
 import { getAddress, formatEther, encodeFunctionData } from 'viem';
@@ -14,7 +16,7 @@ export { parseSqueekMetadata } from './metadata.js';
 const same = (a,b) => String(a).toLowerCase() === String(b).toLowerCase();
 const positive = value => { if (!/^\d+$/.test(String(value)) || BigInt(value) <= 0n || BigInt(value) >= 2n ** 256n) throw new Error('Positive uint256 required'); return BigInt(value); };
 const idsInput = values => { if (!Array.isArray(values) || !values.length || values.length > 1000) throw new Error('Supply token IDs'); const ids = values.map(positive); if (new Set(ids.map(String)).size !== ids.length) throw new Error('Duplicate token IDs'); return ids.sort((a,b)=>a<b?-1:1); };
-export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpcContext, signal, chainCache, discoveryCache = createDiscoveryStore(), verificationCache } = {}) {
+export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpcContext, signal, chainCache, discoveryCache = createDiscoveryStore(), accountSource = accountTokenIds, verificationCache } = {}) {
   const profile = getProfile(profileKey);
   if (profile.abiSet !== 'v9' || !profile.addresses) throw new Error('v9 profile required');
   const addr = Object.fromEntries(Object.entries(profile.addresses).map(([k,v])=>[k,getAddress(v.toLowerCase())]));
@@ -26,7 +28,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
     const task = queue.then(async () => {
       throwIfAborted(signal); activeSnapshot = await context.snapshot();
       try {
-        const prepared = await verifier.prepare(client, activeSnapshot); verification = prepared.value;
+        const prepared = await verifier.prepare(client, activeSnapshot, context.readIdentity); verification = prepared.value;
         throwIfAborted(signal); const result = await operation(); throwIfAborted(signal);
         await context.check(activeSnapshot); throwIfAborted(signal); prepared.commit();
         return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash, timestamp: activeSnapshot.timestamp == null ? null : String(activeSnapshot.timestamp), peers:activeSnapshot.peers?.map(peer=>({label:peer.name,state:'agreed'}))??[] } } : result;
@@ -105,7 +107,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
   async function walletStatus(owner) {
     owner = getAddress(owner.toLowerCase());
     const [walletIds, stakedIds, net, claimable, power, balance, eth, principal] = await Promise.all([
-      idsOwned(owner), depositedIds({ client, snapshot: activeSnapshot, profile, owner, store: discoveryCache, signal }), networkStatus(),
+      idsOwned(owner), depositedIds({ client, snapshot: activeSnapshot, profile, owner, store: discoveryCache, signal, accountSource }), networkStatus(),
       read('staking',staking9Abi,'claimable',[owner]), read('staking',staking9Abi,'accountPower',[owner]),
       read('token',token9Abi,'balanceOf',[owner]), client.getBalance({ address: owner, blockNumber: activeSnapshot.blockNumber }), read('staking',staking9Abi,'stakeOf',[owner]),
     ]);
@@ -152,8 +154,15 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
       const survivor=positive(input.survivor), donor=positive(input.donor); requireBurn(donor,confirm);
       if(survivor===donor) throw new Error('Choose different token IDs');
       if(!await read('nft',nft9Abi,'mergesOpen')) return blocked('mergesClosed');
+      const holders=await Promise.all([survivor,donor].map(id=>read('nft',nft9Abi,'ownerOf',[id])));
+      const staked=holders.map(holder=>same(holder,addr.staking));
+      if(staked[0]!==staked[1] && same(holders[staked[0]?1:0],owner)) {
+        const x=staked[0]?survivor:donor,y=staked[0]?donor:survivor;
+        await custody(owner,x,true);
+        return {ok:false,reasonCode:'mixedCustody',reason:`#${x} is staked; withdraw it or deposit #${y} first`};
+      }
       let deposited=action==='mergeDeposited';
-      if(action==='merge') deposited=same(await read('nft',nft9Abi,'ownerOf',[survivor]),addr.staking);
+      if(action==='merge') deposited=staked[0];
       await custody(owner,survivor,deposited); await custody(owner,donor,deposited);
       const [level, donorLevel, cooldown, donorCooldown, max, core]=await Promise.all([
         read('nft',nft9Abi,'level',[survivor]),read('nft',nft9Abi,'level',[donor]),read('nft',nft9Abi,'nextMergeHeight',[survivor]),read('nft',nft9Abi,'nextMergeHeight',[donor]),read('nft',nft9Abi,'MAXIMUM_LEVEL'),read('core',core9Abi,'state')]);
@@ -189,8 +198,10 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
       const block=await client.getBlock({blockNumber:activeSnapshot.blockNumber});
       const deadline=input.deadline == null ? BigInt(block.timestamp)+600n : positive(input.deadline);
       if(deadline<=BigInt(block.timestamp) || deadline>=2n**64n) throw new Error('Unstake deadline expired or invalid');
-      if(input.maxFee != null && fee>BigInt(input.maxFee)) return {ok:false,reason:'Unstake fee increased; review a new quote'};
-      return simulate(owner,'staking',staking9Abi,'unstake',[value,fee,deadline],{amount:String(value),fee:sqkAmount(fee),net:sqkAmount(net),maxFee:String(fee),deadline:String(deadline),warning:'Unstake burns the quoted exit fee; net is what you receive'});
+      const quote={amount:String(value),fee:sqkAmount(fee),net:sqkAmount(net),maxFee:String(fee),deadline:String(deadline)};
+      if(input.maxFee!=null && fee>BigInt(input.maxFee))return {ok:false,reasonCode:'feeRose',reason:'Fee rose',...quote};
+      try {return await simulate(owner,'staking',staking9Abi,'unstake',[value,fee,deadline],{...quote,warning:'Unstake burns the quoted exit fee; net is what you receive'});}
+      catch(error) {const rose=feeLimitExceeded(error);if(!rose)throw error;return {ok:false,...rose,fee:sqkAmount(BigInt(rose.fee))};}
     }
     throw new Error('Unsupported v9 action');
   }

@@ -1,3 +1,4 @@
+import { readIdentityBatch } from './identity-batch.js';
 import { createPublicClient, custom, fallback, http, shouldThrow as shouldStop } from 'viem';
 import { abortable, throwIfAborted } from './cancellation.js';
 import { sepolia } from 'viem/chains';
@@ -148,7 +149,7 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     if (peerOrigins.has(origin)) return false;
     peerOrigins.add(origin);
     return true;
-  }).map(url => createPublicClient({ name: url===rpcUrl?"Custom RPC":new URL(url).hostname, chain: sepolia, transport: checked.get(url) }));
+  }).map(url => Object.assign(createPublicClient({ name: url===rpcUrl?"Custom RPC":new URL(url).hostname, chain: sepolia, transport: checked.get(url) }), {identityUrl:url}));
   // Identity/hash failures always stop, even if a wrapped message mentions limits.
   const shouldThrow = error => signal?.aborted || isTrustError(error) || isRpcProgrammingError(error) || (!isRpcAvailabilityError(error) && rpcCauses(error).some(item => shouldStop(item.error)));
   const stateClient = createPublicClient({ chain: sepolia, transport: fallback(roleUrls('state').map(url => checked.get(url)), {
@@ -206,5 +207,21 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     }
     return abortable(() => (args.method === 'eth_getLogs' ? logsClient : stateClient).request(args), signal);
   } }, { retryCount: 0 }) });
-  return { client, invalidateChain, rpcDiagnostics: () => failures.slice(), ...createSnapshotGuard(client, peers, { signal }) };
+  const readIdentity = async (snapshot, requests) => Promise.all(snapshot.peers.map(async peer => {
+    const endpoint=peer.identityUrl,method=requests[0]?.method;
+    requireSepolia(await peer.getChainId());
+    if(now()<(rpcCooldowns.get(endpoint)??0))throw new RpcAvailabilityError(new Error('RPC rate limited; waiting for Retry-After backoff'),{endpoint,method,kind:'cooldown'});
+    try {return await readIdentityBatch(peer,requests,{signal,onResponse:(response,url)=>{
+      if(response.status===429||response.status===503){const timestamp=now();rpcCooldowns.set(url,timestamp+retryAfterMs(response.headers.get('Retry-After'),timestamp));}
+    }});} catch(error) {
+      throwIfAborted(signal);
+      if(isTrustError(error))throw recordFailure(error);
+      // Direct batch failures have the same fresh chain-identity check as singles.
+      chainCache.delete(endpoint);
+      try {requireSepolia(await peer.getChainId());}
+      catch(recheckError){throw recordFailure(withRpcContext(error,{endpoint,method,recheckError}));}
+      throw recordFailure(withRpcContext(error,{endpoint,method}));
+    }
+  }));
+  return { client, readIdentity, invalidateChain, rpcDiagnostics: () => failures.slice(), ...createSnapshotGuard(client, peers, { signal }) };
 }

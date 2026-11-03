@@ -25,7 +25,7 @@ import {
   ACTION_REASONS,
   PUBLIC_RPC_ENDPOINTS,
   runReadTool, toolProfile, settlementStatus, requireBurn,
-  profileBalances, chooseProfile, profileFromHash, profileInput, parseEther, formatEther,
+  profileBalances, chooseProfile, profileFromHash, profileInput, parseEther, formatEther, profileHeld, profileCountLabel, feeLimitExceeded,
 } from "./bundle.js";
 
 import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
@@ -243,7 +243,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         const option = doc.createElement("option");
         option.value = p.key;
         const count = state.profileCounts[p.key];
-        option.textContent = p.label + (state.account && p.addresses ? ` · ${count ?? "Unknown"} Squeeks` : "");
+        option.textContent = p.label + (state.account && p.addresses ? ` · ${profileCountLabel(count)}` : "");
         // Mainnet remains selectable as an honest launch-status view.
         return option;
       }),
@@ -251,11 +251,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.profileSelect.value = state.profileKey;
     const badge = $('profile-status');
     badge.setAttribute('aria-label', 'Live verification: open Info Trust');
-    $('profile-choice').classList.toggle('hidden', !state.account || !(BigInt(state.profileCounts['sepolia-v6'] ?? 0) > 0n && BigInt(state.profileCounts['sepolia-v9'] ?? 0) > 0n));
-    $('profile-choice').textContent = `You hold ${state.profileCounts['sepolia-v6'] ?? 'Unknown'} v6 and ${state.profileCounts['sepolia-v9'] ?? 'Unknown'} v9 Squeeks. Choose either profile in the selector.`;
+    $('profile-choice').classList.toggle('hidden', !state.account || !(profileHeld(state.profileCounts['sepolia-v6']) && profileHeld(state.profileCounts['sepolia-v9'])));
+    $('profile-choice').textContent = `v6: ${profileCountLabel(state.profileCounts['sepolia-v6'])}. v9: ${profileCountLabel(state.profileCounts['sepolia-v9'])}. Choose either profile in the selector.`;
   }
 
   async function switchProfile(profileKey, { preserveWallet = false } = {}) {
+    $('fee-rose').classList.add('hidden');
     preserveWallet = preserveWallet && Boolean(getProfile(profileKey).addresses);
     const account = preserveWallet ? state.account : null;
     const chainId = preserveWallet ? state.chainId : null;
@@ -478,7 +479,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       }
       hideBanner();
       try {
-        const counts = await viewAwait(load, () => profileBalanceReader ? profileBalanceReader(state.account) : profileBalances(state.account, { rpcUrl: store.get('wheelhouse:rpc') || undefined, provider: () => provider(), chainCache, signal: load.signal }));
+        const counts = await viewAwait(load, () => profileBalanceReader ? profileBalanceReader(state.account) : profileBalances(state.account, { rpcUrl: store.get('wheelhouse:rpc') || undefined, provider: () => provider(), chainCache, discoveryCache, signal: load.signal }));
         state.profileCounts = counts;
       } catch (err) { if (!isCurrent(load)) return null; state.profileCounts = {}; }
       renderProfileOptions();
@@ -548,6 +549,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── rendering ─────────────────────────────────────────────────────────────
   const observedRounds = new Map();
+  function renderCheckpointGate() {
+    const unknownHoldings=Boolean(state.inspected) && (state.status?.owner?.toLowerCase()!==state.inspected.toLowerCase() || num(state.status?.totals?.count)===UNKNOWN);
+    el.cp.button.disabled=state.busy || unknownHoldings || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
+  }
   function renderNetwork(net) {
     const previous = observedRounds.get(state.profileKey);
     const round = net.core?.settledThroughRound;
@@ -569,8 +574,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.net.paused.parentElement.className = `stat ${core.paused === true ? 'bad' : core.paused === false ? 'ok' : ''}`;
 
     const caps = capabilities();
-    const canCp = Boolean(caps.checkpoint && checkpoint.canCheckpoint === true);
-    el.cp.button.disabled = state.busy || !canCp;
+    renderCheckpointGate();
     el.cp.reason.textContent = caps.checkpoint
       ? checkpoint.canCheckpoint
         ? `next round ${valueText(checkpoint.nextRound)} is settled — a checkpoint will fund it`
@@ -616,6 +620,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     renderWatchMode();
     state.status = status;
     state.plan = plan;
+    renderCheckpointGate();
     const caps = capabilities();
     const isV9 = getProfile(state.profileKey).abiSet === 'v9';
     el.holder.power.parentElement.querySelector('.label').textContent = isV9 ? 'Deposited' : 'Power';
@@ -644,7 +649,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
             ? `≈${num(totals.estimatedSqkPerDay)} SQK/day at current share`
             : ""
           : "Connect owner wallet";
-    el.holder.claim.disabled = state.busy || (!has && !isV9) || !signerOwns || !caps.claim;
+    el.holder.claim.disabled = state.busy || num(totals.count) === UNKNOWN || (!has && !isV9) || !signerOwns || !caps.claim;
     $("btn-custom-merge").disabled = state.busy || !has || !signerOwns || !caps.merge;
     $("claim-ids").disabled = !caps.claim || isV9;
     $("claim-ids").classList.toggle("hidden", isV9);
@@ -854,7 +859,26 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     return { ok: true, ...result };
   }
 
-  async function requestAction(action, input = {}) {
+  async function showFeeRose(action,input,load) {
+    assertCurrent(load);
+    const quote=await readFor(load,'actionPreview',state.account,action,{amount:input.amount});
+    assertCurrent(load);
+    $('v9-result').classList.add('hidden');
+    const fee=quote.fee?.sqk;
+    $('fee-quote').textContent=fee==null?'New quote unavailable. Re-quote before continuing.':`New quote: ${fee} SQK fee${quote.net?.sqk!=null?` · ${quote.net.sqk} SQK received`:''}.`;
+    $('fee-rose').classList.remove('hidden');
+    $('fee-requote').onclick=()=>viewTask(()=>{assertCurrent(load);return requestAction(action,input);});
+    $('fee-requote').focus();
+    showBanner('Fee rose','warn');
+    return {ok:false,reasonCode:'feeRose',reason:'Fee rose',quote};
+  }
+  async function requestAction(action,input={}) {
+    $('fee-rose').classList.add('hidden');
+    const load=captureLoad();
+    try{return await requestActionInner(action,input);}
+    catch(error){if(action==='unstake'&&feeLimitExceeded(error))return showFeeRose(action,input,load);throw error;}
+  }
+  async function requestActionInner(action, input = {}) {
     if (!capabilities().deposit) throw new Error(capabilities().reasons.unavailable);
     const load = captureLoad(), owner = state.account;
     if (!owner || owner.toLowerCase() !== state.inspected?.toLowerCase()) throw new Error('Connect the inspected owner wallet');
@@ -865,17 +889,19 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     const preview = await readFor(load,'actionPreview',owner,action,input);
     showOut($('v9-result'),preview);
-    if (!preview.ok) { showBanner(preview.reason,'warn'); return preview; }
+    if (!preview.ok) {if(preview.reasonCode==='feeRose')return showFeeRose(action,input,load); showBanner(preview.reason,'warn'); return preview; }
     const body=action==='unstake'?'The quoted exit fee is burned.':`${preview.warning??action}. ${preview.amount?.sqk?'Rewards: '+preview.amount.sqk+' SQK.':''}`;
     const details=action==='unstake'?[['Amount',`${formatEther(BigInt(preview.amount))} SQK`],['Fee / maxFee',`${preview.fee.sqk} SQK`],['You receive',`${preview.net.sqk} SQK`],['Deadline',new Date(Number(preview.deadline)*1000).toUTCString()],['Gas estimate',preview.gas]]:[['Gas estimate',preview.gas]];
     if (!await confirmModal({title:action==='unstake'?'Review unstake fee':`Review ${action}`,body,details,confirmLabel:'Review in wallet'})) return {ok:false,reason:'cancelled'};
     assertCurrent(load);
     if (state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error('Wallet changed');
     const fresh = await readFor(load,'actionPreview',owner,action,{...input,...(action==='unstake'?{maxFee:preview.maxFee,deadline:preview.deadline}:{})});
+    if(action==='unstake'&&fresh.reasonCode==='feeRose')return showFeeRose(action,input,load);
     if (!fresh.ok || (action==='mergeDeposited' && fresh.nextLevel!==preview.nextLevel) || (preview.amount?.base != null && fresh.amount?.base !== preview.amount.base) || (action==='unstake' && (fresh.maxFee!==preview.maxFee || fresh.net.base!==preview.net.base))) throw new Error('Outcome or fee changed. Review a fresh preview; no automatic retry.');
     const result=await sendTransaction(fresh.tx,action,owner,load);await refreshAll();return result;
   }
   function renderActionFields() {
+    $('fee-rose').classList.add('hidden');
     const action=$('v9-action').value;
     for(const [id,visible] of [['v9-ids',['deposit','withdraw'].includes(action)],['v9-token',action==='approveNft'],['v9-amount',['stake','unstake','approveSqk'].includes(action)],['v9-survivor',action==='mergeDeposited'],['v9-donor',action==='mergeDeposited']]) {
       $(id).closest('label').classList.toggle('hidden',!visible); if(!visible)$(id).value='';

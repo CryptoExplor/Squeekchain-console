@@ -75,7 +75,7 @@ async function installRaceHarness(page) {
       throw new Error(`Unexpected wallet method ${method}`);
     }, on() {} };
     const holdings = { owner, ethBalance: { eth: '0.1' }, totals: { count: 1, power: '1000', sharePercent: 1, claimable: { sqk: '1' } }, squeeks: [{ tokenId: '1', level: 1, claimable: { sqk: '1' } }] };
-    window.squeek = mount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}), activityReader: async () => new Promise(resolve => { h.resolveReceipt = resolve; }), adapterFactory: (profileKey, load) => {
+    window.squeek = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), activityReader: async () => new Promise(resolve => { h.resolveReceipt = resolve; }), adapterFactory: (profileKey, load) => {
       h.loads.push({ profileKey, ...load });
       return {
         networkStatus: async () => h.pendingNetwork ? new Promise(resolve => h.reads.push({ profileKey, ...load, resolve })) : h.network('10'),

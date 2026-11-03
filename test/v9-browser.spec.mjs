@@ -1,7 +1,9 @@
 import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
+import {encodeErrorResult} from 'viem';
+import {staking9Abi} from '../sdk/abi-v9.js';
 import {installV9Fixture}from './v9-fixture.mjs';
-const capture=async(page,testInfo,name)=>{await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({fullPage:name.includes('squeeks'),animations:'disabled'});await testInfo.attach(name,{body:image,contentType:'image/png'});if(process.env.UPDATE_SCREENSHOTS==='1')fs.writeFileSync('docs/screenshots/'+name,image);};
+const capture=async(page,testInfo,name)=>{await page.evaluate(()=>document.fonts.ready);if(name.includes('fee-rose'))await page.evaluate(()=>scrollTo(0,0));const image=await page.screenshot({fullPage:name.includes('squeeks')||name.includes('fee-rose'),animations:'disabled'});await testInfo.attach(name,{body:image,contentType:'image/png'});if(process.env.UPDATE_SCREENSHOTS==='1')fs.writeFileSync('docs/screenshots/'+name,image);};
 for(const theme of ['light','dark'])for(const width of [1280,390])for(const view of ['squeeks','merge','unstake'])test(`v9 mocked ${view} / ${theme} / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);
  if(theme==='dark')await page.getByTestId('btn-theme').click();await page.evaluate(()=>window.squeek.connect());
@@ -26,7 +28,7 @@ test('v9 explicit approval scope, deposit failure never signs; fee increase and 
  await installV9Fixture(page);await page.evaluate(async()=>{await squeek.connect();v9.approvalRequired=true;});await page.getByTestId('v9-ids').fill('87');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeHidden();expect(await page.evaluate(()=>v9.sends)).toBe(0);
  await page.getByTestId('v9-action').selectOption('approveNft');await expect(page.getByTestId('approval-scope')).toContainText('only this NFT');
  await page.getByTestId('v9-action').selectOption('approveAll');await expect(page.getByTestId('approval-scope')).toContainText('ALL current and future');
- await page.getByTestId('v9-action').selectOption('unstake');await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeVisible();await page.evaluate(()=>{v9.fee='20000000000000000';});await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('banner')).toContainText('Outcome or fee changed');expect(await page.evaluate(()=>v9.sends)).toBe(0);
+ await page.getByTestId('v9-action').selectOption('unstake');await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeVisible();await page.evaluate(()=>{v9.fee='20000000000000000';});await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('banner')).toContainText('Fee rose');expect(await page.evaluate(()=>v9.sends)).toBe(0);
  await page.getByTestId('btn-claim').click();await expect(page.getByTestId('modal')).toBeVisible();await page.evaluate(()=>{v9.claimAmount='1';});await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('banner')).toContainText('Claim outcome changed');expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
 test('v9 staked merge BURN guard and SQK-only account claim',async({page})=>{
@@ -34,7 +36,7 @@ test('v9 staked merge BURN guard and SQK-only account claim',async({page})=>{
  await page.evaluate(async()=>{v9.wallet.totals.count=0;v9.wallet.totals.deposited=0;v9.wallet.squeeks=[];await squeek.refresh();});await expect(page.getByTestId('btn-claim')).toBeEnabled();await page.getByTestId('btn-claim').click();await expect(page.getByTestId('modal')).toBeVisible();expect(await page.evaluate(()=>v9.previews.at(-1).action)).toBe('claim');await page.evaluate(()=>squeek.destroy());
 });
 for(const [a,b,expected]of [['2','0','sepolia-v6'],['0','2','sepolia-v9'],['2','3','sepolia-v9'],['0','0','sepolia-v9'],[null,'2','sepolia-v9']])test(`connect inventory ${a}/${b} chooses ${expected}`,async({page})=>{
- await installV9Fixture(page);await page.evaluate(([a,b])=>{v9.counts={'sepolia-v6':a,'sepolia-v9':b};},[a,b]);await page.evaluate(()=>squeek.connect());await expect(page.getByTestId('profile-select')).toHaveValue(expected);expect(await page.getByTestId('profile-select').locator('option').allTextContents()).toEqual(expect.arrayContaining([`Sepolia v6 · ${a??'Unknown'} Squeeks`,`Sepolia v9 · ${b} Squeeks`]));
+ await installV9Fixture(page);await page.evaluate(([a,b])=>{v9.counts={'sepolia-v6':a,'sepolia-v9':b};},[a,b]);await page.evaluate(()=>squeek.connect());await expect(page.getByTestId('profile-select')).toHaveValue(expected);expect(await page.getByTestId('profile-select').locator('option').allTextContents()).toEqual(expect.arrayContaining([`Sepolia v6 · ${a??'Unknown'} in wallet · 0 staked`,`Sepolia v9 · ${b} in wallet · 0 staked`]));
  await expect(page.getByTestId('profile-choice'))[a==='2'&&b==='3'?'toBeVisible':'toBeHidden']();
  await page.getByTestId('wallet-button').click();await page.getByTestId('btn-disconnect').click();
  expect(await page.getByTestId('profile-select').locator('option').allTextContents()).toEqual(['Sepolia v9','Sepolia v6','Mainnet']);
@@ -50,4 +52,46 @@ test('subtract pass: active policy, one footer, source icons, conditional warnin
  await page.getByTestId('info-link-developers').click();await page.getByTestId('btn-copy-manifest').click();expect(loaded).toContain('/developers.js');
  const body=await page.locator('body').textContent();expect(body.match(/not affiliated with Squeekchain/g)).toHaveLength(1);expect(body).not.toMatch(/Powered by a hamster|Build with Squeekchain|Network at a glance|undocumented|no v9 transactions|read-only and unverified/);
  await page.getByTestId('tab-network').click();await expect(page.getByTestId('source-api')).toHaveAccessibleName('API · device readings, not settled work');await expect(page.getByTestId('source-chain')).toHaveAccessibleName('Chain · same-block verified RPC reads');await page.evaluate(()=>squeek.destroy());
+});
+
+for(const [name,v6,v9,expected] of [
+ ['only staked v9',{wallet:'0',staked:'0',nftPower:'0'},{wallet:'0',staked:'2',nftPower:'9000'},'sepolia-v9'],
+ ['wallet v6 and staked v9',{wallet:'3',staked:'0',nftPower:'0'},{wallet:'0',staked:'2',nftPower:'9000'},'sepolia-v6'],
+ ['staked history unavailable',{wallet:'0',staked:'0',nftPower:'0'},{wallet:'0',staked:null,nftPower:'9000'},'sepolia-v9'],
+])test(`staked profile selector: ${name}`,async({page})=>{
+ await installV9Fixture(page);await page.evaluate(async({v6,v9})=>{window.v9.counts={'sepolia-v6':v6,'sepolia-v9':v9};await squeek.switchProfile('sepolia-v6');await squeek.connect();},{v6,v9});
+ await expect(page.getByTestId('profile-select')).toHaveValue(expected);
+ const text=await page.getByTestId('profile-select').locator('option[value="sepolia-v9"]').textContent();
+ expect(text).toContain(v9.staked==null?'Staked (Unknown)':'0 in wallet · 2 staked');expect(text).not.toContain('9000');
+ if(name==='wallet v6 and staked v9'){await expect(page.getByTestId('profile-choice')).toBeVisible();await expect(page.getByTestId('profile-choice')).toContainText('3 in wallet · 0 staked');await expect(page.getByTestId('profile-choice')).toContainText('0 in wallet · 2 staked');}
+ await page.evaluate(()=>squeek.destroy());
+});
+test('v9 Unknown holdings keep Claim and otherwise-ready Checkpoint disabled; known zero still allows SQK claim',async({page})=>{
+ await installV9Fixture(page);await page.evaluate(async()=>{v9.wallet.totals.count=null;v9.net.checkpoint.canCheckpoint=true;await squeek.connect();});
+ await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('btn-checkpoint')).toBeDisabled();
+ await page.evaluate(async()=>{v9.wallet.totals.count=0;await squeek.refresh();});await expect(page.getByTestId('btn-claim')).toBeEnabled();await expect(page.getByTestId('btn-checkpoint')).toBeEnabled();
+ await page.evaluate(()=>squeek.destroy());
+});
+const feeRevert=encodeErrorResult({abi:staking9Abi,errorName:'FeeLimitExceeded',args:[20000000000000000n,10000000000000000n]});
+for(const source of ['simulation','wallet'])test(`FeeLimitExceeded decoded from ${source}: Fee rose, fresh quote and one explicit Re-quote`,async({page})=>{
+ await installV9Fixture(page);await page.evaluate(()=>squeek.connect());
+ await page.getByTestId('v9-action').selectOption('unstake');await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeVisible();
+ await page.evaluate(({source,data})=>{if(source==='simulation')v9.simulationError={cause:{data}};else v9.sendError={code:-32000,data:{originalError:{data}}};},{source,data:feeRevert});
+ await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('fee-rose')).toBeVisible();await expect(page.getByTestId('fee-quote')).toContainText('0.02 SQK fee');await expect(page.getByTestId('fee-quote')).toContainText('0.98 SQK received');
+ await expect(page.getByRole('button',{name:'Re-quote',exact:true})).toHaveCount(1);await expect(page.getByTestId('modal')).toBeHidden();
+ expect(await page.evaluate(()=>v9.sends)).toBe(source==='wallet'?1:0);
+ expect(await page.evaluate(()=>v9.previews[1].input.maxFee)).toBe('10000000000000000');
+ await page.getByRole('button',{name:'Re-quote',exact:true}).click();await expect(page.getByTestId('modal')).toBeVisible();await expect(page.getByTestId('confirm-details')).toContainText('0.02 SQK');
+ expect(await page.evaluate(()=>v9.sends)).toBe(source==='wallet'?1:0);await page.getByTestId('btn-modal-cancel').click();await page.evaluate(()=>squeek.destroy());
+});
+test('mixed custody merge gives the withdrawal/deposit remedy without simulation or wallet',async({page})=>{
+ await installV9Fixture(page);await page.evaluate(async()=>{v9.mixedCustody=true;await squeek.connect();});
+ await page.getByTestId('v9-action').selectOption('mergeDeposited');await page.getByTestId('v9-survivor').fill('41');await page.getByTestId('v9-donor').fill('87');await page.getByTestId('v9-review').click();
+ await page.getByTestId('modal-input').fill('BURN-87');await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('banner')).toContainText('#41 is staked; withdraw it or deposit #87 first');await expect(page.getByTestId('modal')).toBeHidden();expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
+});
+for(const theme of ['light','dark'])for(const width of [1280,390])test(`Fee rose mocked / ${theme} / ${width}`,async({page},info)=>{
+ await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);if(theme==='dark')await page.getByTestId('btn-theme').click();await page.evaluate(()=>squeek.connect());
+ await page.getByTestId('v9-action').selectOption('unstake');await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeVisible();await page.evaluate(()=>{v9.fee='20000000000000000';});await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('fee-rose')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Re-quote',exact:true})).toHaveCount(1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await capture(page,info,`fee-rose-${theme}-${width}.png`);await page.evaluate(()=>squeek.destroy());
 });

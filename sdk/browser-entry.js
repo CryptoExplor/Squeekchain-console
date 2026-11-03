@@ -14,7 +14,7 @@ export { rpcToolError } from './rpc-errors.js';
 
 export { SQUEEKS_POLICY } from './record.js';
 export { PUBLIC_RPC_ENDPOINTS } from './rpc.js';
-export { profileBalances, chooseProfile, profileFromHash } from './profile-selection.js';
+export { profileBalances, chooseProfile, profileFromHash, profileHeld, profileCountLabel } from './profile-selection.js';
 export { parseEther, formatEther } from 'viem';
 
 export { runReadTool, toolProfile } from "./tool-runtime.js";
@@ -24,3 +24,5 @@ export { profileInput } from './profile-input.js';
 export { ACTION_REASONS } from './capabilities.js';
 
 export { settlementStatus } from "./reward-status.js";
+
+export { feeLimitExceeded } from './fee-error.js';

@@ -1,19 +1,19 @@
 # Wheelhouse — equal profiles and subtract pass
 
-**Date:** 2026-11-03 (Asia/Calcutta). **Draft PR:** [#3](https://github.com/CryptoExplor/Squeekchain-console/pull/3). **Branch:** `arena/417b8688-squeekchain-console`. Phase 3 (`b705683`) remains accepted; this extends that draft. No main push, merge or deployment. The `thewheel` workflow name is unchanged.
+**Date:** 2026-11-04 (Asia/Calcutta). **Draft PR:** [#3](https://github.com/CryptoExplor/Squeekchain-console/pull/3). **Branch:** `arena/417b8688-squeekchain-console`. Phase 3 (`b705683`) remains accepted; this extends that draft. No main push, merge or deployment. The `thewheel` workflow name is unchanged.
 
 ## Current scope and result
 
 The user-supplied identity export resolves the earlier identity-evidence blocker. **Sepolia v6 and Sepolia v9 are equal, selectable profiles**, with live verification or stopped states, not version-based transaction restrictions. Mainnet is **Not deployed**.
 
-The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`budgetBytes: 250_000` in `build.mjs`). This supersedes both the previous 146,800-byte acceptance limit and the older 200,000-byte build limit. Developers and Settings remain dynamically imported. All seven external JS files, including lazy modules, count toward the cap, independently gzipped—not one combined compression stream. Current total: **153,968 bytes** ([breakdown](audit/phase2-js-size.json)).
+The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`budgetBytes: 250_000` in `build.mjs`). This supersedes both the previous 146,800-byte acceptance limit and the older 200,000-byte build limit. Developers and Settings remain dynamically imported. All seven external JS files, including lazy modules, count toward the cap, independently gzipped—not one combined compression stream. Current total: **156,318 bytes** ([breakdown](audit/phase2-js-size.json)).
 
 ## Delivery checklist
 
 - [x] Exact attachment preserved as [v9-identity-2026-11-03.json](audit/v9-identity-2026-11-03.json), SHA-256 `fbedcbe2979cf650ff42b1e0f35c679b3afce08da4d13f7b21efe9361e286979`. Sepolia block **12056257**, hash `0x0c8d3619dbfd24c577c119248f472a5c4809cf342651134700b1122731642b22`; Tenderly/PublicNode export fields agree. This is an expected-value seed, **not live qualification of this head**.
-- [x] `sdk/deployments.js` seeds six-contract slot/runtime/implementation/version/layout/wiring pins. `sdk/verify-v9.js` checks them at one snapshot, plus chain identity and final two-peer hash agreement. Staking admin comes from the EIP-1967 slot: the ABI has no proxyAdmin function. Staking.launch zero is expected; NFT.launch is checked separately. Core/issuance also check ABI-reported proxy admins. Verified cache writes occur only after the final guard; later operations recheck slots.
+- [x] `sdk/deployments.js` seeds six-contract slot/runtime/implementation/version/layout/wiring pins. `sdk/verify-v9.js` checks them at one snapshot, plus chain identity and final two-peer hash agreement. Staking admin comes from the EIP-1967 slot: the ABI has no proxyAdmin function. Staking.launch zero is expected; NFT.launch is checked separately. Core/issuance also check ABI-reported proxy admins. Verified cache writes occur only after the final guard; later v9 operations recheck slots, mutable wiring, versions/layouts and paused state even on cache hits.
 - [x] Canonical `sepolia-v6` / `sepolia-v9` keys. `sdk/profile-input.js` is the only compatibility conversion for old `sepolia`, used at hash/storage/MCP input boundaries. `getProfile` rejects legacy/unknown keys. Browser storage/hash are rewritten canonically; Activity records retain the originating canonical profile, including late wallet responses after navigation.
-- [x] v9 first-visit default, saved choice, profile-qualified hash routes, both collection balance counts on connect, one-held auto-selection, both-held explicit choice, neither-held retention, Unknown-safe behavior.
+- [x] v9 first-visit default, saved choice, profile-qualified hash routes, same-snapshot collection balances plus v9 NFT power on connect; separate wallet/staked counts, one-held auto-selection, both-held explicit choice, neither-held retention, Unknown-safe behavior.
 - [x] Runtime settlement/readiness for both profiles; mining-live text requires observed round advancement. No fixed frontier or version-derived live state. Pause explanation appears only when Core.paused is true.
 - [x] v9 Wallet/Staked Squeeks, indexed deposit-event discovery, same-block depositor plus NFT custody confirmation, separate per-token/broad NFT and exact SQK approval previews. Wallet/staked position details share one multicall.
 - [x] v9 NFT/staking merges, mergesOpen reason, exact BURN acknowledgement before any construction/simulation. Claims, claimAndStake, stake, unstake and settled issuance checkpoint use the official ABI. Unstake reviews fee/net/maxFee/deadline; changed fee/outcome or expired deadline stops. Owner wallet signs; MCP/SDK return unsigned preparations. In-page request tools simulate first and ask the human wallet; no agent sees a key.
@@ -21,7 +21,7 @@ The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`bu
 - [x] Subtract pass: removed taglines, obsolete restrictions, repeated checkpoint/non-affiliation copy and art helpers; one footer line. Source icons/accessible names, age on verification badge, one Trust status line and honest Agreed/Not sampled peer list. Concise action/cache labels, empty-state connection action, conditional RPC-secret warning. Merge safety/input remain; unstake review uses a labelled fee/net definition list instead of a base-unit paragraph.
 - [x] `sdk/tools.js` single registry for **29 read/prepare tools + 9 browser-only request tools** (name/description/schema/side effect); generated `web/tools.json`, local MCP, `window.squeek` and postMessage use it. Per-call profile selection and burn guard are shared. Wallet-popup tools are available only to the in-page browser surface; cross-origin postMessage requests are rejected and MCP does not advertise or handle them.
 - [x] Offline v9 action/approval/fee/custody/identity/cache tests and browser action/autopick/Unknown/fee-change/claim-change/burn tests. Existing race, Activity, focus, contrast, header and Mainnet tests retained.
-- [x] **60 regenerated mocked captures**: 32 structure/header views, 12 v9 Squeeks/Merge/Unstake views and 16 contextual stall/watch/pending views, light/dark × 1280/390. [Gallery](screenshots/README.md). Mock fixtures do not qualify live contracts.
+- [x] **64 regenerated mocked captures**: 32 structure/header views, 12 v9 Squeeks/Merge/Unstake views, 16 contextual stall/watch/pending views and four Fee rose views, light/dark × 1280/390. [Gallery](screenshots/README.md). Mock fixtures do not qualify live contracts.
 - [x] Extended `test/live.spec.mjs` to both profiles, read-only. **Did not run it**, dispatch/label a workflow, start a keeper or submit a transaction.
 
 ## Contextual restorations on top of `94ebebf`
@@ -37,6 +37,19 @@ The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`bu
 
 All new interaction tests use roles or test IDs. The first browser pass caught a programmatic-focus assertion after mouse input; the test now enters keyboard modality before checking the existing visible focus style. A pause-summary expectation was restored. A new watch test initially waited on the hidden Squeeks input after disconnect navigated to Network; its trace identified the missing tab selection, fixed before the final passing run. No failed or interrupted run is counted as acceptance evidence.
 
+## Review follow-up (2026-11-04)
+
+All four requested fixes are included, on the same Draft PR and with `94ebebf` and `4383c48` retained:
+
+- **Staked-aware selection/counts:** both balances and v9 NFT power share one snapshot multicall. Only snapshot balance/power decide held profiles. The chooser labels wallet and staked counts separately. Snapshot-matched official account API staking IDs are untrusted candidates; owner/collection-indexed deposit/withdraw/merge history is the fallback. One snapshot multicall confirms every depositor and NFT custody. API candidates do not establish a canonical cache cursor. Failed history remains **Staked (Unknown)**, not zero; positive power still detects holdings. The three event signatures share one OR-topic log filter per range, preserving indexed account/collection filtering while reducing cold discovery requests.
+- **Exact unstake fee:** encoded maxFee is always the quote itself, including when a caller supplies a larger limit. Official-ABI FeeLimitExceeded decoding traverses viem and nested EIP-1193 error envelopes. Simulation or wallet-send failure stops, presents **Fee rose**, a fresh fee/net quote and exactly one **Re-quote** button. Re-quote requires new human review; it never submits automatically. Both failure paths are covered, with four new contextual captures.
+- **Mixed custody:** both survivor/donor directions stop before simulation/calldata with **#X is staked; withdraw it or deposit #Y first** (after confirming the depositor), instead of misleading ownership copy.
+- **Identity batching/cache:** storage plus cold code reads are one JSON-RPC array per independent snapshot peer; unsupported batch capability falls back to the same checked singles. Reordered valid IDs work; malformed/duplicate/missing IDs or a corrupt peer stop without seeding trust. Only implementation/code identity is cached across profile switches. All v9 slots, mutable bindings/wiring, versions/layouts and Core/staking/NFT/issuance pause readings are fresh at every snapshot. Cache-hit changed-wiring/slot/admin/version/layout tests fail closed. Cache commits still follow the final two-peer hash guard.
+- **Unknown safety/root cause:** the earlier component failure came from an empty hash incorrectly becoming a v9 selection and overriding saved v6. Restoring the null fallback fixed the source; the paused second check used the stale generated bundle. Fresh builds pass the original assertion unchanged. Separately, the v9 Claim known-zero exception was tightened to reject null counts. New coverage checks Unknown Claim and an otherwise-ready Checkpoint remain disabled, with known-zero v9 SQK-only Claim still enabled.
+- **Identity export parity:** `test/review-fixes.mjs` compares every deployed pin, wiring field and reported implementation/admin identity against both peers in the committed export. It passes; the identity export and official v9 ABI SHA-256 are unchanged. Mutable captured state is not treated as a pin or live qualification.
+
+Final validation below was repeated after the last code and fixture changes. `test/review-fixes.mjs` adds deterministic inventory/API/log/batch/error/export coverage; `test/v9-safety.mjs` adds cache-hit corruption, paused reads, exact-fee calldata and integrated batch fallback checks. Browser additions use roles/test IDs. No live suite or qualification workflow was invoked.
+
 ## Phase 2 data-layer checklist
 
 | Requirement | Implementation | Offline coverage / status |
@@ -49,17 +62,17 @@ All new interaction tests use roles or test IDs. The first browser pass caught a
 
 ## Validation and request budgets
 
-- `npm run build`: **PASS**, **153,968 / 250,000 gzip bytes**, all seven external scripts. Settings/Developers lazy loading also asserted in the browser.
-- `npm test`: **PASS**, 14 deterministic offline scripts. No external RPC required; test-only synthetic code hashes never override production pins.
-- Mocked Chromium: **108 PASS**, last complete run **59.7s**; captures regenerated with `UPDATE_SCREENSHOTS=1`. Roles/test IDs select controls; copy assertions check safety/state, not navigation selectors.
+- `npm run build`: **PASS**, **156,318 / 250,000 gzip bytes**, all seven external scripts. Settings/Developers lazy loading also asserted in the browser.
+- `npm test`: **PASS**, 15 deterministic offline scripts. No external RPC required; test-only synthetic code hashes never override production pins.
+- Mocked Chromium: **119 PASS**, last complete run **1.1 minutes**; captures regenerated with `UPDATE_SCREENSHOTS=1`. Roles/test IDs select controls; copy assertions check safety/state, not navigation selectors.
 - `git diff --check`: run before commit.
 
 | Profile | Cold network | Warm network | Wallet | Evidence |
 |---|---:|---:|---:|---|
 | v6 | 22 | 12 | 15 | [v6 wire report](audit/v6-request-budget.json) |
-| v9 | 34 | 22 | 34 initial discovery / **24 warm** | [v9 wire report](audit/v9-request-budget.json), two wallet + two staked NFTs |
+| v9 | 15 | 13 | 21 initial discovery / **15 warm** | [v9 wire report](audit/v9-request-budget.json), two wallet + two staked NFTs |
 
-Warm regression measurements reuse a confirmed snapshot and initialized session/discovery caches, with healthy mocked endpoints and no retries. The <=25 warm gate passes for both profiles. New-block log increments, large inventories, reorgs and unavailable endpoints can require extra discovery/failover requests; these figures are **not a live availability guarantee**. The connect-only two-collection inventory probe is separate from these SDK page-operation measurements. No extra background polling was introduced (age rendering is local only).
+Counts measure HTTP JSON-RPC envelopes (one array batch is one transport request), not the number of subrequests inside a batch. API GET hints are not included; the v9 wallet fixture exercises the indexed-log fallback. Cold network uses empty verification/chain caches; initial wallet discovery follows network verification, matching the v6 measurement sequence. The final v9 cold network **15 <= v6 22 + 8** and initial wallet **21 <= v6 15 + 8** gates pass. Warm regression measurements reuse a confirmed snapshot and initialized session/discovery caches, with healthy mocked endpoints and no retries. The <=25 warm gate passes for both profiles. New-block log increments, large inventories, reorgs and unavailable endpoints can require extra discovery/failover requests; these figures are **not a live availability guarantee**. The connect-only balance/NFT-power inventory and displayed-count discovery is separate from these SDK page-operation measurements. No extra background polling was introduced (age rendering is local only).
 
 Earlier attempts exposed obsolete alias/copy assertions, a mock Multicall3 balance-handler omission, a Mainnet address-display regression, and a 26-request v9 wallet path. These were fixed and followed by the passing full suites; the request reduction preserves custody and identity checks. Earlier failed 146.8 kB-cap measurements are superseded, not acceptance evidence.
 

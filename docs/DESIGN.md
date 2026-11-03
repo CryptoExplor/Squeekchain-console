@@ -4,9 +4,9 @@ Browser-first Squeekchain holder utility. Preserve `sdk/`, `mcp/`, `src/`, `test
 
 ## Equal profiles
 
-**Sepolia v6 / Sepolia v9** are equal user choices. Canonical keys: `sepolia-v6` / `sepolia-v9`. Legacy `sepolia` migrates only at hash, saved-storage and MCP input boundaries; adapters and caches never receive it. Default v9, then saved choice. Hashes include profile. Connect probes both collection balances: one held selects it, both held shows counts/choice, neither retains selection; Unknown never silently selects another profile. Mainnet is Not deployed.
+**Sepolia v6 / Sepolia v9** are equal user choices. Canonical keys: `sepolia-v6` / `sepolia-v9`. Legacy `sepolia` migrates only at hash, saved-storage and MCP input boundaries; adapters and caches never receive it. Default v9, then saved choice. Hashes include profile. Connect probes both collection balances and v9 NFT power in one snapshot multicall: one held selects it, both held shows counts/choice, neither retains selection; Unknown never silently selects another profile. Only snapshot balance/power, not a hint-derived count, decides holdings. Wallet and staked counts are separate; API/history candidates are depositor/custody-confirmed at the snapshot. Unavailable history says Staked (Unknown). Mainnet is Not deployed.
 
-Every operation uses the same fail-closed chain/snapshot/identity/slot/runtime/layout/version/wiring protection. Verification or stopped badges reflect runtime checks, not version policy. v9 expected identities come from the exact dated two-peer export, not an API configuration feed. Official-dApp-derived `sdk/abi-v9.js` is unchanged. Staking admin is a storage-slot check, not an invented ABI method; staking.launch zero is normal.
+Every operation uses the same fail-closed chain/snapshot/identity/slot/runtime/layout/version/wiring protection. Verification or stopped badges reflect runtime checks, not version policy. v9 expected identities come from the exact dated two-peer export, not an API configuration feed. Official-dApp-derived `sdk/abi-v9.js` is unchanged. v9 identity storage/code is batched once per independent peer, with unsupported-batch single-request fallback. Only code hashes survive profile switches: slots, bindings/wiring, versions/layouts and paused state are fresh each v9 snapshot; cache commits follow the final guard. Staking admin is a storage-slot check, not an invented ABI method; staking.launch zero is normal.
 
 ## Subtract standard
 
@@ -18,7 +18,7 @@ Squeeks empty state has connection and watch-address controls, not instructions.
 
 ## Safety and agents
 
-Both wallet and staked merges require exact BURN-<donorId> before construction/simulation. The input's label gives the instruction; the dialog retains the permanent-burn safety line. Fresh simulation precedes every wallet prompt. Claims re-preview actual payout and recipient; changed outcomes stop. Unstake uses a labelled amount/fee-maxFee/net/deadline/gas review, and reuses the reviewed cap/deadline on re-preview. The single registry in `sdk/tools.js` drives generated JSON, local stdio MCP and browser tools. MCP/SDK read or prepare unsigned calls. Browser-only request tools can open a human wallet popup after simulation; cross-origin postMessage requests are refused. Profile/owner/watch guards and typed BURN confirmation apply. Agents never see a private key.
+Both wallet and staked merges require exact BURN-<donorId> before construction/simulation. The input's label gives the instruction; the dialog retains the permanent-burn safety line. Fresh simulation precedes every wallet prompt. Claims re-preview actual payout and recipient; changed outcomes stop. Unstake uses a labelled amount/fee-maxFee/net/deadline/gas review, and reuses the reviewed cap/deadline on re-preview. The cap is the exact quoted fee, never padded. A decoded simulation/wallet FeeLimitExceeded shows Fee rose, a new quote and exactly one Re-quote button, with no automatic wallet retry. Mixed custody names the staked token and offers withdrawal or depositing the other NFT first. Unknown holdings disable Claim/Checkpoint; a known-zero v9 NFT count still allows SQK-only claims. The single registry in `sdk/tools.js` drives generated JSON, local stdio MCP and browser tools. MCP/SDK read or prepare unsigned calls. Browser-only request tools can open a human wallet popup after simulation; cross-origin postMessage requests are refused. Profile/owner/watch guards and typed BURN confirmation apply. Agents never see a private key.
 
 ## Structure and accessibility
 
@@ -28,7 +28,7 @@ Light default; saved light/dark/system override. Local Barlow Condensed, Quicksa
 
 ## Evidence
 
-See [STATUS](STATUS.md) for exact current results and limits, [60 mocked captures](screenshots/README.md), [gzip report](audit/phase2-js-size.json), and both request-budget reports. Total external JavaScript is **153,968 bytes / 250,000 cap**, independently gzipped including lazy scripts. Offline tests are not live qualification. No live suite, signing, workflow dispatch, keeper, merge or deploy was run. Phase 4 planner/per-token redesign remains deferred.
+See [STATUS](STATUS.md) for exact current results and limits, [64 mocked captures](screenshots/README.md), [gzip report](audit/phase2-js-size.json), and both request-budget reports. Total external JavaScript is **156,318 bytes / 250,000 cap**, independently gzipped including lazy scripts. Offline tests are not live qualification. No live suite, signing, workflow dispatch, keeper, merge or deploy was run. Phase 4 planner/per-token redesign remains deferred.
 
 ## Context-only signals
 

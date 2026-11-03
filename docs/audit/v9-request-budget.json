@@ -1,9 +1,9 @@
 {
   "profile": "sepolia-v9",
   "fixture": "2 wallet + 2 staked NFTs",
-  "coldNetwork": 34,
-  "warmNetwork": 22,
-  "coldWallet": 34,
-  "warmWallet": 24,
+  "coldNetwork": 15,
+  "warmNetwork": 13,
+  "coldWallet": 21,
+  "warmWallet": 15,
   "limit": 25
 }

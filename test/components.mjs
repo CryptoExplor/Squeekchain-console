@@ -20,7 +20,7 @@ try {
   for (const value of [0, '0', 0n]) assert.equal(formatNumber(value), '0');
   assert.equal(formatNumber(false), UNKNOWN);
   assert.equal(formatNumber('9007199254740993'), '9,007,199,254,740,993');
-  assert.equal(formatAmount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}),}), UNKNOWN); assert.equal(formatAmount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}), sqk: '0' }), '0 SQK');
+  assert.equal(formatAmount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}),}), UNKNOWN); assert.equal(formatAmount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), sqk: '0' }), '0 SQK');
 
   const panel = Panel($('profile-panel')), stat = Stat($('net-round').parentElement);
   stat.set(null); panel.setBusy(true);
@@ -58,7 +58,7 @@ try {
   const adapter = { networkStatus: async () => net, verify: async () => ({ ok: true, trusted: true }), walletStatus: async () => { if (failed) throw new Error('RPC offline'); return wallet; } };
   win.ethereum = { request: async ({ method }) => method === 'eth_chainId' ? '0xaa36a7' : [owner], on() {} };
   win.localStorage.setItem('squeekchain:profile','sepolia-v6');
-  const app = mount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}), doc, win, adapterFactory: () => adapter, fetcher: async () => { throw new Error('No external requests'); } });
+  const app = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), doc, win, adapterFactory: () => adapter, fetcher: async () => { throw new Error('No external requests'); } });
   try {
     await app.refresh(); await app.connect();
     for (const id of ['net-round', 'net-blocks', 'net-lag', 'net-issued', 'net-squeeks', 'net-paused', 'holder-count', 'holder-power', 'holder-share', 'holder-claimable']) assert.equal($(id).textContent, UNKNOWN, id);
@@ -74,6 +74,9 @@ try {
     assert.equal($('holder-count').textContent, UNKNOWN); assert.equal(app.state.status, null);
     assert.equal($('btn-custom-merge').disabled, true);
     await app.switchProfile('sepolia-v9'); assert.equal($('verified-chip').textContent, 'Verified');
+    failed=false;wallet={owner,totals:{count:null},squeeks:[]};await app.connect();
+    assert.equal($('btn-checkpoint').disabled,true);assert.equal($('btn-claim').disabled,true,'v9 Unknown is not the SQK-only known-zero exception');
+    wallet={owner,totals:{count:0},squeeks:[]};await app.refresh();assert.equal($('btn-claim').disabled,false,'v9 known zero still allows SQK-only claims');
     await app.switchProfile('mainnet'); assert.equal($('profile-status').textContent, 'Not deployed');
     assert.equal($('deployment-content').classList.contains('hidden'), true);
   } finally { app.destroy(); }

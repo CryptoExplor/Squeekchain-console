@@ -14,7 +14,7 @@ assert.equal(toolProfile('sepolia').key,'sepolia-v9');
 assert.throws(()=>getProfile('sepolia'),/canonical/);
 assert.equal(PROFILES.sepolia,undefined);
 for(const file of ['sdk/deployments.js','sdk/v9.js','sdk/deposits.js','web/app.js','web/activity.js','mcp/server.js','sdk/tool-runtime.js'])assert.doesNotMatch(fs.readFileSync(file,'utf8'),/['"]sepolia['"]|PROFILES\.sepolia\b/,file+' must not read the legacy key');
-const counts=(a,b)=>({'sepolia-v6':a,'sepolia-v9':b});
+const counts=(a,b)=>({'sepolia-v6':{wallet:a,staked:'0',nftPower:'0'},'sepolia-v9':{wallet:b,staked:'0',nftPower:'0'}});
 assert.equal(chooseProfile('sepolia-v9',counts('1','0')),'sepolia-v6');
 assert.equal(chooseProfile('sepolia-v6',counts('0','2')),'sepolia-v9');
 for(const pair of [counts('2','3'),counts('0','0'),counts(null,'3'),counts('2',null)])assert.equal(chooseProfile('sepolia-v6',pair),'sepolia-v6');

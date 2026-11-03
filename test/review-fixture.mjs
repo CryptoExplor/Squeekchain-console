@@ -35,7 +35,7 @@ export async function installReviewFixture(page) {
       if (method === 'eth_sendTransaction') counters.sends++;
       throw new Error(`Offline review forbids wallet method ${method}`);
     }, on() {}, removeListener() {} };
-    window.squeek = mount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}),
+    window.squeek = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}),
       adapterFactory: profileKey => ({
         networkStatus: async () => network, verify: async () => ({ ...verification, trusted: true }), walletStatus: async owner => ({...wallet,owner}), mergePlan: async () => plan,
         mergePreview: async () => { counters.simulations++; throw new Error('Screenshot must stop before simulation or wallet submission'); },

@@ -26,7 +26,7 @@ const adapter = {
   art: async tokenId => ({ tokenId, name: 'Test Squeek', attributes: [], image: 'data:image/svg+xml;base64,PHN2Zy8+' }),
 };
 win.ethereum = { request: async ({ method }) => method === 'eth_chainId' ? '0xaa36a7' : [owner], on() {} };
-const api = mount({ profileBalanceReader: async () => ({"sepolia-v6":"0","sepolia-v9":"0"}), doc: win.document, win, adapterFactory: () => adapter, fetcher: async () => response() });
+const api = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), doc: win.document, win, adapterFactory: () => adapter, fetcher: async () => response() });
 await api.refresh();
 assert.equal(win.document.documentElement.dataset.theme, 'light');
 assert.equal($('btn-theme').getAttribute('aria-pressed'), 'false');
