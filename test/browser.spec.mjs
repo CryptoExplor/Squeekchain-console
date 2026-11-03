@@ -18,7 +18,7 @@ test('offline browser: Wheelhouse identity, default/saved themes, mobile visibil
   await page.getByRole('button', { name: 'Toggle theme' }).click();
   for (const width of [1280, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const id of ['wallet-chip', 'verified-chip', 'btn-connect', 'profile-select']) {
+    for (const id of ['verified-chip', 'btn-connect', 'profile-select']) {
       await expect(page.locator(`#${id}`)).toBeVisible();
       const box = await page.locator(`#${id}`).boundingBox();
       expect(box.x).toBeGreaterThanOrEqual(0);
@@ -26,6 +26,8 @@ test('offline browser: Wheelhouse identity, default/saved themes, mobile visibil
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
+  await expect(page.locator('#wallet-chip')).toBeHidden();
+  await expect(page.locator('#btn-connect')).toHaveText('Connect wallet');
   await page.getByText('Connection & trust', { exact: true }).click();
   await expect(page.locator('#rpc-url')).toBeVisible();
   await page.locator('#rpc-url').fill('http://not-secure.test');

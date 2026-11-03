@@ -145,7 +145,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function applyTheme(theme) {
     theme = theme === "dark" ? "dark" : "light";
     doc.documentElement.dataset.theme = theme;
-    el.theme.textContent = theme === "dark" ? "☀" : "☾";
+    // Authored UI icon, not untrusted artwork/metadata SVG.
+    const icon = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    for (const [key, value] of Object.entries({ width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': true, focusable: false })) icon.setAttribute(key, value);
+    const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', theme === 'dark'
+      ? 'M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'
+      : 'M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z');
+    icon.append(path); el.theme.replaceChildren(icon);
     el.theme.setAttribute("aria-pressed", String(theme === "dark"));
     el.theme.title = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
     const surface = win.getComputedStyle?.(doc.documentElement)?.getPropertyValue("--sqk-bg").trim();
@@ -422,8 +429,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   function renderWalletChip() {
     el.connect.textContent = state.account ? "Disconnect" : "Connect wallet";
-    el.walletChip.textContent = state.account ? short(state.account) : "not connected";
-    el.walletChip.className = `chip ${state.account ? "ok" : ""}`;
+    el.walletChip.textContent = state.account ? short(state.account) : "";
+    el.walletChip.className = `chip ${state.account ? "ok" : "hidden"}`;
     el.walletChip.title = state.account ?? "";
   }
 
@@ -502,7 +509,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   function renderWalletChipStats(status) {
-    if (!status) return;
+    if (!status || !state.account) return;
     el.walletChip.textContent = `${short(status.owner)} · ${num(status.ethBalance?.eth) === UNKNOWN ? UNKNOWN : `${Number(status.ethBalance.eth).toFixed(3)} ETH`}`;
   }
 

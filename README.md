@@ -2,11 +2,11 @@
 
 A static, browser-first Squeekchain holder console. The app is branded **Wheelhouse**; the GitHub repository remains **CryptoExplor/Squeekchain-console**.
 
-**Phase 1 screenshot polish ready for review — Phase 0 complete.** [Live run 41618128325](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41618128325) passed on `dd0afff`; the new polish head awaits the user-triggered pre-merge rerun. PR #2 remains draft. Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
+**Header-polish follow-up ready for draft review — Phase 1 merged in [PR #2](https://github.com/CryptoExplor/Squeekchain-console/pull/2).** Phase 0 remains complete from [live run 41618128325](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41618128325) on `dd0afff`. The new header head is not live-qualified. Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
 
 The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
 
-[Review the 16 mocked screenshots](docs/screenshots/README.md): Overview, Wallet, Merge dialog and not-deployed Mainnet, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **146,982 bytes gzipped**, below the build-enforced 200,000-byte budget ([breakdown](docs/audit/phase1-js-size.json)).
+[Review the 24 mocked screenshots](docs/screenshots/README.md): Overview, Wallet, Merge dialog and not-deployed Mainnet, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **147,359 bytes gzipped**, below the build-enforced 200,000-byte budget ([breakdown](docs/audit/phase1-js-size.json)).
 
 ## Deployments and safety
 
@@ -38,7 +38,7 @@ npm run web                    # build + local static file server, port 5173
 npm run rpc:probe              # endpoint capability table; diagnostic, not live qualification
 npm test                       # deterministic offline regressions, safety, RPC budget, discovery and Activity
 npx playwright install --with-deps chromium
-npm run test:browser            # real Chromium, injected/offline data: components, profile races, persistence, and the 16 mocked screenshot states
+npm run test:browser            # real Chromium, injected/offline data: components, profile races, persistence, and the 24 mocked screenshot states
 npm run test:live               # real Chromium + public Sepolia RPCs; no RPC mocks or signatures
 ```
 
@@ -55,11 +55,11 @@ The live test records public CORS RPC availability, two-peer block agreement and
 
 It uses read-only repository permissions and no configured secrets, wallet, keeper or signing variables. Opted-in runs are serialized under the same concurrency group to avoid hammering public RPCs. Test failures are not ignored. An always-run artifact upload retains the HTML Playwright report, screenshots/traces/test attachments and **`live-qualification/live-qualification.json`**, including failure evidence. A not-run JSON is seeded before dependency/browser setup so a later setup or probe failure is not mistaken for a pass. The dedicated live reporter rejects empty/skipped/incomplete suites as qualification passes; ordinary browser tests remain separate.
 
-**At the end of Phase 1, the user re-triggers the pre-merge gate from PR #2:** remove/re-add the **`run-live`** label and manually review the app in their browser before merge. The job checks out the event's exact **PR head SHA**, not GitHub's synthetic merge commit. `LIVE_SOURCE_COMMIT` carries that same SHA into both the initial and final qualification JSON. For `workflow_dispatch`, the checkout/evidence use the selected ref's event SHA. No `pull_request_target`, configured secrets or write permissions are used.
+**For the intended final follow-up head, the user re-triggers the pre-merge gate:** remove/re-add the **`run-live`** label and manually review the app in their browser before merge. The job checks out the event's exact **PR head SHA**, not GitHub's synthetic merge commit. `LIVE_SOURCE_COMMIT` carries that same SHA into both the initial and final qualification JSON. For `workflow_dispatch`, the checkout/evidence use the selected ref's event SHA. No `pull_request_target`, configured secrets or write permissions are used.
 
 Dispatch from the Actions tab still requires the workflow on the default branch; the label trigger avoids that bootstrap requirement. I.e. no merge of this WIP PR is needed to run the label gate. Adding subsequent commits does not rerun live RPC tests automatically: remove and re-add `run-live` to qualify a newer head.
 
-**Phase 0 is complete**, supported by the offline audit and [successful live run 41618128325 on dd0afff](docs/audit/live-qualification-run-41618128325.json). The screenshot-polish head needs a new user-triggered live pass. Before merge, the opted-in live job must pass for the intended final source SHA. A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
+**Phase 0 is complete**, supported by the offline audit and [successful live run 41618128325 on dd0afff](docs/audit/live-qualification-run-41618128325.json). The header-polish head needs its own user-triggered live pass. Before merge, the opted-in live job must pass for the intended final source SHA. A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
 
 ### Live failure diagnostics
 

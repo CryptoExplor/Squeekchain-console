@@ -1,4 +1,4 @@
-# Wheelhouse design contract — Phase 1 ready for review
+# Wheelhouse design contract — header-polish follow-up
 
 Wheelhouse is the independent, browser-first Squeekchain holder console. The repository remains **Squeekchain-console**; the Cloudflare Pages project and opt-in live workflow remain **thewheel**. No repository/project rename or official affiliation is implied.
 
@@ -12,7 +12,7 @@ The [official homepage](https://squeekchain.com/) was re-read on 2026-11-03. Its
 - **Type:** local Barlow Condensed for editorial headings, Quicksand for body/voice, IBM Plex Mono for labels/data. No CDN font dependency. Operational captions use a shared 11px token rather than 7–10px overrides; numbers retain tabular figures.
 - **Surfaces:** warm light `#fafaf7`, white panels, ink `#292b26`; dark surface `#10120f`, panel `#141418`, ink `#edeee7`. The original editorial spacing, wheel artwork and responsive layout remain intact.
 - **Accents:** gold primary controls with dark labels; blue links/focus. Semantic primary-fill/hover/on-primary tokens keep controls consistent. Destructive controls use a separate deep-red fill/hover with white labels in both themes, rather than reusing the brighter dark-theme error-text color.
-- **Accessibility:** 44px controls, visible 3px keyboard focus, reduced-motion handling, status text beyond color, mobile-visible wallet/verification, skip link and existing modal focus trap/restore. The palette test checks selected normal-text pairs at **at least 4.5:1**, including primary/danger hover and status chips. This is not a blanket WCAG certification.
+- **Accessibility:** 36px header controls (explicit follow-up requirement), 44px action/dialog controls, visible 3px keyboard focus, reduced-motion handling, status text beyond color, mobile-visible wallet/verification, skip link and existing modal focus trap/restore. The palette test checks selected normal-text pairs at **at least 4.5:1**, including primary/danger hover and status chips. This is not a blanket WCAG certification.
 
 ## Shared components
 
@@ -32,7 +32,7 @@ The header keeps live verification separate from the profile's support badge. Bo
 
 ## Offline acceptance
 
-[The committed review gallery](screenshots/README.md) contains 16 light/dark × desktop/mobile × Overview/Wallet/Merge/Mainnet captures from the mocked suite.
+[The committed review gallery](screenshots/README.md) contains 24 captures: 16 light/dark × desktop/mobile × Overview/Wallet/Merge/Mainnet views plus eight connected/disconnected header crops from the mocked suite.
 
 `npm run test:browser` uses Chromium with external requests blocked or explicitly mocked. It verifies light/saved theme behavior, 320/390/768/1280px layout without page overflow, wallet/verification visibility, keyboard navigation, profile cancellation and Activity persistence. The design-system test measures computed text/background contrast for secondary text, captions, status chips, primary and danger controls in both themes, checks theme metadata/state, and exercises keyboard focus. These checks are not live RPC qualification.
 
@@ -40,12 +40,16 @@ The header keeps live verification separate from the profile's support badge. Bo
 
 ## Distribution budget
 
-`npm run build` checks static parity (including the components module) and writes ignored `dist/js-size.json`. It independently gzips every dist JS response with Node's default gzip level and sums the result: **146,982 bytes**, under the **200,000-byte** budget. The build fails if this budget is reached/exceeded. Fonts/CSS are not counted as JavaScript. See the committed [per-file report](audit/phase1-js-size.json).
+`npm run build` checks static parity (including the components module) and writes ignored `dist/js-size.json`. It independently gzips every dist JS response with Node's default gzip level and sums the result: **147,359 bytes**, under the **200,000-byte** budget. The build fails if this budget is reached/exceeded. Fonts/CSS are not counted as JavaScript. See the committed [per-file report](audit/phase1-js-size.json).
 
 ## Pre-merge review (polish-head rerun pending)
 
-Phase 0 qualification passed in run 41618128325 on dd0afff. After screenshot polish, the user will review the actual app in their browser and re-trigger **run-live** on the intended final PR head. Keep PR #2 open/draft until review and pre-merge live qualification. No sandbox live retry or automatic gate trigger is part of design work.
+Phase 0 qualification passed in run 41618128325 on dd0afff. PR #2 subsequently merged at `22263e775461101b7d1dcb24933edd2ccd5a281f`; this header follow-up is a separate draft against main. It is not live-qualified. The user reviews the actual app and triggers **run-live** on the intended final head before merge. No sandbox live retry or automatic gate trigger is part of design work.
 
 ## Screenshot-review layout refinements
 
 The profile select occupies a full mobile row; badges share the next row, then wallet/theme/refresh controls align on a single row. Only Overview shows the full hero; body copy wraps naturally. Mainnet keeps one support badge and one status panel, without repeating the hero or deployment message. Mobile holdings below 600px use labelled token cards derived from the same table cells, not a second data/action source. Screenshot-only review ribbons sit below the header. These are presentation changes only; transaction/cancellation/verification rules remain intact.
+
+## Header-only follow-up
+
+Disconnected wallets have no redundant status chip; connected wallets retain address/balance. Select, badges and wallet buttons are 36px tall with a common radius, 11px text/14px line height and 8px group gaps. Theme/refresh are 36×36px with authored 18px SVGs, accessible labels and the existing visible focus rings. At widths ≥900px the brand and right-aligned controls share one row, with Squeekchain/Docs before the select; at 390px the stacked layout remains. The support and verification badges remain separate. Compact-desktop read-only/unverified text is checked for clipping. Body/action/dialog controls and all safety paths are unchanged.

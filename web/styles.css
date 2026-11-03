@@ -522,3 +522,52 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
   table[data-component="Table"] td:first-child { grid-column: 1 / -1; font-size: 20px; background: var(--sqk-bg-raised); }
   table[data-component="Table"] tbody tr:hover { background: var(--sqk-panel-alt); }
 }
+
+/* Header-only compact controls. Owner-action and dialog controls remain 44px. */
+.topbar { --header-size: 36px; gap: 16px; }
+.topbar .toolbar, .topbar .header-links, .topbar .header-badges,
+.topbar .wallet-controls, .topbar .wallet-control { gap: 8px; }
+.topbar :is(select, .chip, .btn) {
+  height: var(--header-size); min-height: var(--header-size);
+  border-radius: var(--sqk-r-ctrl); font-size: 11px; line-height: 14px;
+  padding: 2px 8px; vertical-align: middle;
+}
+.topbar .chip { align-items: center; display: inline-flex; white-space: normal; }
+.topbar #btn-theme, .topbar #btn-refresh {
+  width: var(--header-size); min-width: var(--header-size); height: var(--header-size);
+  padding: 0; font: 18px/1 var(--sqk-font-voice); flex-shrink: 0;
+}
+.topbar .header-link { margin-right: 0; font-size: 11px; }
+@media (min-width: 900px) {
+  .topbar { flex-wrap: nowrap; padding: 16px max(20px, calc((100vw - 1240px) / 2)); }
+  .topbar .brand { flex-shrink: 0; }
+  .topbar .toolbar { margin-left: auto; justify-content: flex-end; flex-wrap: nowrap; min-width: 0; }
+  .topbar .header-links { display: flex; flex-shrink: 0; }
+  .topbar .header-link { display: inline-flex; align-items: center; height: 36px; white-space: nowrap; }
+  .topbar #profile-select { width: 200px; max-width: 200px; min-width: 120px; flex: 0 1 200px; }
+  .topbar .header-badges { flex-wrap: nowrap; flex-shrink: 1; }
+  .topbar #profile-status, .topbar #verified-chip { flex-shrink: 0; max-width: 116px; }
+  .topbar #wallet-chip { flex: 0 0 116px; max-width: 116px; overflow-wrap: anywhere; }
+  .topbar .wallet-controls, .topbar .wallet-control { flex-shrink: 0; }
+}
+@media (min-width: 900px) and (max-width: 1199px) {
+  .topbar { padding: 12px 16px; gap: 12px; }
+  .topbar .brand { gap: 8px; }
+  .topbar .brand-name { font-size: 24px; }
+  .topbar .brand .label { display: none; }
+  .topbar .mark { width: 28px; height: 28px; }
+  .topbar .mark svg { width: 23px; height: 23px; }
+  .topbar #profile-select { width: 128px; max-width: 128px; min-width: 112px; flex-basis: 128px; }
+  .topbar .chip { padding-inline: 6px; }
+  .topbar #wallet-chip { flex-basis: 100px; max-width: 100px; }
+  .topbar #profile-status { max-width: 104px; }
+  .topbar #verified-chip { max-width: 104px; }
+  .topbar #btn-connect { max-width: 80px; }
+}
+@media (max-width: 760px) {
+  .topbar { gap: 12px; }
+  .topbar .header-badges { grid-template-columns: auto auto minmax(0, 1fr); }
+  .topbar .wallet-controls { grid-template-columns: minmax(0, 1fr) 36px 36px; }
+  .topbar .wallet-controls:has(#btn-refresh.hidden) { grid-template-columns: minmax(0, 1fr) 36px; }
+  .topbar #wallet-chip { overflow-wrap: anywhere; }
+}
