@@ -1,14 +1,12 @@
-<!doctype html>
-<html lang="en" data-theme="light">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+<!DOCTYPE html><html lang="en" data-theme="light"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Wheelhouse · Squeekchain console</title>
-    <meta name="description" content="Wheelhouse — checkpoint, claim, merge and inspect Squeeks on Squeekchain. Reads are permissionless; owner actions are signed in your own wallet." />
-    <meta name="theme-color" content="#fafaf7" />
-    <script>try { const theme = localStorage.getItem('squeekchain:theme') === 'dark' ? 'dark' : 'light'; document.documentElement.dataset.theme = theme; document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#10120f' : '#fafaf7'; } catch { /* light default */ }</script>
-    <link rel="stylesheet" href="./styles.css" />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='6' fill='%2316161c'/><g fill='none' stroke='%23ffc048' stroke-width='2.2'><circle cx='20' cy='20' r='11'/><circle cx='20' cy='20' r='3.4'/><path d='M20 9v3.6M20 27.4V31M9 20h3.6M27.4 20H31'/></g></svg>" />
+    <meta name="description" content="Wheelhouse — checkpoint, claim, merge and inspect Squeeks on Squeekchain. Reads are permissionless; owner actions are signed in your own wallet.">
+    <meta name="theme-color" content="#fafaf7">
+    <script>try { const choice = localStorage.getItem('squeekchain:theme'); const theme = choice === 'dark' || (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; document.documentElement.dataset.theme = theme; document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#10120f' : '#fafaf7'; } catch { /* light default */ }</script>
+    <link rel="stylesheet" href="./styles.css">
+    <link rel="icon" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'&gt;&lt;rect width='40' height='40' rx='6' fill='%2316161c'/&gt;&lt;g fill='none' stroke='%23ffc048' stroke-width='2.2'&gt;&lt;circle cx='20' cy='20' r='11'/&gt;&lt;circle cx='20' cy='20' r='3.4'/&gt;&lt;path d='M20 9v3.6M20 27.4V31M9 20h3.6M27.4 20H31'/&gt;&lt;/g&gt;&lt;/svg&gt;">
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
@@ -16,9 +14,9 @@
       <div class="brand">
         <div class="mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6">
-            <circle cx="12" cy="12" r="9" stroke="#ffc048" />
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+            <circle cx="12" cy="12" r="9" stroke="#ffc048"></circle>
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"></path>
           </svg>
         </div>
         <div>
@@ -27,175 +25,143 @@
         </div>
       </div>
       <div class="toolbar">
-        <div class="header-links"><a class="header-link" href="https://squeekchain.com" target="_blank" rel="noreferrer">Squeekchain ↗</a>
-        <a class="header-link" href="https://docs.squeekchain.com" target="_blank" rel="noreferrer">Docs ↗</a></div>
-        <select aria-label="Network deployment" id="profile-select" title="Deployment"></select>
-        <div class="header-badges"><span class="chip ok" id="profile-status" role="status" aria-live="polite">Supported</span>
-        <span class="chip" id="verified-chip" role="status" aria-live="polite">verifying…</span>
-        <span class="chip hidden" id="wallet-chip"></span></div>
+
+        <select aria-label="Network deployment" id="profile-select" title="Deployment" data-testid="profile-select"></select>
+        <div class="header-badges"><button class="chip ok" id="profile-status" type="button" data-testid="profile-status" aria-label="Profile status: open Trust">Supported</button>
+        <span class="chip" id="verified-chip" role="status" aria-live="polite" data-testid="verified-chip">verifying…</span>
+        <span class="chip hidden" id="wallet-chip" data-testid="wallet-chip"></span></div>
         <div class="wallet-controls"><div class="wallet-control">
-        <button class="btn btn-primary" id="btn-connect">Connect wallet</button></div>
-        <button class="btn icon" id="btn-theme" type="button" title="Switch to dark theme" aria-label="Toggle theme" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z" /></svg></button>
-        <button class="btn icon" id="btn-refresh" type="button" title="Refresh" aria-label="Refresh"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 1 1-2.3-5.7L21 8M21 3v5h-5" /></svg></button></div>
+        <button class="btn btn-primary" id="btn-connect" data-testid="wallet-button" aria-haspopup="menu" aria-expanded="false">Connect wallet</button></div>
+        <button class="btn icon" id="btn-theme" type="button" title="Switch to dark theme" aria-label="Toggle theme" aria-pressed="false" data-testid="btn-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"></path></svg></button>
+        <button class="btn icon" id="btn-refresh" type="button" title="Refresh" aria-label="Refresh" data-testid="btn-refresh"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 1 1-2.3-5.7L21 8M21 3v5h-5"></path></svg></button><button class="btn icon" id="btn-settings" data-testid="settings-open" type="button" aria-label="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 3-1 3-3 1v3l-2 2 2 2v3l3 1 1 3h6l1-3 3-1v-3l2-2-2-2V7l-3-1-1-3Z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></div>
       </div>
-    </header>
+    </header><div id="wallet-menu" class="wallet-menu panel hidden" role="menu" aria-label="Wallet" data-testid="wallet-menu"><button class="btn hidden" id="btn-menu-connect" data-testid="btn-menu-connect" role="menuitem">Connect wallet</button><button class="btn" id="btn-copy-address" role="menuitem" data-testid="btn-copy-address">Copy address</button><button class="btn" id="btn-open-activity" role="menuitem" data-testid="btn-open-activity">Activity <span id="pending-count" class="pending-dot hidden" aria-label="Pending transactions" data-testid="pending-count"></span></button><button class="btn" id="btn-disconnect" role="menuitem" data-testid="btn-disconnect">Disconnect</button></div>
 
-    <main id="main-content">
-      <div class="page-intro"><span class="eyebrow"><span class="status-dot"></span> SMALL HAMSTER. BIG POSSIBILITIES.</span><span class="label">INDEPENDENT COMMUNITY TOOL / 01</span></div>
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <span class="eyebrow">YOUR SQUEEKS. YOUR CONTROLS.</span>
-          <h1 id="hero-title">A little wheel.<br>A whole <em>ecosystem.</em></h1>
-          <p>The hamster does the work. You take it from here. Explore the network, manage your Squeeks, and make every turn count.</p>
-          <div class="row hero-actions"><button class="btn btn-primary" data-go="holdings">Explore my Squeeks <span>↗</span></button><a class="text-link" href="https://squeekchain.com/genesis/i/kbxh52st" target="_blank" rel="noopener noreferrer">Discover Genesis ↗</a></div>
-          <span class="hero-footnote"><span class="tiny-wheel">◎</span> Hamster-powered. Wallet-signed. Always yours.</span>
-        </div>
-        <div class="hero-art" aria-hidden="true">
-          <svg viewBox="0 0 480 330" fill="none">
-            <defs><pattern id="dots" width="9" height="9" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="currentColor" opacity=".2"/></pattern></defs>
-            <ellipse cx="245" cy="300" rx="146" ry="10" fill="currentColor" opacity=".04"/>
-            <path d="M235 197 194 294H294L253 197" stroke="currentColor" stroke-width="5"/>
-            <circle cx="244" cy="153" r="124" fill="url(#dots)" stroke="currentColor" stroke-width="3"/>
-            <circle cx="244" cy="153" r="113" stroke="#d9a017" stroke-width="10"/>
-            <g stroke="currentColor" opacity=".35"><path d="M244 38V268M129 153H359M163 72 325 234M163 234 325 72M200 47 288 259M138 109 350 197M138 197 350 109M200 259 288 47"/></g>
-            <circle cx="244" cy="153" r="13" fill="var(--sqk-panel)" stroke="currentColor" stroke-width="3"/>
-            <path d="M170 217C162 181 191 163 219 176C228 154 253 157 259 180C288 172 314 187 312 213C326 221 317 237 303 238H193C178 238 169 230 170 217Z" fill="var(--sqk-gold-soft)" stroke="currentColor" stroke-width="2.5"/>
-            <path d="M219 177C209 157 220 146 232 153C242 158 236 172 230 179" fill="#e7b44d" stroke="currentColor" stroke-width="2.5"/>
-            <path d="M259 181C261 164 277 162 281 174C284 182 276 188 272 188" fill="#e7b44d" stroke="currentColor" stroke-width="2.5"/>
-            <circle cx="286" cy="201" r="3" fill="currentColor"/><path d="m310 210 6 2-5 4M282 221l14-2M283 227l13-4M197 238l-5 8h18M266 238l7 8h17" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="297" cy="217" r="6" fill="#dc9c72" opacity=".55"/>
-            <path d="M93 94h20M103 84v20M375 228h14M382 221v14M355 53h10M360 48v10" stroke="#4460cf" stroke-width="2"/>
-            <path d="M93 268h44M351 281h37" stroke="currentColor" opacity=".25"/>
-          </svg>
-          <span class="art-annotation">WHEELY GOOD TECHNOLOGY ↗</span>
-        </div>
-      </section>
-      <div class="network-strip"><span><span class="status-dot"></span> <b id="network-context">SEPOLIA TESTNET</b></span><span id="network-mode">Read freely. Sign only what you understand.</span><a href="https://docs.squeekchain.com/developers/owner-actions/" target="_blank" rel="noreferrer">How it works ↗</a></div>
-      <details class="rpc-settings"><summary>Connection & trust</summary><p>Connected Sepolia wallet preferred. Otherwise, browser-direct public RPCs. Every snapshot must match block hashes from two independent RPC peers; mismatch means unavailable. No server proxy.</p><label for="rpc-url">Optional custom HTTPS RPC (saved only in this browser; avoid URLs with secrets)</label><div class="row"><input id="rpc-url" type="url" placeholder="Default: public Sepolia RPCs" autocomplete="off" spellcheck="false" /><button class="btn" id="btn-save-rpc">Save connection</button></div><p class="muted small">A custom RPC joins the peer set but never replaces the two-peer cross-check. Mainnet and undocumented v9 transactions stay disabled.</p></details>
-      <div id="banner" class="notice hidden" role="status" aria-live="polite"></div>
+    <main id="main-content" data-testid="main-content">
 
-      <section id="activity-panel" class="panel hidden" aria-label="Transaction Activity"><div class="panel-head"><h2>Activity</h2><button id="btn-refresh-activity" class="btn">Refresh receipts</button></div><p class="muted small">Saved in this browser, across profiles. Switching profiles cannot cancel a wallet popup or a broadcast transaction. Receipt reads retry; transactions never do. Final status requires 12 confirmations and public-RPC block agreement.</p><ol id="activity-list" aria-live="polite"></ol></section>
-      <section id="not-deployed" class="notice hidden" role="status" aria-live="polite"><h2>Mainnet · not deployed</h2><p id="not-deployed-note"></p></section>
-      <div id="deployment-content">
+
+
+
+      <div id="banner" class="notice hidden" role="status" aria-live="polite" data-testid="banner"></div>
+
+
+      <section id="not-deployed" class="notice hidden" role="status" aria-live="polite" data-testid="not-deployed"><h2>Mainnet · not deployed</h2><p id="not-deployed-note" data-testid="not-deployed-note"></p></section>
       <nav class="tabs" role="tablist" aria-label="Console sections">
-        <button class="tab" role="tab" data-tab="overview" aria-selected="true"><span class="tab-number">01</span> Overview</button>
-        <button class="tab" role="tab" data-tab="holdings" aria-selected="false"><span class="tab-number">02</span> My Squeeks</button>
-        <button class="tab" role="tab" data-tab="art" aria-selected="false"><span class="tab-number">03</span> DotGrid gallery</button>
-        <button class="tab" role="tab" data-tab="agent" aria-selected="false"><span class="tab-number">04</span> Developer tools</button>
-      </nav>
+
+
+
+
+      <button class="tab" role="tab" data-tab="squeeks" aria-selected="false" data-testid="tab-squeeks" id="tab-squeeks" aria-controls="panel-squeeks">Squeeks</button><button class="tab" role="tab" data-tab="art" aria-selected="false" data-testid="tab-art" id="tab-art" aria-controls="panel-art">Art</button><button class="tab" role="tab" data-tab="network" aria-selected="true" data-testid="tab-network" id="tab-network" aria-controls="panel-network">Network</button><button class="tab" role="tab" data-tab="info" aria-selected="false" data-testid="tab-info" id="tab-info" aria-controls="panel-info">Info</button></nav><div id="deployment-content" data-testid="deployment-content">
+
 
       <!-- ── overview ──────────────────────────────────────────────────────── -->
-      <section data-panel="overview">
-        <div class="section-heading"><div><span class="eyebrow">A LOOK INSIDE THE WHEEL</span><h2>Network at a glance<span class="brand-dot">.</span></h2></div><span class="label">ONCHAIN READS · AUTO-REFRESH 45s</span></div>
+      <section data-panel="network" id="panel-network" data-testid="panel-network" role="tabpanel" aria-labelledby="tab-network">
+        <div class="section-heading"><div><h2>Network at a glance<span class="brand-dot">.</span></h2></div><div class="row"><span class="label">ONCHAIN READS · AUTO-REFRESH 45s</span><a href="#info/how-it-works" data-testid="network-how-link">How it works</a></div></div>
         <div class="overview-layout">
         <div>
-        <div class="panel" id="profile-panel">
+        <div class="panel" id="profile-panel" data-testid="profile-panel">
           <div class="panel-head">
             <h2>Chain pulse</h2>
-            <span class="panel-note" id="profile-release">Unknown</span>
+            <span class="panel-note" id="profile-release" data-testid="profile-release">Unknown</span>
           </div>
           <div class="grid cols-4">
-            <div class="stat"><span class="label">Network</span><strong id="net-chain">Unknown</strong></div>
-            <div class="stat"><span class="label">Kind</span><strong id="net-kind">Unknown</strong></div>
-            <div class="stat"><span class="label">Settled round</span><strong id="net-round">Unknown</strong></div>
-            <div class="stat"><span class="label">Squeek blocks</span><strong id="net-blocks">Unknown</strong></div>
-            <div class="stat"><span class="label">Checkpoint lag</span><strong id="net-lag">Unknown</strong></div>
-            <div class="stat"><span class="label">Issued / minted</span><strong id="net-issued">Unknown</strong></div>
-            <div class="stat"><span class="label">Squeeks live</span><strong id="net-squeeks">Unknown</strong></div>
-            <div class="stat"><span class="label">Core paused</span><strong id="net-paused">Unknown</strong></div>
+            <div class="stat"><span class="label">Network</span><strong id="net-chain" data-testid="net-chain">Unknown</strong></div>
+            <div class="stat"><span class="label">Kind</span><strong id="net-kind" data-testid="net-kind">Unknown</strong></div>
+            <div class="stat"><span class="label">Settled round</span><strong id="net-round" data-testid="net-round">Unknown</strong></div>
+            <div class="stat"><span class="label">Squeek blocks</span><strong id="net-blocks" data-testid="net-blocks">Unknown</strong></div>
+            <div class="stat"><span class="label">Checkpoint lag</span><strong id="net-lag" data-testid="net-lag">Unknown</strong></div>
+            <div class="stat"><span class="label">Issued / minted</span><strong id="net-issued" data-testid="net-issued">Unknown</strong></div>
+            <div class="stat"><span class="label">Squeeks live</span><strong id="net-squeeks" data-testid="net-squeeks">Unknown</strong></div>
+            <div class="stat"><span class="label">Core paused</span><strong id="net-paused" data-testid="net-paused">Unknown</strong></div>
           </div>
-          <div class="notice hidden" id="profile-notice"></div>
-          <p class="notice warn hidden" id="settlement-notice" role="status" aria-live="polite"></p>
+          <div class="notice hidden" id="profile-notice" data-testid="profile-notice"></div>
+          <p class="notice warn hidden" id="settlement-notice" role="status" aria-live="polite" data-testid="settlement-notice"></p>
         </div>
 
-        <div class="panel" id="checkpoint-panel">
+        <div class="panel" id="checkpoint-panel" data-testid="checkpoint-panel">
           <div class="panel-head">
             <h2>Checkpoint <span class="label">anyone can run it</span></h2>
             <span class="panel-note">permissionless · no caller reward · you pay gas</span>
           </div>
-          <p class="muted small" id="cp-explain">
+          <p class="muted small" id="cp-explain" data-testid="cp-explain">
             Turns settled rounds into issued SQK. Holders cannot claim until someone checkpoints, so this is the job
             a wallet without Squeeks can do.
           </p>
           <div class="row">
-            <button class="btn btn-gold" id="btn-checkpoint" disabled>Simulate &amp; checkpoint</button>
-            <span class="mono small" id="cp-reason">Unknown</span>
+            <button class="btn btn-gold" id="btn-checkpoint" disabled="" data-testid="btn-checkpoint">Simulate &amp; checkpoint</button>
+            <span class="mono small" id="cp-reason" data-testid="cp-reason">Unknown</span>
           </div>
-          <pre class="out hidden" id="cp-result"></pre>
+          <pre class="out hidden" id="cp-result" data-testid="cp-result"></pre>
         </div>
 
         </div>
         <aside class="panel wheel-panel">
-          <div class="panel-head"><h2>From the wheel</h2><span class="chip" id="wheel-state">Unknown</span></div>
+          <div class="panel-head"><h2>From the wheel</h2><span class="chip" id="wheel-state" data-testid="wheel-state">Unknown</span></div>
           <div class="wheel-glyph" aria-hidden="true">◎</div>
-          <div class="wheel-speed"><strong id="wheel-rpm">Unknown</strong><span class="label">RPM</span></div>
-          <p class="muted small" id="wheel-note" role="status">Waiting for an official device reading.</p>
-          <div class="mini-metrics"><div><span class="label">Speed</span><strong id="wheel-speed">Unknown</strong></div><div><span class="label">Daily distance</span><strong id="wheel-distance">Unknown</strong></div></div>
+          <div class="wheel-speed"><strong id="wheel-rpm" data-testid="wheel-rpm">Unknown</strong><span class="label">RPM</span></div>
+          <p class="muted small" id="wheel-note" role="status" data-testid="wheel-note">Waiting for an official device reading.</p>
+          <div class="mini-metrics"><div><span class="label">Speed</span><strong id="wheel-speed" data-testid="wheel-speed">Unknown</strong></div><div><span class="label">Daily distance</span><strong id="wheel-distance" data-testid="wheel-distance">Unknown</strong></div></div>
           <a class="btn stream-link" href="https://sepolia.squeekchain.com/#stream-game" target="_blank" rel="noreferrer">↗ Watch Squeektoshi</a>
           <span class="label telemetry-source">OFFICIAL API · DISPLAY ONLY</span>
         </aside>
         </div>
-        <div class="section-heading"><div><span class="eyebrow">LESS FRICTION. MORE SQUEEK.</span><h2>Your next move</h2></div><span class="label">YOU'RE IN CONTROL</span></div>
-        <div class="action-grid">
-          <button class="action-card" data-go="holdings"><span class="action-icon">▦</span><span class="eyebrow">01 / YOUR COLLECTION</span><h3>Meet your Squeeks</h3><p>Inspect levels, power, rewards and merge cooldowns. No wallet needed to look.</p><span class="action-link">Open holdings ↗</span></button>
-          <button class="action-card" data-go="art"><span class="action-icon blue">✳</span><span class="eyebrow">02 / FULLY ONCHAIN</span><h3>A little work of art</h3><p>Explore deterministic DotGrid art. Every image and trait, straight from the chain.</p><span class="action-link">Explore the gallery ↗</span></button>
-          <button class="action-card" data-go="agent"><span class="action-icon">⌘</span><span class="eyebrow">03 / BUILD SOMETHING</span><h3>Made for your agents</h3><p>One tool registry for the console, SDK and MCP. Agents prepare. Owners sign.</p><span class="action-link">Open developer tools ↗</span></button>
-        </div>
+
+
       </section>
 
       <!-- ── holdings ──────────────────────────────────────────────────────── -->
-      <section data-panel="holdings" class="hidden">
-        <div class="section-heading"><div><span class="eyebrow">YOUR LITTLE CORNER OF THE CHAIN</span><h2>My Squeeks<span class="brand-dot">.</span></h2></div></div>
-        <div class="capability-grid" id="capability-grid"></div>
-        <div class="panel">
+      <section data-panel="squeeks" class="hidden" id="panel-squeeks" data-testid="panel-squeeks" role="tabpanel" aria-labelledby="tab-squeeks">
+        <div class="section-heading"><div><h2>Squeeks</h2></div></div>
+
+        <div class="row" id="watch-row" data-testid="watch-row">
+            <input aria-label="View address" id="watch-input" placeholder="0x… inspect any address read-only" spellcheck="false" data-testid="watch-input">
+            <button class="btn" id="btn-watch" data-testid="btn-watch">View address</button>
+          </div><div class="panel">
           <div class="panel-head">
             <h2>Holdings</h2>
-            <span class="panel-note" id="holder-owner">Unknown</span>
-          </div>
-          <div class="row" id="watch-row">
-            <input aria-label="Wallet address to inspect" id="watch-input" placeholder="0x… inspect any address read-only" spellcheck="false" />
-            <button class="btn" id="btn-watch">Inspect</button>
+            <span class="panel-note" id="holder-owner" data-testid="holder-owner">Unknown</span>
           </div>
 
-          <div id="holder-body" class="hidden">
+
+          <div id="holder-body" class="hidden" data-testid="holder-body">
             <div class="grid cols-4" style="margin: 12px 0">
-              <div class="stat"><span class="label">Squeeks</span><strong id="holder-count">Unknown</strong></div>
-              <div class="stat"><span class="label">Power</span><strong id="holder-power">Unknown</strong></div>
-              <div class="stat"><span class="label">Share</span><strong id="holder-share">Unknown</strong></div>
-              <div class="stat accent"><span class="label">Claimable</span><strong id="holder-claimable">Unknown</strong></div>
+              <div class="stat"><span class="label">Squeeks</span><strong id="holder-count" data-testid="holder-count">Unknown</strong></div>
+              <div class="stat"><span class="label">Power</span><strong id="holder-power" data-testid="holder-power">Unknown</strong></div>
+              <div class="stat"><span class="label">Share</span><strong id="holder-share" data-testid="holder-share">Unknown</strong></div>
+              <div class="stat accent"><span class="label">Claimable</span><strong id="holder-claimable" data-testid="holder-claimable">Unknown</strong></div>
             </div>
             <div class="row">
-              <input id="claim-ids" aria-label="Token IDs to claim" placeholder="IDs: 1, 2, 3 · blank = all owned" spellcheck="false" />
-              <button class="btn btn-primary" id="btn-claim" disabled>Simulate &amp; claim</button>
-              <button class="btn" id="btn-plan">Refresh merge plan</button>
-              <span class="mono small muted" id="holder-hint"></span>
+              <input id="claim-ids" aria-label="Token IDs to claim" placeholder="IDs: 1, 2, 3 · blank = all owned" spellcheck="false" data-testid="claim-ids">
+              <button class="btn btn-primary" id="btn-claim" disabled="" data-testid="btn-claim">Simulate &amp; claim</button>
+              <button class="btn" id="btn-plan" data-testid="btn-plan">Refresh merge plan</button>
+              <span class="mono small muted" id="holder-hint" data-testid="holder-hint"></span>
             </div>
-            <pre class="out hidden" id="claim-result"></pre>
+            <pre class="out hidden" id="claim-result" data-testid="claim-result"></pre>
 
             <div class="table-wrap" style="margin-top: 12px">
               <table>
-                <thead id="squeeks-head"></thead>
-                <tbody id="squeeks-tbody"></tbody>
+                <thead id="squeeks-head" data-testid="squeeks-head"></thead>
+                <tbody id="squeeks-tbody" data-testid="squeeks-tbody"></tbody>
               </table>
             </div>
 
             <h3 style="margin-top: 20px">Merge plan</h3>
-            <p class="mono small muted" id="merge-note">Merging burns the donor NFT permanently and raises the survivor one level.</p>
-            <ul class="plan" id="merge-list"></ul>
+            <p class="mono small muted" id="merge-note" data-testid="merge-note">Merging burns the donor NFT permanently and raises the survivor one level.</p>
+            <ul class="plan" id="merge-list" data-testid="merge-list"></ul>
             <div class="row" style="margin-top: 16px">
-              <input id="merge-survivor" aria-label="Survivor token ID" placeholder="Keep token ID" inputmode="numeric" />
-              <input id="merge-donor" aria-label="Donor token ID to burn" placeholder="Burn token ID" inputmode="numeric" />
-              <button class="btn" id="btn-custom-merge" disabled>Review my pair</button>
+              <input id="merge-survivor" aria-label="Survivor token ID" placeholder="Keep token ID" inputmode="numeric" data-testid="merge-survivor">
+              <input id="merge-donor" aria-label="Donor token ID to burn" placeholder="Burn token ID" inputmode="numeric" data-testid="merge-donor">
+              <button class="btn" id="btn-custom-merge" disabled="" data-testid="btn-custom-merge">Review my pair</button>
             </div>
             <p class="small muted">Choose which image and token ID survives. Type the exact BURN-&lt;id&gt; acknowledgement before call construction or simulation; review the simulation before wallet signing.</p>
           </div>
-          <p class="muted small" id="holder-empty">Connect a wallet, or inspect an address, to see positions.</p>
+          <p class="muted small" id="holder-empty" data-testid="holder-empty">Connect a wallet, or inspect an address, to see positions.</p>
         </div>
       </section>
 
       <!-- ── art ───────────────────────────────────────────────────────────── -->
-      <section data-panel="art" class="hidden">
-        <div class="section-heading"><div><span class="eyebrow">NOT HOSTED. NOT HAND-DRAWN. ONCHAIN.</span><h2>The DotGrid gallery<span class="brand-dot">.</span></h2></div></div>
+      <section data-panel="art" class="hidden" id="panel-art" data-testid="panel-art" role="tabpanel" aria-labelledby="tab-art">
+        <div class="section-heading"><div><h2>The DotGrid gallery<span class="brand-dot">.</span></h2></div></div>
         <div class="panel">
           <div class="panel-head">
             <h2>Onchain art</h2>
@@ -206,18 +172,30 @@
             token, or for everything in the connected wallet.
           </p>
           <div class="row">
-            <input aria-label="Squeek token ID" id="art-token" placeholder="token id" inputmode="numeric" style="max-width: 140px" />
-            <button class="btn" id="btn-art-one">Load token</button>
-            <button class="btn" id="btn-art-mine">Load my Squeeks</button>
-            <span class="mono small muted" id="art-status"></span>
+            <input aria-label="Squeek token ID" id="art-token" placeholder="token id" inputmode="numeric" style="max-width: 140px" data-testid="art-token">
+            <button class="btn" id="btn-art-one" data-testid="btn-art-one">Load token</button>
+            <button class="btn" id="btn-art-mine" data-testid="btn-art-mine">Load my Squeeks</button>
+            <span class="mono small muted" id="art-status" data-testid="art-status"></span>
           </div>
-          <div class="art-grid" id="art-grid" style="margin-top: 16px"></div>
+          <div class="art-grid" id="art-grid" style="margin-top: 16px" data-testid="art-grid"></div>
         </div>
       </section>
 
       <!-- ── agent ─────────────────────────────────────────────────────────── -->
-      <section data-panel="agent" class="hidden">
-        <div class="section-heading"><div><span class="eyebrow">HUMANS AND AGENTS, WORKING TOGETHER</span><h2>Build with Squeekchain<span class="brand-dot">.</span></h2></div></div>
+
+      </div>
+<section data-panel="info" class="hidden" id="panel-info" data-testid="panel-info" role="tabpanel" aria-labelledby="tab-info"><div class="section-heading"><h1>Info</h1></div>
+<nav class="info-links" aria-label="Info sections"><a href="#info/how-it-works" data-testid="info-link-how-it-works">How it works</a><a href="#info/trust" data-testid="info-link-trust">Trust</a><a href="#info/status" data-testid="info-link-status">Status</a><a href="#info/contracts" data-testid="info-link-contracts">Contracts</a><a href="#info/developers" data-testid="info-link-developers">Developers</a><a href="#info/about" data-testid="info-link-about">About</a></nav>
+<section id="info-how-it-works" class="panel info-section" tabindex="-1" data-testid="info-how-it-works"><h2>How it works</h2><p>Published Sepolia v6 policy. Merge two same-level Squeeks: the donor burns permanently and the survivor keeps its ID and image, gains one level and keeps both Squeeks’ unclaimed SQK. Both must have no pending power and have reached their merge cooldown. Maximum level: 10.</p>
+<p>Cooldowns count completed Squeek blocks, not elapsed time.</p><div class="table-wrap"><table data-testid="policy-table"><caption>Published deployment record · v6 levels</caption><thead><tr><th scope="col">Level</th><th scope="col">Weight</th><th scope="col">Cooldown (Squeek blocks)</th></tr></thead><tbody id="policy-levels" data-testid="policy-levels"></tbody></table></div><p>Checkpoints turn settled rounds into funded SQK rewards for all Squeeks. Any account can checkpoint, pays gas, and receives no caller reward. Owners claim already-funded rewards in batches of up to 32 IDs.</p>
+<p id="info-reward-status" data-testid="info-reward-status">Live reward state: Unknown.</p>
+<p>A live Core pause stops checkpoints and new issuance, not claims of already-funded SQK. Runtime reward readiness is shown on Network; an unavailable reading is Unknown, never zero.</p><a href="https://docs.squeekchain.com/assets/deployments/sepolia.json" target="_blank" rel="noreferrer">Deployment record ↗</a></section>
+<section id="info-trust" class="panel info-section" tabindex="-1" data-testid="info-trust"><h2>Trust</h2><p>Connected Sepolia wallet preferred. Otherwise, browser-direct public RPCs. Every snapshot must match block hashes from two independent RPC peers; mismatch means stop, not a fallback to guessed identities. No server proxy.</p>
+<p>For published v6 we verify chain ID, graph, implementations, runtime hashes, layout digests, versions, proxy admins, wiring, configuration and collection policy at one block. Proxy slots are rechecked for each operation. Observed v9 identities are not published trust pins: read-only, unverified, all transactions disabled.</p><dl class="trust-grid"><div><dt>Current snapshot block</dt><dd id="trust-block" data-testid="trust-block">Unknown</dd></div><div><dt>Last verification check</dt><dd id="trust-time" data-testid="trust-time">Unknown</dd></div><div><dt>Verification state</dt><dd id="trust-result" data-testid="trust-result">Unknown</dd></div><div><dt>RPC configuration</dt><dd id="trust-rpcs" data-testid="trust-rpcs">Unknown</dd></div></dl><p class="muted small">Configured peers are availability preferences, not proof that each endpoint served the last snapshot. Two independent peer hashes are checked by the SDK for every snapshot. Immutable artwork integrity remains Unknown where hashes are unpublished.</p><button class="btn" data-open-settings="">Connection settings</button></section>
+<section id="info-status" class="panel info-section" tabindex="-1" data-testid="info-status"><h2>Status</h2><p id="capability-profile" data-testid="capability-profile"></p><div id="capability-grid" class="status-list" data-testid="capability-grid"></div></section>
+<section id="info-contracts" class="panel info-section" tabindex="-1" data-testid="info-contracts"><h2>Contracts</h2><p id="contracts-release" data-testid="contracts-release"></p><ul id="contracts-list" data-testid="contracts-list"></ul></section>
+<section id="info-developers" class="info-section" tabindex="-1" data-testid="info-developers"><h2>Developers</h2>
+        <div class="section-heading"><div><h2>Build with Squeekchain<span class="brand-dot">.</span></h2></div></div>
         <div class="panel">
           <div class="panel-head">
             <h2>Agent / SDK console</h2>
@@ -228,16 +206,17 @@
             signature. Agents never see a private key.
           </p>
           <div class="row">
-            <select aria-label="Agent tool" id="tool-call"></select>
-            <button class="btn" id="btn-run-tool">Run</button>
-            <button class="btn" id="btn-copy-manifest">Copy manifest</button>
+            <select aria-label="Agent tool" id="tool-call" data-testid="tool-call"></select>
+            <button class="btn" id="btn-run-tool" data-testid="btn-run-tool">Run</button>
+            <button class="btn" id="btn-copy-manifest" data-testid="btn-copy-manifest">Copy manifest</button>
             <a class="btn" href="./tools.json" target="_blank" rel="noreferrer">tools.json</a>
           </div>
-          <textarea aria-label="Tool arguments as JSON" id="tool-args" rows="3" spellcheck="false">{}</textarea>
-          <pre class="out hidden" id="tool-result"></pre>
+          <textarea aria-label="Tool arguments as JSON" id="tool-args" rows="3" spellcheck="false" data-testid="tool-args">{}</textarea>
+          <pre class="out hidden" id="tool-result" data-testid="tool-result"></pre>
         </div>
-      </section>
-      </div><!-- deployment-content: hidden entirely for undeployed profiles -->
+      <p>Local stdio MCP · read/prepare only, never signs or submits.</p>
+<pre class="out" data-testid="mcp-snippet">{ "mcpServers": { "wheelhouse": { "command": "node", "args": ["/absolute/path/Squeekchain-console/mcp/server.js"] } } }</pre></section>
+<section id="info-about" class="panel info-section" tabindex="-1" data-testid="info-about"><h2>About</h2><p>Wheelhouse is an independent community console, not affiliated with Squeekchain. Sepolia testnet software, not investment advice.</p><div class="row"><a class="text-link" href="https://squeekchain.com/genesis/i/kbxh52st" target="_blank" rel="noopener noreferrer">Discover Genesis ↗</a><a href="https://github.com/CryptoExplor/Squeekchain-console" target="_blank" rel="noreferrer">Source ↗</a><a href="https://squeekchain.com" target="_blank" rel="noreferrer">Squeekchain ↗</a><a href="https://docs.squeekchain.com" target="_blank" rel="noreferrer">Docs ↗</a></div></section></section><!-- deployment-content: hidden entirely for undeployed profiles -->
     </main>
 
     <footer>
@@ -246,23 +225,28 @@
         Wheelhouse · testnet software · addresses come from the published deployment record (v6) and the official dApp bundle +
         public API (observed v9, read-only and unverified) · no v9 transactions · no owner keys
       </p>
-      <div class="footer-links"><a href="https://github.com/CryptoExplor/Squeekchain-console" target="_blank" rel="noreferrer">Source ↗</a><a href="https://docs.squeekchain.com/developers/owner-actions/" target="_blank" rel="noreferrer">Safety & owner actions ↗</a><span>Independent community console · not affiliated with Squeekchain · Sepolia only · not investment advice</span></div>
+      <div class="footer-links"><a href="https://github.com/CryptoExplor/Squeekchain-console" target="_blank" rel="noreferrer">Source ↗</a><a href="https://docs.squeekchain.com/developers/owner-actions/" target="_blank" rel="noreferrer">Safety &amp; owner actions ↗</a><span>Independent community console · not affiliated with Squeekchain · Sepolia only · not investment advice</span></div>
     </footer>
 
-    <div class="modal hidden" id="modal">
+    <div class="modal hidden" id="modal" data-testid="modal">
       <div class="modal-box" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-body">
-        <h3 id="modal-title">Confirm</h3>
-        <p id="modal-body"></p>
+        <h3 id="modal-title" data-testid="modal-title">Confirm</h3>
+        <p id="modal-body" data-testid="modal-body"></p>
         <label for="modal-input" class="label">Burn confirmation</label>
-        <input id="modal-input" placeholder="type to confirm" spellcheck="false" autocomplete="off" />
+        <input id="modal-input" placeholder="type to confirm" spellcheck="false" autocomplete="off" data-testid="modal-input">
         <div class="row end" style="margin-top: 12px">
-          <button class="btn" id="btn-modal-cancel">Cancel</button>
-          <button class="btn btn-danger" id="btn-modal-confirm" disabled>Confirm</button>
+          <button class="btn" id="btn-modal-cancel" data-testid="btn-modal-cancel">Cancel</button>
+          <button class="btn btn-danger" id="btn-modal-confirm" disabled="" data-testid="btn-modal-confirm">Confirm</button>
         </div>
       </div>
     </div>
 
-    <div class="toasts" id="toasts" aria-live="polite"></div>
+    <div class="toasts" id="toasts" aria-live="polite" data-testid="toasts"></div>
     <script type="module" src="./app.js"></script>
-  </body>
-</html>
+
+
+<div class="sheet-overlay hidden" id="activity-drawer" data-testid="activity-drawer" role="dialog" aria-modal="true" aria-labelledby="activity-title"><div class="sheet"><div class="panel-head"><h2 id="activity-title" data-testid="activity-title">Activity</h2><button class="btn" data-close-sheet="" data-testid="sheet-close">Close</button></div><p id="activity-empty" class="muted" data-testid="activity-empty">No saved transactions.</p><section id="activity-panel" class="panel" aria-label="Transaction Activity" data-testid="activity-panel"><div class="panel-head"><h2>Activity</h2><button id="btn-refresh-activity" class="btn" data-testid="btn-refresh-activity">Refresh receipts</button></div><p class="muted small">Saved in this browser, across profiles. Switching profiles cannot cancel a wallet popup or a broadcast transaction. Receipt reads retry; transactions never do. Final status requires 12 confirmations and public-RPC block agreement.</p><ol id="activity-list" aria-live="polite" data-testid="activity-list"></ol></section></div></div><div class="sheet-overlay hidden" id="settings-sheet" data-testid="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="sheet"><div class="panel-head"><h2 id="settings-title" data-testid="settings-title">Settings</h2><button class="btn" data-close-sheet="" data-testid="sheet-close">Close</button></div>
+<section class="settings-section"><h3>Custom RPC</h3><label for="rpc-url">Optional HTTPS RPC (browser-local; avoid URLs with secrets)</label><input id="rpc-url" type="url" placeholder="Default: public Sepolia RPCs" autocomplete="off" spellcheck="false" data-testid="rpc-url"><div class="row"><button class="btn" id="btn-save-rpc" data-testid="btn-save-rpc">Save</button><button class="btn" id="btn-test-rpc" data-testid="btn-test-rpc">Test</button><button class="btn" id="btn-remove-rpc" data-testid="btn-remove-rpc">Remove</button></div><p class="muted small">A custom RPC joins the peer set, never replaces the two-peer check. Mainnet and undocumented v9 transactions stay disabled.</p>
+<p id="rpc-test-result" role="status" aria-live="polite" data-testid="rpc-test-result"></p></section>
+<section class="settings-section"><h3>Cache</h3><button class="btn" id="btn-clear-cache" data-testid="btn-clear-cache">Clear IndexedDB log cache</button><button class="btn" id="btn-clear-activity" data-testid="btn-clear-activity">Clear Activity list</button><p id="cache-result" role="status" aria-live="polite" data-testid="cache-result"></p></section>
+<section class="settings-section"><h3>Theme</h3><label for="theme-choice">Appearance</label><select id="theme-choice" data-testid="theme-choice"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select></section></div></div></body></html>

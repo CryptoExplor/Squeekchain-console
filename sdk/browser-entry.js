@@ -11,3 +11,6 @@ export { createDiscoveryStore } from "./discovery.js";
 export { createRpcContext } from "./rpc.js";
 
 export { rpcToolError } from './rpc-errors.js';
+
+export { SQUEEKS_POLICY } from './record.js';
+export { PUBLIC_RPC_ENDPOINTS } from './rpc.js';

@@ -1,22 +1,26 @@
-# Phase 1 mocked Chromium review
+# Phase 3 mocked Chromium review
 
-**Synthetic fixtures only — not live qualification.** The captures use the actual Wheelhouse DOM, components, CSS and locally bundled fonts. Network/SDK/wallet adapters are injected by `test/review-fixture.mjs`. External requests are blocked. No contract simulation, wallet submission or signature occurs; merge images show the typed acknowledgement but stop before simulation. “Verified” in these images is fixture data, not a live attestation.
+**Synthetic fixtures only — not live qualification.** Actual app DOM/CSS/components and bundled local fonts, with injected network/wallet adapters and external requests blocked or explicitly mocked. Verified labels are fixture data. Review captures perform no contract simulation, wallet signature or transaction submission; Merge stops at the typed BURN acknowledgement.
 
-All 16 full-view states were regenerated after the header-only follow-up, alongside eight new header crops. Header controls are 36px with 8px gaps and theme/refresh glyphs are 18px. Header control alignment, hero visibility, labelled card cells below 600px, single Mainnet status and review-ribbon position are asserted. All 24 states are tested by `test/screenshots.spec.mjs`. Light and dark are explicit choices; desktop viewport is **1280 × 960**, mobile is **390 × 844**, device scale 1. Header-only captures use the same widths with a 900px viewport height and crop to the header. Overview, Wallet and Mainnet use full-page images; Merge uses a viewport image to keep the focused dialog readable. Animations are disabled, and local fonts finish loading before capture. Wallet token #87 deliberately has Unknown fields to show unavailable data, rather than fabricated zeroes.
+32 captures: Squeeks, Network, Info, Settings, Merge, Mainnet in light/dark × 1280/390, plus eight connected/disconnected header crops. Desktop viewport 1280×960; mobile 390×844; header crops use a 900px viewport height, device scale 1. Settings/Merge use viewport images; other main states are full-page. Fonts finish loading and animations are disabled. Token #87 deliberately has Unknown fields. Review banners are injected by tests only; they are absent from production.
+
+Header controls are 36px with 8px gaps and 18px theme/refresh/settings glyphs. Geometry and visibility are asserted, including 900/1024px desktop, hash routes and mobile overflow. The old Overview/Wallet gallery was replaced by Network/Squeeks.
 
 | View | Light · 1280px | Dark · 1280px | Light · 390px | Dark · 390px |
 |---|---|---|---|---|
-| Overview | [PNG](overview-light-1280.png) | [PNG](overview-dark-1280.png) | [PNG](overview-light-390.png) | [PNG](overview-dark-390.png) |
-| Wallet / My Squeeks | [PNG](wallet-light-1280.png) | [PNG](wallet-dark-1280.png) | [PNG](wallet-light-390.png) | [PNG](wallet-dark-390.png) |
+| Squeeks | [PNG](squeeks-light-1280.png) | [PNG](squeeks-dark-1280.png) | [PNG](squeeks-light-390.png) | [PNG](squeeks-dark-390.png) |
+| Network | [PNG](network-light-1280.png) | [PNG](network-dark-1280.png) | [PNG](network-light-390.png) | [PNG](network-dark-390.png) |
+| Info | [PNG](info-light-1280.png) | [PNG](info-dark-1280.png) | [PNG](info-light-390.png) | [PNG](info-dark-390.png) |
+| Settings sheet | [PNG](settings-light-1280.png) | [PNG](settings-dark-1280.png) | [PNG](settings-light-390.png) | [PNG](settings-dark-390.png) |
 | Merge · typed BURN-42 | [PNG](merge-light-1280.png) | [PNG](merge-dark-1280.png) | [PNG](merge-light-390.png) | [PNG](merge-dark-390.png) |
+| Mainnet · not deployed | [PNG](mainnet-light-1280.png) | [PNG](mainnet-dark-1280.png) | [PNG](mainnet-light-390.png) | [PNG](mainnet-dark-390.png) |
 | Header · disconnected | [PNG](header-disconnected-light-1280.png) | [PNG](header-disconnected-dark-1280.png) | [PNG](header-disconnected-light-390.png) | [PNG](header-disconnected-dark-390.png) |
 | Header · connected | [PNG](header-connected-light-1280.png) | [PNG](header-connected-dark-1280.png) | [PNG](header-connected-light-390.png) | [PNG](header-connected-dark-390.png) |
-| Mainnet · not deployed | [PNG](mainnet-light-1280.png) | [PNG](mainnet-dark-1280.png) | [PNG](mainnet-light-390.png) | [PNG](mainnet-dark-390.png) |
 
-To explicitly regenerate tracked images on a supported local Chromium installation:
+Explicit regeneration:
 
 ```sh
 UPDATE_SCREENSHOTS=1 npm run test:browser
 ```
 
-Ordinary `npm run test:browser` exercises/captures the same states under `test-results/`, **without overwriting these tracked review files**. The images are review evidence, not cross-platform pixel-diff baselines. Additional offline tests cover theme/contrast, cancellation/profile races, Activity persistence, RPC fallback, the shared TokenCard keyboard interaction and isolated artwork image, and typed burn guards. Phase 0 live qualification passed separately on dd0afff in run 41618128325; these images remain mocked. PR #2 is merged; user manual browser review and an opted-in `run-live` rerun for the new header follow-up head remain required before its merge; no sandbox `test:live` is part of this capture process.
+Ordinary browser tests save captures in ignored `test-results/` without changing these files. Images are review evidence, not cross-platform pixel-diff baselines. The 48-test mocked Chromium suite also covers profile/receipt races, Unknown vs zero, focus and contrast, routing/history, sheet/system theme, wallet menu/Activity, RPC diagnostic/save/remove and browser IndexedDB clear. No `test:live` was run. Historical Phase 0 qualification does not qualify this new head.

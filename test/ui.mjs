@@ -37,10 +37,10 @@ $('btn-theme').click(); assert.equal(win.localStorage.getItem('squeekchain:theme
 assert.equal($('net-round').textContent, '1000');
 assert.equal($('settlement-notice').classList.contains('hidden'), true, 'v9 must not show the v6 settlement notice');
 assert.equal($('btn-checkpoint').disabled, true);
-assert.equal($('capability-grid').children.length, 4);
+assert.equal($('capability-grid').children.length, 6);
 assert.match($('wheel-rpm').textContent, /12.5/);
-win.document.querySelector('[data-go="holdings"]').click();
-assert.equal(win.document.querySelector('[data-panel="holdings"]').classList.contains('hidden'), false);
+win.document.querySelector('[data-testid="tab-squeeks"]').click();
+assert.equal(win.document.querySelector('[data-panel="squeeks"]').classList.contains('hidden'), false);
 await api.connect();
 assert.equal($('squeeks-tbody').children.length, 1);
 assert.equal($('btn-claim').disabled, true);

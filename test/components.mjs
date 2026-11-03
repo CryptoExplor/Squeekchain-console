@@ -8,7 +8,7 @@ const html = fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf
 const dom = new JSDOM(html, { url: 'https://console.test/' });
 const { window: win } = dom, doc = win.document, $ = id => doc.getElementById(id);
 try {
-  const referral = doc.querySelector('.hero-actions a');
+  const referral = doc.querySelector('#info-about a');
   assert.equal(referral.href, 'https://squeekchain.com/genesis/i/kbxh52st');
   assert.equal(referral.textContent, 'Discover Genesis ↗');
   assert.equal(referral.target, '_blank');

@@ -571,3 +571,49 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
   .topbar .wallet-controls:has(#btn-refresh.hidden) { grid-template-columns: minmax(0, 1fr) 36px; }
   .topbar #wallet-chip { overflow-wrap: anywhere; }
 }
+
+/* Phase 3: holder-first shell; presentation only, no action authority. */
+.topbar #btn-settings { width: 36px; min-width: 36px; height: 36px; padding: 0; }
+.topbar #profile-status { cursor: pointer; font-family: var(--sqk-font-data); }
+.topbar #btn-connect { white-space: normal; }
+.tabs { margin-top: 0; }
+.tabs .tab { min-height: 44px; }
+.info-links { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 0 0 24px; }
+.info-section { scroll-margin-top: 110px; }
+.info-section h2 { margin-bottom: 16px; }
+.info-section p { line-height: 1.75; }
+.info-section a, #contracts-list { overflow-wrap: anywhere; }
+#info-developers { margin-bottom: 24px; }
+#contracts-list { padding-left: 20px; line-height: 2; }
+.trust-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.trust-grid dt { font: 11px var(--sqk-font-data); color: var(--sqk-gray-lit); }
+.trust-grid dd { margin: 8px 0; overflow-wrap: anywhere; font-size: 13px; }
+.status-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.status-list .capability { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.status-list .capability h3 { font-size: 22px; }
+#watch-row { margin-bottom: 20px; }
+.wallet-menu { position: fixed; right: 20px; top: 80px; z-index: 45; display: grid; gap: 8px; min-width: 220px; box-shadow: 0 12px 40px rgb(0 0 0 / .2); }
+.wallet-menu button { justify-content: flex-start; }
+.pending-dot { border-radius: 999px; min-width: 20px; padding: 2px 5px; background: var(--sqk-gold); color: #292b26; font: 11px var(--sqk-font-data); }
+.sheet-overlay { position: fixed; inset: 0; z-index: 50; background: rgb(10 10 14 / .5); display: flex; justify-content: flex-end; }
+.sheet { width: min(520px, 100%); height: 100%; overflow-y: auto; overscroll-behavior: contain; background: var(--sqk-panel); border-left: 1px solid var(--sqk-line); padding: 24px; box-shadow: -12px 0 40px rgb(0 0 0 / .15); }
+.sheet label { display: block; font-size: 13px; margin: 12px 0; }
+.sheet input, .sheet select { width: 100%; margin-bottom: 12px; }
+.sheet .row { flex-wrap: wrap; }
+.settings-section { padding: 24px 0; border-bottom: 1px solid var(--sqk-line); }
+.settings-section > button { margin: 8px 0; }
+#activity-panel { padding: 0; border: 0; }
+#activity-panel .panel-head { display: block; }
+#activity-panel .panel-head h2 { display: none; }
+#activity-panel .panel-head button { margin-bottom: 12px; }
+@media (max-width: 760px) {
+  .topbar .wallet-controls { grid-template-columns: minmax(0, 1fr) repeat(3, 36px); }
+  .topbar .wallet-controls:has(#btn-refresh.hidden) { grid-template-columns: minmax(0, 1fr) repeat(2, 36px); }
+  .topbar .header-badges { grid-template-columns: auto auto minmax(0, 1fr); }
+  .wallet-menu { top: 185px; right: 16px; max-width: calc(100vw - 32px); }
+  .trust-grid, .status-list { grid-template-columns: 1fr; }
+  .info-section { scroll-margin-top: 16px; }
+  .sheet { padding: 20px 16px; }
+  .info-section .table-wrap { max-width: 100%; }
+  .info-section table { min-width: 0; }
+}

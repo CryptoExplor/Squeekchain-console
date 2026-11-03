@@ -2,11 +2,11 @@
 
 A static, browser-first Squeekchain holder console. The app is branded **Wheelhouse**; the GitHub repository remains **CryptoExplor/Squeekchain-console**.
 
-**Header-polish follow-up ready for draft review — Phase 1 merged in [PR #2](https://github.com/CryptoExplor/Squeekchain-console/pull/2).** Phase 0 remains complete from [live run 41618128325](https://github.com/CryptoExplor/Squeekchain-console/actions/runs/41618128325) on `dd0afff`. The new header head is not live-qualified. Offline tests and browser layout/race tests are not proof of public RPC availability, current contract identities, or transaction success. See [status and validation](docs/STATUS.md).
+**Phase 3 structure ready for draft review.** [PR #3](https://github.com/CryptoExplor/Squeekchain-console/pull/3) now includes the holder-first shell, with the user's approval to extend the current draft rather than create a separate branch. Phase 1 merged in PR #2; Phase 0 remains complete from its historical qualified source. This head has not run `test:live`. Offline tests are not live qualification. See [status and validation](docs/STATUS.md).
 
 The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
 
-[Review the 24 mocked screenshots](docs/screenshots/README.md): Overview, Wallet, Merge dialog and not-deployed Mainnet, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **147,354 bytes gzipped**, below the build-enforced 200,000-byte budget ([breakdown](docs/audit/phase1-js-size.json)).
+[Review the 32 mocked screenshots](docs/screenshots/README.md): Squeeks, Network, Info, Settings, Merge dialog and not-deployed Mainnet, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **150,497 bytes gzipped**, below the build-enforced 200,000-byte budget ([breakdown](docs/audit/phase1-js-size.json)).
 
 ## Deployments and safety
 
@@ -38,7 +38,7 @@ npm run web                    # build + local static file server, port 5173
 npm run rpc:probe              # endpoint capability table; diagnostic, not live qualification
 npm test                       # deterministic offline regressions, safety, RPC budget, discovery and Activity
 npx playwright install --with-deps chromium
-npm run test:browser            # real Chromium, injected/offline data: components, profile races, persistence, and the 24 mocked screenshot states
+npm run test:browser            # real Chromium, injected/offline data: components, profile races, persistence, and the 32 mocked screenshot states
 npm run test:live               # real Chromium + public Sepolia RPCs; no RPC mocks or signatures
 ```
 
@@ -59,7 +59,7 @@ It uses read-only repository permissions and no configured secrets, wallet, keep
 
 Dispatch from the Actions tab still requires the workflow on the default branch; the label trigger avoids that bootstrap requirement. I.e. no merge of this WIP PR is needed to run the label gate. Adding subsequent commits does not rerun live RPC tests automatically: remove and re-add `run-live` to qualify a newer head.
 
-**Phase 0 is complete**, supported by the offline audit and [successful live run 41618128325 on dd0afff](docs/audit/live-qualification-run-41618128325.json). The header-polish head needs its own user-triggered live pass. Before merge, the opted-in live job must pass for the intended final source SHA. A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
+**Phase 0 is complete**, supported by the offline audit and [successful live run 41618128325 on dd0afff](docs/audit/live-qualification-run-41618128325.json). The Phase 3 structure head needs its own user-triggered live pass. Before merge, the opted-in live job must pass for the intended final source SHA. A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
 
 ### Live failure diagnostics
 
@@ -81,7 +81,11 @@ The v6 Chain pulse panel shows the **live settlement frontier**, not a hardcoded
 
 Switching profiles always wins: reads abort, generation IDs invalidate late results, profile/wallet/position/claim/merge/receipt-view state clears before new reads, and only signing has a busy lock. A wallet request or transaction already sent cannot be cancelled by navigation. Broadcast hashes are saved immediately in localStorage and shown under **Activity across all profiles**, including Mainnet; receipts are monitored while the tab is open and rechecked after reload. No transaction is automatically resubmitted. Closing the tab stops monitoring until it is opened again.
 
-## Static Cloudflare Pages deployment
+## Static deployment (Vercel)
+
+The current deployment target is Vercel: build with `npm run build` and publish `dist/`. No backend or RPC proxy. Phase 7 CSP/Lighthouse work is not included here. Cloudflare alerts, cron, push, Telegram and OG extras remain deferred; alerts stay in-tab.
+
+### Legacy Cloudflare Pages configuration (optional, not the current target)
 
 Use a **Pages** Git integration, not Workers Builds:
 
@@ -93,6 +97,15 @@ Use a **Pages** Git integration, not Workers Builds:
 | Build variables | None required |
 
 Pages publishes `dist/` automatically. `dist/` is generated, ignored and **not committed**; the build checks source/output parity. There is no Worker entry point. `npx wrangler deploy` is the wrong deployment command for the existing Pages configuration. For manual deployment to an existing Pages project use `npx wrangler pages deploy dist --project-name=YOUR_ACTUAL_PAGES_PROJECT_NAME` with appropriate account permissions. Do not confuse the token name with the project name.
+
+## Holder-first navigation
+
+- **Squeeks · Art · Network · Info**, with URL hashes (`#squeeks`, `#info/trust`, etc.). New sessions default to Network; connecting a wallet or viewing an address selects Squeeks. Explicit hashes survive reload and browser history. Legacy `selectTab('holdings'|'overview'|'agent')` API calls remain display-only aliases.
+- Profile status opens **Info › Trust**. The wallet menu has copy address, Activity with a pending count, and disconnect. Saved Activity remains reachable without reconnecting, including on Mainnet, where the menu cannot connect or submit.
+- **Settings**: browser-local custom HTTPS RPC save/test/remove, IndexedDB log-cache clear, confirmed Activity clear, and light/dark/system theme. RPC tests show chainId/block but do not establish two-peer trust.
+- **Info**: How it works, Trust, Status, Contracts, Developers (existing console, tools.json and local MCP snippet), About. Trust lists configured RPC peers honestly; the SDK does not expose which endpoint served each individual read.
+- Existing claim/merge inputs and BURN/simulation/signing behavior are unchanged. Selection actions, merge planner and per-Squeek pages are Phase 4, not implemented here. Staking stays **Coming when documented**.
+- The Genesis referral link now lives in Info › About, unchanged. Hero, introductory/section eyebrows, network strip and action/capability cards on Squeeks are removed.
 
 ## Unsigned CLI and MCP
 

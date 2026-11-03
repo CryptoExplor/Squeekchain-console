@@ -73,5 +73,5 @@ export function createActivity({ storage, receiptReader, onChange = () => {}, no
     }
     throw new Error('Receipt outcome unclear. Saved in Activity; check your wallet before retrying.');
   }
-  return { list, record, refresh, wait, destroy: () => controller.abort() };
+  return { list, record, refresh, wait, clear: () => { items = []; save(); }, destroy: () => controller.abort() };
 }

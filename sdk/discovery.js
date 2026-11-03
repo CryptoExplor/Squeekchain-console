@@ -33,7 +33,14 @@ export function createDiscoveryStore(indexedDB = globalThis.indexedDB) {
       });
     } catch { return mode === 'readonly' ? memory.get(key) : memory.set(key, value); }
   }
-  return { get: key => access('readonly', key), set: (key, value) => { memory.set(key, value); return access('readwrite', key, value); } };
+  return { clear: async () => {
+    memory.clear();
+    const database = await db();
+    if (database) await new Promise((resolve, reject) => {
+      const tx = database.transaction('discovery', 'readwrite'); tx.objectStore('discovery').clear();
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+    });
+  }, get: key => access('readonly', key), set: (key, value) => { memory.set(key, value); return access('readwrite', key, value); } };
 }
 const defaultStore = createDiscoveryStore();
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;

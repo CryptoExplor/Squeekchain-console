@@ -31,6 +31,9 @@ const failure = createActivity({ storage: { get: () => null, set() { throw new E
 failure.record(hash, 'merge(keep 1, burn 2)');
 assert.equal((await failure.wait(hash)).status, 'reverted');
 assert.throws(() => activity.record('not-a-hash', 'invalid'), /Invalid Sepolia/);
+activity.clear();
+assert.deepEqual(activity.list(), []);
+assert.equal(JSON.parse([...saved.values()][0]).length, 0);
 for (const tracker of [activity, reloaded, bad, failure]) tracker.destroy();
 assert.ok(changes.length > 1);
 console.log('PASS Activity: immediate persistent broadcast, hash dedup, mined/final/revert status, reload recheck, unavailable receipts and private-mode fallback; no submission path');

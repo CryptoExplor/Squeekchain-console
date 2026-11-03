@@ -38,3 +38,8 @@ export const CORE_CONFIGURATION = {
   initialWorkPerThousandBlocks: 10875, targetBlocksPerActiveRound: 40n,
   difficultySmoothingRounds: 30n, blockUnitsPerBlock: 1000000000n,
 };
+
+// Display-only policy from the official deployment record, re-read 2026-11-03.
+// Runtime eligibility still comes from verified same-block chain reads.
+export const SQUEEKS_POLICY = [1000, 3000, 7000, 15000, 31000, 63000, 127000, 255000, 511000, 1023000]
+  .map((weight, index) => ({ level: index + 1, weight, cooldownBlocks: index === 9 ? 0 : (index + 1) * 2 }));

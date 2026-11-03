@@ -14,6 +14,7 @@ export async function installReviewFixture(page) {
       checkpoint: { canCheckpoint: false, roundSettled: false, nextRound: '2049', reason: 'Next round is not settled; no checkpoint is available.' },
       verification, snapshot: { blockNumber: '12101024', blockHash: `0x${'ab'.repeat(32)}` },
     };
+    window.reviewNetwork = network;
     const plan = { note: 'Mocked same-level pair. You choose which ID survives. Donor burn is permanent.', pairs: [
       { survivor: '41', donor: '42', level: 1, nextLevel: 2, powerBefore: '2000', powerAfter: '2400', powerGainPercent: 20 },
     ] };
@@ -38,7 +39,7 @@ export async function installReviewFixture(page) {
         mergePreview: async () => { counters.simulations++; throw new Error('Screenshot must stop before simulation or wallet submission'); },
         art: async tokenId => ({ tokenId, name: `Mock Squeek #${tokenId}`, attributes: [], image: 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="#fff6dd"/><path d="M2 2h4v4H2z" fill="#8a6a10"/><path d="M3 3h1v1H3zM5 3h1v1H5z" fill="#292b26"/></svg>') }),
       }),
-      fetcher: async () => { throw new Error('No API in offline review'); },
+      fetcher: async (url, options) => { if (window.reviewRpcTest && url === 'https://custom-rpc.test/') return fetch(url, options); throw new Error('No API in offline review'); },
       activityReader: async () => { throw new Error('No receipt reads in offline review'); },
     });
     await window.squeek.refresh();
