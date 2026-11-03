@@ -1,14 +1,27 @@
-# Wheelhouse — equal profiles and subtract pass
+# Wheelhouse — deployed frontend restored with equal profiles
 
-**Date:** 2026-11-04 (Asia/Calcutta). **Draft PR:** [#3](https://github.com/CryptoExplor/Squeekchain-console/pull/3). **Branch:** `arena/417b8688-squeekchain-console`. Phase 3 (`b705683`) remains accepted; this extends that draft. No main push, merge or deployment. The `thewheel` workflow name is unchanged.
+**Date:** 2026-11-04 (Asia/Calcutta). **Draft PR:** [#3](https://github.com/CryptoExplor/Squeekchain-console/pull/3). **Branch:** `arena/417b8688-squeekchain-console`. Phase 3 (`b705683`) remains accepted; this extends that draft. No main push, merge or manual deployment. The `thewheel` workflow name is unchanged.
 
 ## Current scope and result
 
 The user-supplied identity export resolves the earlier identity-evidence blocker. **Sepolia v6 and Sepolia v9 are equal, selectable profiles**, with live verification or stopped states, not version-based transaction restrictions. Mainnet is **Not deployed**.
 
-The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`budgetBytes: 250_000` in `build.mjs`). This supersedes both the previous 146,800-byte acceptance limit and the older 200,000-byte build limit. Developers and Settings remain dynamically imported. All seven external JS files, including lazy modules, count toward the cap, independently gzipped—not one combined compression stream. Current total: **156,318 bytes** ([breakdown](audit/phase2-js-size.json)).
+The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`budgetBytes: 250_000` in `build.mjs`). This supersedes both the previous 146,800-byte acceptance limit and the older 200,000-byte build limit. Developers and Settings remain dynamically imported. All seven external JS files, including lazy modules, count toward the cap, independently gzipped—not one combined compression stream. Current total: **156,083 bytes** ([breakdown](audit/phase2-js-size.json)).
 
-## Delivery checklist
+## Frontend restoration on top of the completed fixes
+
+The four review fixes were completed and pushed first at **`545d4b4efd377e9544bb785a468c797cdbc97fff`**, with 15 offline scripts / 119 mocked Chromium tests green and 156,318 gzip bytes. Its Cloudflare check reports [e030c7a7.wheel-house.pages.dev](https://e030c7a7.wheel-house.pages.dev). That fixes commit remains the parent of the separate frontend-restoration commit; no Git revert was used.
+
+The latest user instruction supersedes the subtract-pass UI/copy. The frontend baseline is **`b7056836cec731a7165ba48e9d571dee9c150524`**, identical to `14fe6e5` for the four requested frontend files, deployed at [1cfe468b.wheel-house.pages.dev](https://1cfe468b.wheel-house.pages.dev). Original CSS/components/layout/labels/helpers are restored, with only functional later surfaces and truthful equal-profile wording layered in. Details and explicit exceptions are in [DESIGN](DESIGN.md).
+
+- The brand subtitle, Network at a glance, checkpoint explanation and Simulate & checkpoint/claim, Refresh merge plan, merge safety helper, gallery introduction, Activity explanation, Developers console and Settings labels return. Footer keeps its original tagline and a single non-affiliation line; the obsolete v9 restriction paragraph is removed.
+- Trust retains its original definition-list layout plus the live checklist/peer evidence. The profile badge is live-only; baseline Read-only/undocumented/no-v9-transaction restrictions are absent. Watch placeholder is exactly `0x… (view only)`.
+- Current SDK/MCP, identity batching/cache, canonical inputs, wallet + staked suggestions/counts, actions/approvals, 38-tool registry including nine browser requests, stalled rewards, Viewing/Exit, pending warning, wallet-popup permissions, fee re-quote, mixed-custody and Unknown gates remain intact. Developers/Settings stay lazy.
+- `test/frontend-baseline.mjs` validates baseline CSS/component hashes and selected DOM sections/table columns using `test/fixtures/frontend-b705683.json`. Its `git grep` gate rejects every obsolete v9 restriction pattern in `web/app.js` and `web/index.html`. No SDK files changed in the restore commit.
+- Final restore validation: **16 offline scripts, 121 mocked Chromium tests, 64 regenerated 1280/390 light/dark screenshots, 156,083 / 250,000 gzip bytes**. The first full mocked pass found one obsolete Profile-label expectation in the rapid-switch test; it now checks the baseline Kind value plus explicit final profile/selector/generation isolation. No safety assertion was removed or weakened.
+- No `test:live`, live qualification/label trigger or manual deployment. The existing Pages GitHub integration builds the requested branch preview after push; its exact-head check supplies the immutable preview URL in the PR report.
+
+## Delivery checklist (functional work retained; earlier presentation notes are historical)
 
 - [x] Exact attachment preserved as [v9-identity-2026-11-03.json](audit/v9-identity-2026-11-03.json), SHA-256 `fbedcbe2979cf650ff42b1e0f35c679b3afce08da4d13f7b21efe9361e286979`. Sepolia block **12056257**, hash `0x0c8d3619dbfd24c577c119248f472a5c4809cf342651134700b1122731642b22`; Tenderly/PublicNode export fields agree. This is an expected-value seed, **not live qualification of this head**.
 - [x] `sdk/deployments.js` seeds six-contract slot/runtime/implementation/version/layout/wiring pins. `sdk/verify-v9.js` checks them at one snapshot, plus chain identity and final two-peer hash agreement. Staking admin comes from the EIP-1967 slot: the ABI has no proxyAdmin function. Staking.launch zero is expected; NFT.launch is checked separately. Core/issuance also check ABI-reported proxy admins. Verified cache writes occur only after the final guard; later v9 operations recheck slots, mutable wiring, versions/layouts and paused state even on cache hits.
@@ -18,7 +31,7 @@ The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`bu
 - [x] v9 Wallet/Staked Squeeks, indexed deposit-event discovery, same-block depositor plus NFT custody confirmation, separate per-token/broad NFT and exact SQK approval previews. Wallet/staked position details share one multicall.
 - [x] v9 NFT/staking merges, mergesOpen reason, exact BURN acknowledgement before any construction/simulation. Claims, claimAndStake, stake, unstake and settled issuance checkpoint use the official ABI. Unstake reviews fee/net/maxFee/deadline; changed fee/outcome or expired deadline stops. Owner wallet signs; MCP/SDK return unsigned preparations. In-page request tools simulate first and ask the human wallet; no agent sees a key.
 - [x] Active-profile on-chain policy table; both address graphs and ABI/pin/staking-source provenance in Info › Contracts. Missing policy readings remain Unknown.
-- [x] Subtract pass: removed taglines, obsolete restrictions, repeated checkpoint/non-affiliation copy and art helpers; one footer line. Source icons/accessible names, age on verification badge, one Trust status line and honest Agreed/Not sampled peer list. Concise action/cache labels, empty-state connection action, conditional RPC-secret warning. Merge safety/input remain; unstake review uses a labelled fee/net definition list instead of a base-unit paragraph.
+- [x] The subtract-pass presentation was superseded by the frontend-restoration section above. Its functional additions (active policy, honest Agreed/Not sampled peers, conditional RPC-secret warning and structured unstake review) are retained on the original layout and helper copy.
 - [x] `sdk/tools.js` single registry for **29 read/prepare tools + 9 browser-only request tools** (name/description/schema/side effect); generated `web/tools.json`, local MCP, `window.squeek` and postMessage use it. Per-call profile selection and burn guard are shared. Wallet-popup tools are available only to the in-page browser surface; cross-origin postMessage requests are rejected and MCP does not advertise or handle them.
 - [x] Offline v9 action/approval/fee/custody/identity/cache tests and browser action/autopick/Unknown/fee-change/claim-change/burn tests. Existing race, Activity, focus, contrast, header and Mainnet tests retained.
 - [x] **64 regenerated mocked captures**: 32 structure/header views, 12 v9 Squeeks/Merge/Unstake views, 16 contextual stall/watch/pending views and four Fee rose views, light/dark × 1280/390. [Gallery](screenshots/README.md). Mock fixtures do not qualify live contracts.
@@ -62,9 +75,9 @@ Final validation below was repeated after the last code and fixture changes. `te
 
 ## Validation and request budgets
 
-- `npm run build`: **PASS**, **156,318 / 250,000 gzip bytes**, all seven external scripts. Settings/Developers lazy loading also asserted in the browser.
-- `npm test`: **PASS**, 15 deterministic offline scripts. No external RPC required; test-only synthetic code hashes never override production pins.
-- Mocked Chromium: **119 PASS**, last complete run **1.1 minutes**; captures regenerated with `UPDATE_SCREENSHOTS=1`. Roles/test IDs select controls; copy assertions check safety/state, not navigation selectors.
+- `npm run build`: **PASS**, **156,083 / 250,000 gzip bytes**, all seven external scripts. Settings/Developers lazy loading also asserted in the browser.
+- `npm test`: **PASS**, 16 deterministic offline scripts. No external RPC required; test-only synthetic code hashes never override production pins.
+- Mocked Chromium: **121 PASS**, last complete run **1.2 minutes**; captures regenerated with `UPDATE_SCREENSHOTS=1`. Roles/test IDs select controls; copy assertions check safety/state, not navigation selectors.
 - `git diff --check`: run before commit.
 
 | Profile | Cold network | Warm network | Wallet | Evidence |
@@ -78,4 +91,4 @@ Earlier attempts exposed obsolete alias/copy assertions, a mock Multicall3 balan
 
 ## Boundaries and deferred work
 
-No `test:live`, live RPC probe/retry, qualification workflow trigger, real wallet signing, keeper, merge or deploy. Runtime guards remain mandatory; offline tests are not live qualification. Historical Phase 0/Phase 3 evidence does not qualify this source head. Vercel remains the deployment target. Phase 4 planner/per-token redesign, background alerts and Cloudflare extras remain deferred. CLI remains the unsigned v6 helper; equal-profile agent actions are exposed by SDK/browser tools/local MCP.
+No `test:live`, live RPC probe/retry, qualification workflow trigger, real wallet signing, keeper, merge or manual deploy. The requested Cloudflare branch preview uses the existing GitHub integration. Runtime guards remain mandatory; offline tests are not live qualification. Historical Phase 0/Phase 3 evidence does not qualify this source head. No deployment-provider configuration was changed. Phase 4 planner/per-token redesign, background alerts and Cloudflare extras remain deferred. CLI remains the unsigned v6 helper; equal-profile agent actions are exposed by SDK/browser tools/local MCP.

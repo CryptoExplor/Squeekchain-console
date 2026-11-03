@@ -55,7 +55,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
     await expect(page.locator('.hero, .page-intro, .network-strip, .action-grid, .eyebrow')).toHaveCount(0);
     await expect(page.getByTestId('activity-drawer')).toBeHidden();
     await expect(page.getByTestId('capability-grid'))[view === 'info' ? 'toBeVisible' : 'toBeHidden']();
-    await expect(page.getByRole('contentinfo')).toContainText('Independent · not affiliated with Squeekchain · Sepolia testnet · not investment advice');
+    await expect(page.getByRole('contentinfo')).toContainText('Independent community console · not affiliated with Squeekchain · Sepolia only · not investment advice');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.evaluate(() => window.reviewCounters)).toEqual({ simulations: 0, sends: 0 });
     await capture(page, testInfo, `${view}-${theme}-${width}.png`, null, !['merge', 'settings'].includes(view));

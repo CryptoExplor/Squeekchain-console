@@ -56,7 +56,7 @@ test('watch mode keeps wallet identity, disables owner requests and exits to con
   await page.getByTestId('watch-input').fill((await page.evaluate(()=>squeek.state.account)).toLowerCase());await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();
   await page.getByTestId('wallet-button').click();await page.getByTestId('btn-disconnect').click();await page.getByTestId('tab-squeeks').click();
   await page.getByTestId('watch-input').fill(other);await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeVisible();
-  await page.getByTestId('btn-exit-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();await expect(page.getByTestId('holder-connect')).toBeVisible();await page.evaluate(()=>squeek.destroy());
+  await page.getByTestId('btn-exit-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();await expect(page.getByTestId('holder-empty')).toBeVisible();await expect(page.getByTestId('holder-empty')).toHaveText('Connect a wallet, or inspect an address, to see positions.');await page.evaluate(()=>squeek.destroy());
 });
 
 async function seedPending(page) {

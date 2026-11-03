@@ -131,7 +131,10 @@ test('three rapid switches: only the final generation may render', async ({ page
   await expect(page.getByTestId('net-round')).toHaveText('Unknown');
   await page.evaluate(() => { window.races.reads[2].resolve(window.races.network('300')); });
   await expect(page.getByTestId('net-round')).toHaveText('300');
-  await expect(page.getByTestId('net-kind')).toHaveText('Sepolia v9');
+  // The baseline Kind stat is shared by equal profiles; retain explicit profile/generation checks.
+  expect(await page.evaluate(() => window.squeek.state.profileKey)).toBe('sepolia-v9');
+  await expect(page.getByTestId('profile-select')).toHaveValue('sepolia-v9');
+  await expect(page.getByTestId('net-kind')).toHaveText('deployed');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
   await page.evaluate(() => window.squeek.destroy());
 });

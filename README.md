@@ -2,11 +2,11 @@
 
 A static, browser-first Squeekchain holder console. The app is branded **Wheelhouse**; the GitHub repository remains **CryptoExplor/Squeekchain-console**.
 
-**Equal-profile / subtract pass ready for draft review.** [PR #3](https://github.com/CryptoExplor/Squeekchain-console/pull/3) now includes the holder-first shell, with the user's approval to extend the current draft rather than create a separate branch. Phase 1 merged in PR #2; Phase 0 remains complete from its historical qualified source. This head has not run `test:live`. Offline tests are not live qualification. See [status and validation](docs/STATUS.md).
+**Deployed frontend restored, with equal-profile functionality.** [PR #3](https://github.com/CryptoExplor/Squeekchain-console/pull/3) restores the frontend from `b705683` / [the original Pages preview](https://1cfe468b.wheel-house.pages.dev), keeping canonical v6/v9 profiles and all later functional safety fixes, with the user's approval to extend the current draft rather than create a separate branch. Phase 1 merged in PR #2; Phase 0 remains complete from its historical qualified source. This head has not run `test:live`. Offline tests are not live qualification. See [status and validation](docs/STATUS.md).
 
 The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
 
-[Review the 64 mocked screenshots](docs/screenshots/README.md): Squeeks, Network, Info, Settings, Merge dialog and not-deployed Mainnet, v9 Unstake and Fee rose, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **156,318 bytes gzipped**, below the build-enforced 250,000-byte budget, including lazy Developers/Settings modules ([breakdown](docs/audit/phase2-js-size.json)).
+[Review the 64 mocked screenshots](docs/screenshots/README.md): Squeeks, Network, Info, Settings, Merge dialog and not-deployed Mainnet, v9 Unstake and Fee rose, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **156,083 bytes gzipped**, below the build-enforced 250,000-byte budget, including lazy Developers/Settings modules ([breakdown](docs/audit/phase2-js-size.json)).
 
 ## Deployments and safety
 

@@ -7,7 +7,7 @@ const capture=async(page,testInfo,name)=>{await page.evaluate(()=>document.fonts
 for(const theme of ['light','dark'])for(const width of [1280,390])for(const view of ['squeeks','merge','unstake'])test(`v9 mocked ${view} / ${theme} / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);
  if(theme==='dark')await page.getByTestId('btn-theme').click();await page.evaluate(()=>window.squeek.connect());
- await expect(page.getByTestId('squeeks-tbody')).toContainText('Wallet');await expect(page.getByTestId('squeeks-tbody')).toContainText('Staked');
+ await expect(page.getByTestId('squeeks-head')).toContainText('deposited');await expect(page.getByTestId('squeeks-tbody').locator('tr').nth(0)).toContainText('yes');await expect(page.getByTestId('squeeks-tbody').locator('tr').nth(2)).toContainText('no');
  if(view==='merge'){await page.getByTestId('merge-list').getByRole('button').click();await page.getByTestId('modal-input').fill('BURN-42');await expect(page.getByTestId('btn-modal-confirm')).toBeEnabled();expect(await page.evaluate(()=>v9.previews.length)).toBe(0);}
  if(view==='unstake'){await page.getByTestId('v9-action').selectOption('unstake');await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeVisible();await expect(page.getByTestId('confirm-details')).toContainText('0.01 SQK');await expect(page.getByTestId('confirm-details')).toContainText('0.99 SQK');}
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(await page.evaluate(()=>v9.sends)).toBe(0);
@@ -32,7 +32,7 @@ test('v9 explicit approval scope, deposit failure never signs; fee increase and 
  await page.getByTestId('btn-claim').click();await expect(page.getByTestId('modal')).toBeVisible();await page.evaluate(()=>{v9.claimAmount='1';});await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('banner')).toContainText('Claim outcome changed');expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
 test('v9 staked merge BURN guard and SQK-only account claim',async({page})=>{
- await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.getByTestId('v9-action').selectOption('mergeDeposited');await page.getByTestId('v9-survivor').fill('41');await page.getByTestId('v9-donor').fill('42');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal-input')).toHaveAccessibleName('Type BURN-42 to confirm');await page.getByTestId('modal-input').fill('42');await expect(page.getByTestId('btn-modal-confirm')).toBeDisabled();expect(await page.evaluate(()=>v9.previews.length)).toBe(0);await page.getByTestId('modal-input').fill('BURN-42');await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('modal')).toBeVisible();expect(await page.evaluate(()=>v9.previews[0].input.confirm)).toBe('BURN-42');await page.getByTestId('btn-modal-cancel').click();
+ await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.getByTestId('v9-action').selectOption('mergeDeposited');await page.getByTestId('v9-survivor').fill('41');await page.getByTestId('v9-donor').fill('42');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal-input')).toHaveAccessibleName('Type BURN-42 to acknowledge permanent burn');await page.getByTestId('modal-input').fill('42');await expect(page.getByTestId('btn-modal-confirm')).toBeDisabled();expect(await page.evaluate(()=>v9.previews.length)).toBe(0);await page.getByTestId('modal-input').fill('BURN-42');await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('modal')).toBeVisible();expect(await page.evaluate(()=>v9.previews[0].input.confirm)).toBe('BURN-42');await page.getByTestId('btn-modal-cancel').click();
  await page.evaluate(async()=>{v9.wallet.totals.count=0;v9.wallet.totals.deposited=0;v9.wallet.squeeks=[];await squeek.refresh();});await expect(page.getByTestId('btn-claim')).toBeEnabled();await page.getByTestId('btn-claim').click();await expect(page.getByTestId('modal')).toBeVisible();expect(await page.evaluate(()=>v9.previews.at(-1).action)).toBe('claim');await page.evaluate(()=>squeek.destroy());
 });
 for(const [a,b,expected]of [['2','0','sepolia-v6'],['0','2','sepolia-v9'],['2','3','sepolia-v9'],['0','0','sepolia-v9'],[null,'2','sepolia-v9']])test(`connect inventory ${a}/${b} chooses ${expected}`,async({page})=>{
@@ -42,16 +42,16 @@ for(const [a,b,expected]of [['2','0','sepolia-v6'],['0','2','sepolia-v9'],['2','
  expect(await page.getByTestId('profile-select').locator('option').allTextContents()).toEqual(['Sepolia v9','Sepolia v6','Mainnet']);
  await page.evaluate(()=>squeek.destroy());
 });
-test('subtract pass: active policy, one footer, source icons, conditional warning/pause and lazy modules',async({page})=>{
+test('restored frontend: active policy, one footer, baseline copy, conditional warning/pause and lazy modules',async({page})=>{
  const loaded=[];page.on('request',r=>loaded.push(new URL(r.url()).pathname));await installV9Fixture(page);
  expect(loaded).not.toContain('/settings.js');expect(loaded).not.toContain('/developers.js');
  await page.getByTestId('tab-info').click();await expect(page.getByTestId('policy-levels')).toContainText('2200');await expect(page.getByTestId('policy-levels').locator('tr')).toHaveCount(1);
- await expect(page.getByTestId('core-pause-note')).toBeHidden();await page.evaluate(async()=>{v9.net.core.paused=true;await squeek.refresh();});await expect(page.getByTestId('core-pause-note')).toBeVisible();await expect(page.getByTestId('trust-summary')).toContainText('Verified · block 12101024');await expect(page.getByTestId('trust-rpcs')).toContainText('Agreed');
+ await expect(page.getByTestId('core-pause-note')).toBeHidden();await page.evaluate(async()=>{v9.net.core.paused=true;await squeek.refresh();});await expect(page.getByTestId('core-pause-note')).toBeVisible();await expect(page.getByTestId('trust-summary')).toContainText('Current snapshot block');await expect(page.getByTestId('trust-block')).toHaveText('12101024');await expect(page.getByTestId('trust-result')).toHaveText('Verified');await expect(page.getByTestId('trust-rpcs')).toContainText('Agreed');
  await expect(page.getByTestId('developer-surfaces').locator('tbody tr')).toHaveCount(3);
  await page.getByTestId('settings-open').click();await expect(page.getByTestId('settings-sheet')).toBeVisible();expect(loaded).toContain('/settings.js');await page.getByTestId('rpc-url').fill('https://rpc.example/');await expect(page.getByTestId('rpc-secret-warning')).toBeHidden();await page.getByTestId('rpc-url').fill('https://rpc.example/?apiKey=private');await expect(page.getByTestId('rpc-secret-warning')).toBeVisible();await page.keyboard.press('Escape');
  await page.getByTestId('info-link-developers').click();await page.getByTestId('btn-copy-manifest').click();expect(loaded).toContain('/developers.js');
- const body=await page.locator('body').textContent();expect(body.match(/not affiliated with Squeekchain/g)).toHaveLength(1);expect(body).not.toMatch(/Powered by a hamster|Build with Squeekchain|Network at a glance|undocumented|no v9 transactions|read-only and unverified/);
- await page.getByTestId('tab-network').click();await expect(page.getByTestId('source-api')).toHaveAccessibleName('API · device readings, not settled work');await expect(page.getByTestId('source-chain')).toHaveAccessibleName('Chain · same-block verified RPC reads');await page.evaluate(()=>squeek.destroy());
+ const body=await page.locator('body').textContent();expect(body.match(/not affiliated with Squeekchain/g)).toHaveLength(1);expect(body).toMatch(/Powered by a hamster/);expect(body).toMatch(/Build with Squeekchain/);expect(body).toMatch(/Network at a glance/);expect(body).not.toMatch(/undocumented|no v9 transactions|read-only and unverified|all transactions disabled/);
+ await page.getByTestId('tab-network').click();await expect(page.locator('.telemetry-source')).toHaveText('OFFICIAL API · DISPLAY ONLY');await expect(page.getByTestId('panel-network')).toContainText('ONCHAIN READS · AUTO-REFRESH 45s');await page.evaluate(()=>squeek.destroy());
 });
 
 for(const [name,v6,v9,expected] of [
@@ -94,4 +94,18 @@ for(const theme of ['light','dark'])for(const width of [1280,390])test(`Fee rose
  await page.getByTestId('v9-action').selectOption('unstake');await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeVisible();await page.evaluate(()=>{v9.fee='20000000000000000';});await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('fee-rose')).toBeVisible();
  await expect(page.getByRole('button',{name:'Re-quote',exact:true})).toHaveCount(1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await capture(page,info,`fee-rose-${theme}-${width}.png`);await page.evaluate(()=>squeek.destroy());
+});
+
+for(const width of [1280,390])test(`b705683 layout and live-only badges / ${width}`,async({page})=>{
+ await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);
+ await expect(page.locator('.brand .label')).toHaveText('Independent Squeekchain console');
+ await expect(page.getByTestId('panel-network').locator('.section-heading h2')).toHaveText('Network at a glance.');
+ await expect(page.getByTestId('btn-checkpoint')).toHaveText('Simulate & checkpoint');await expect(page.getByTestId('cp-explain')).toContainText('Turns settled rounds into issued SQK.');
+ await expect(page.locator('.footer-top')).toContainText('Powered by a hamster. Built for the holders.');
+ await page.evaluate(()=>squeek.connect());await expect(page.getByTestId('profile-status')).toHaveText('Verified');
+ await expect(page.getByTestId('btn-claim')).toHaveText('Simulate & claim');await expect(page.getByTestId('btn-plan')).toHaveText('Refresh merge plan');
+ await expect(page.getByTestId('claim-ids')).toBeHidden();await expect(page.getByTestId('v9-actions')).toBeVisible();
+ await page.evaluate(async()=>{v9.net.verification.trusted=false;await squeek.refresh();});await expect(page.getByTestId('profile-status')).toHaveText('Mismatch: stop');
+ await page.getByTestId('profile-select').selectOption('mainnet');await expect(page.getByTestId('profile-status')).toHaveText('Not deployed');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.evaluate(()=>squeek.destroy());
 });

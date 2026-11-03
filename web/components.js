@@ -143,9 +143,7 @@ export function ConfirmDialog({ doc, win, elements }) {
       elements.input.value = "";
       elements.input.classList.toggle("hidden", !requireText);
       elements.input.placeholder = requireText ? `type ${requireText}` : "";
-      const inputLabel=requireText?`Type ${requireText} to confirm`:"Confirmation";
-      elements.input.setAttribute("aria-label",inputLabel);
-      elements.root.querySelector('[for="modal-input"]').textContent=inputLabel;
+      elements.input.setAttribute("aria-label", requireText ? `Type ${requireText} to acknowledge permanent burn` : "Confirmation");
       elements.confirm.textContent = confirmLabel;
       elements.confirm.disabled = Boolean(requireText);
       const close = openModal({

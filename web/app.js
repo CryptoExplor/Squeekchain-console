@@ -60,7 +60,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       notice: $("profile-notice"),
       settlement: $("settlement-notice"),
     },
-    cp: { button: $("btn-checkpoint"), reason: $("cp-reason"), out: $("cp-result") },
+    cp: { button: $("btn-checkpoint"), reason: $("cp-reason"), out: $("cp-result"), explain: $("cp-explain") },
     holder: {
       owner: $("holder-owner"),
       body: $("holder-body"),
@@ -330,17 +330,18 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.cp.button.disabled = true;
     el.cp.reason.textContent = profile.addresses ? "Waiting for verified chain state." : "Unavailable until a mainnet deployment is published and verified.";
     el.verified.textContent = profile.addresses ? "Checking…" : "Not deployed";
-    el.verified.className = "";
+    el.verified.className = "chip";
     $("profile-status").className = "chip";
+    $("profile-status").textContent = profile.addresses ? "Checking…" : "Not deployed";
     renderTrust(null);
     renderPolicy(null);
     renderContracts(profile);
     renderCapabilities(profile);
     el.net.chain.textContent = profile.chainId === CHAIN.id ? "Sepolia" : "Ethereum";
-    el.net.kind.textContent = profile.label;
+    el.net.kind.textContent = profile.kind;
     el.net.release.textContent = profile.identities?.release ?? (profile.addresses ? "docs-pinned v6" : "no deployment");
-    el.net.notice.textContent = "";
-    el.net.notice.className = "notice hidden";
+    el.net.notice.textContent = profile.notes ?? "";
+    el.net.notice.className = `notice ${profile.addresses ? "" : "warn"}`;
   }
 
   function renderCapabilities(profile) {
@@ -350,27 +351,23 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       const row = doc.createElement('div'); row.className = 'capability';
       const heading = doc.createElement('h3'); heading.textContent = title;
       const badge = doc.createElement('span'); badge.className = `chip ${cap && profile.capabilities[cap] ? 'ok' : 'warn'}`;
-      badge.textContent = !profile.addresses ? 'Not deployed' : cap && profile.capabilities[cap] ? 'Available' : capabilities().reasons.unavailable;
+      badge.textContent = !profile.addresses ? 'Not deployed' : cap && profile.capabilities[cap] ? 'Supported' : capabilities().reasons.unavailable;
       row.append(heading, badge); return row;
     }));
   }
 
   function renderContracts(profile) {
-    if(!profile.addresses) { $('contracts-release').textContent='Not deployed'; $('contracts-list').replaceChildren(); return; }
-    $('contracts-release').textContent=profile.addresses?profile.identities?.release??'squeeks-sepolia-core3-mining6-001':'Not deployed';
-    const sources=[['v6 · Published deployment','https://docs.squeekchain.com/assets/deployments/sepolia.json'],['v9 · Official dApp ABI','https://github.com/CryptoExplor/Squeekchain-console/blob/arena/417b8688-squeekchain-console/sdk/abi-v9.js'],['Staking · Verified source',`${EXPLORER}/address/${PROFILES['sepolia-v9'].addresses.staking}?tab=contract`],['Identity pins · 2026-11-03','https://github.com/CryptoExplor/Squeekchain-console/blob/arena/417b8688-squeekchain-console/docs/audit/v9-identity-2026-11-03.json']];
-    const link=(label,url)=>{const node=doc.createElement('a');node.textContent=label;node.href=url;node.target='_blank';node.rel='noopener noreferrer';return node;};
-    $('contracts-list').replaceChildren(...sources.map(([label,url])=>{const row=doc.createElement('li');row.append(link(label,url));return row;}),...Object.values(PROFILES).filter(p=>p.addresses).map(candidate=>{
-      const row=doc.createElement('li'),details=doc.createElement('details'),summary=doc.createElement('summary'),list=doc.createElement('ul');summary.textContent=candidate.label;details.open=candidate.key===state.profileKey;
-      const seen=new Set();for(const[name,address]of Object.entries(candidate.addresses)) {if(seen.has(address.toLowerCase()))continue;seen.add(address.toLowerCase());const item=doc.createElement('li');item.append(link(`${name}: ${address}`,`${EXPLORER}/address/${address}`));list.append(item);}details.append(summary,list);row.append(details);return row;
+    $('contracts-release').textContent = profile.identities?.release ?? (profile.addresses ? 'squeeks-sepolia-core3-mining6-001' : 'Not deployed');
+    $('contracts-list').replaceChildren(...Object.entries(profile.addresses ?? {}).map(([name, address]) => {
+      const row = doc.createElement('li'), link = doc.createElement('a');
+      link.textContent = `${name}: ${address}`; link.href = `${EXPLORER}/address/${address}`;
+      link.target = '_blank'; link.rel = 'noopener noreferrer'; row.append(link); return row;
     }));
   }
 
   let lastVerificationTime = null;
   function updateTrustAge() {
-    const age=lastVerificationTime == null ? null : Math.max(0,Math.floor((Date.now()-lastVerificationTime)/1000));
-    $('trust-time').textContent=age==null?UNKNOWN:`${age} s ago`;
-    $('verification-age').textContent=age==null?'':` · ${age}s`;
+    $('trust-time').textContent=lastVerificationTime==null?UNKNOWN:new Date(lastVerificationTime).toISOString();
   }
   function renderTrust(v) {
     lastVerificationTime=v?Date.now():null;
@@ -407,7 +404,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     try {
       const view = telemetryView(await viewAwait(load, () => telemetry.read({ signal: load.signal })));
       if (!isCurrent(load)) return;
-      $("wheel-state").textContent = `${view.state}${view.age==null?"":` · ${view.age}s`}`;
+      $("wheel-state").textContent = view.state;
       $("wheel-rpm").textContent = view.rpm;
       $("wheel-speed").textContent = view.speed;
       $("wheel-distance").textContent = view.distance;
@@ -581,6 +578,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         : checkpoint.reason ?? UNKNOWN
       : caps.reasons.unavailable;
     renderPolicy(net.policy);
+    el.cp.explain.textContent = "Turns settled rounds into issued SQK. Holders cannot claim until someone checkpoints, so this is the job a wallet without Squeeks can do.";
   }
 
   function renderWalletChipStats(status) {
@@ -594,8 +592,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       ? [
           { key: "tokenId", label: "token" },
           { key: "level", label: "level" },
-          { key: 'cooldown', label: 'Cooldown (blocks)', num:true },
-          { key: "custody", label: "custody" },
+          { key: "nextMergeHeight", label: "next merge" , num: true },
+          { key: "deposited", label: "deposited" },
           { key: "art", label: "art" },
         ]
       : [
@@ -603,7 +601,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
           { key: "level", label: "level" },
           { key: "activeWeight", label: "power", num: true },
           { key: "pendingRound", label: "pending" },
-          {key:'cooldown',label:'Cooldown (blocks)',num:true},
+          { key: "nextMergeBlock", label: "merge @", num: true },
           { key: "claimable", label: "claimable SQK", num: true },
           { key: "art", label: "art" },
         ];
@@ -648,7 +646,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
           ? totals.estimatedSqkPerDay
             ? `≈${num(totals.estimatedSqkPerDay)} SQK/day at current share`
             : ""
-          : "Connect owner wallet";
+          : "view only: connect this wallet to claim or merge";
     el.holder.claim.disabled = state.busy || num(totals.count) === UNKNOWN || (!has && !isV9) || !signerOwns || !caps.claim;
     $("btn-custom-merge").disabled = state.busy || !has || !signerOwns || !caps.merge;
     $("claim-ids").disabled = !caps.claim || isV9;
@@ -658,7 +656,6 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
 
     Table({ head: el.holder.head, body: el.holder.tbody, columns: columnsForProfile(), rows: status.squeeks ?? [], cell: (s, c) => {
-      if(c.key==='cooldown') {const until=s.nextMergeHeight??s.nextMergeBlock, height=status.net?.core?.blockHeight??state.net?.core?.blockHeight;return until==null||height==null?UNKNOWN:String(BigInt(until)>BigInt(height)?BigInt(until)-BigInt(height):0n);}
       if (c.key === 'claimable') return s.claimable ? num(s.claimable.sqk, 4) : UNKNOWN;
       if (c.key === 'deposited') return s.deposited == null ? UNKNOWN : s.deposited ? 'yes' : 'no';
       if (c.key === 'pendingRound') return s.pendingRound == null ? UNKNOWN : String(s.pendingRound) === '0' ? 'None' : `r${s.pendingRound}`;
@@ -679,7 +676,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for (const pair of plan?.pairs ?? []) {
       const li = doc.createElement("li");
       const text = doc.createElement("span");
-      text.textContent = `Keep #${pair.survivor} · burn #${pair.donor} · L${pair.level}→L${pair.nextLevel}${pair.deposited?" · Staked":""}${pair.powerBefore==null?"":` · power ${pair.powerBefore}→${pair.powerAfter}`}`;
+      text.textContent = `keep #${pair.survivor} · burn #${pair.donor} · L${pair.level}→L${pair.nextLevel}${pair.deposited?" · Staked":""}${pair.powerBefore==null?"":` · power ${pair.powerBefore}→${pair.powerAfter} (+${pair.powerGainPercent}%)`}`;
       if (signerOwns && caps.merge) {
         const button = doc.createElement("button");
         button.className = "btn btn-danger";
@@ -700,7 +697,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderVerification(v) {
       renderTrust(v);
       el.verified.textContent = v.ok && v.trusted ? "Verified" : "Stopped";
-      el.verified.className = ""; $("profile-status").className = `chip ${v.ok && v.trusted ? "ok" : "bad"}`;
+      el.verified.className = `chip ${v.ok && v.trusted ? "ok" : "bad"}`; $("profile-status").className = el.verified.className;
+      $("profile-status").textContent = v.ok && v.trusted ? "Verified" : "Mismatch: stop";
       el.verified.title = v.ok && v.trusted ? `Pinned identities fully verified at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; proxy slots checked at ${v.blockNumber ?? "unknown"}. Two public RPC block hashes agree for this snapshot.` : (v.problems ?? []).join("; ");
   }
 
@@ -720,7 +718,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       state.net = null;
       renderNetworkPlaceholder();
       el.verified.textContent = "Stopped";
-      el.verified.className = ""; $("profile-status").className = "chip bad";
+      el.verified.className = "chip bad"; $("profile-status").className = "chip bad";
+      $("profile-status").textContent = "Mismatch: stop";
       renderTrust({ok:false,trusted:false});
       $('trust-result').textContent='Stopped';
       showBanner(`Read failed: ${errorMessage(err)}. Nothing was signed.`, "bad");
@@ -816,7 +815,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     const confirmed = await confirmModal({
       title: "Claim SQK",
-      body: `Claim ${preview.total.sqk} SQK · ${preview.batches.length} transaction(s)${preview.recipient?` · Recipient ${preview.recipient}`:""}.`,
+      body: `Claim ${preview.total.sqk} SQK across ${preview.batches.length} transaction(s)? Simulated successfully; your wallet asks next.${preview.recipient?` Recipient: ${preview.recipient}.`:""}`,
       confirmLabel: "Sign claim",
     });
     if (!confirmed) return { ok: false, reason: "cancelled" };
@@ -839,7 +838,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const confirm = `BURN-${BigInt(pair.donor)}`;
     const confirmed = await confirmModal({
       title: `Keep #${pair.survivor} · burn #${pair.donor}`,
-      body: "Merging burns the donor NFT permanently and raises the survivor one level.",
+      body: `#${pair.donor} is BURNED permanently and cannot be restored. #${pair.survivor} survives. Type ${confirm} before we build or simulate this call. You will review the simulation before your wallet opens.`,
       requireText: confirm,
       confirmLabel: "Acknowledge burn & simulate",
     });
@@ -1090,7 +1089,6 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     sheet.querySelector('[data-close-sheet]').onclick = closeSheet;
     sheet.onclick = event => { if (event.target === sheet) closeSheet(); };
   }
-  $('holder-connect').onclick = () => viewTask(connect);
   $('btn-settings').onclick = showSettings;
   doc.querySelectorAll('[data-open-settings]').forEach(button => { button.onclick = showSettings; });
   function closeWalletMenu() { $('wallet-menu').classList.add('hidden'); el.connect.setAttribute('aria-expanded', 'false'); }
@@ -1220,7 +1218,6 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   void refreshTelemetry();
   renderActivity(activity.list());
   void activity.refresh();
-  const ageTimer=win.setInterval?.(updateTrustAge,1000);
   const activityTimer = win.setInterval?.(() => { if (!destroyed) void activity.refresh(); }, 15_000);
 
   const telemetryTimer = win.setInterval?.(() => { if (!destroyed) void refreshTelemetry({ reset: false }); }, 15_000);
@@ -1249,7 +1246,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(ageTimer); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
+    destroy: () => { dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
   };
 }
 
