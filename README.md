@@ -6,7 +6,7 @@ A static, browser-first Squeekchain holder console. The app is branded **Wheelho
 
 The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
 
-[Review the 68 mocked screenshots](docs/screenshots/README.md): Squeeks, Network, Info, Settings, Merge dialog and not-deployed Mainnet, v9 Unstake, Fee rose and full-address recipient warnings, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **157,157 bytes gzipped**, below the build-enforced 250,000-byte budget, including lazy Developers/Settings modules ([breakdown](docs/audit/phase2-js-size.json)).
+[Review the 68 mocked screenshots](docs/screenshots/README.md): Squeeks, Network, Info, Settings, Merge dialog and not-deployed Mainnet, v9 Unstake, Fee rose and full-address recipient warnings, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **157,160 bytes gzipped**, below the build-enforced 250,000-byte budget, including lazy Developers/Settings modules ([breakdown](docs/audit/phase2-js-size.json)).
 
 ## Deployments and safety
 

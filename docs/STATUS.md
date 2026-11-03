@@ -6,7 +6,11 @@
 
 The user-supplied identity export resolves the earlier identity-evidence blocker. **Sepolia v6 and Sepolia v9 are equal, selectable profiles**, with live verification or stopped states, not version-based transaction restrictions. Mainnet is **Not deployed**.
 
-The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`budgetBytes: 250_000` in `build.mjs`). This supersedes both the previous 146,800-byte acceptance limit and the older 200,000-byte build limit. Developers and Settings remain dynamically imported. All eight external JS files, including lazy modules, count toward the cap, independently gzipped—not one combined compression stream. Current total: **157,157 bytes** ([breakdown](audit/phase2-js-size.json)).
+The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`budgetBytes: 250_000` in `build.mjs`). This supersedes both the previous 146,800-byte acceptance limit and the older 200,000-byte build limit. Developers and Settings remain dynamically imported. All eight external JS files, including lazy modules, count toward the cap, independently gzipped—not one combined compression stream. Current total: **157,160 bytes** ([breakdown](audit/phase2-js-size.json)).
+
+## Header follow-up: one visible verification badge
+
+The duplicate header status is removed visually. `profile-status` is the sole visible verification badge and still opens Info → Trust; `verified-chip` remains a screen-reader-only live region so state changes are announced without rendering a second chip. Responsive header columns now accommodate the one status plus the connected wallet. Visible status retains verification details in its tooltip. Browser header checks explicitly assert one visual verification chip across connected/disconnected desktop/mobile states. All 68 synthetic screenshots regenerated; 17 offline scripts and 138 mocked Chromium tests pass (1.5m). Current gzip: **157,160 / 250,000 bytes**. No live test, signing or qualification trigger.
 
 ## Current PR #3 audit fix pack (2026-11-04)
 
@@ -20,7 +24,7 @@ All seven requested items are implemented on the same branch, with the restored 
 6. **Expired unstake quotes:** official zero-argument DeadlineExpired is decoded through simulation/wallet causes into **Quote expired**, using the same single explicit Re-quote flow as Fee rose; new review discards the old deadline/cap. Deadline display uses the user's local time zone. Raw viem decoding omits args for zero-argument errors; the decoder handles that representation without relying on error-message text.
 7. **Recipient warning:** a non-owner claim recipient is shown as a warning-styled **Recipient** row with its full address, tested in both themes at desktop/mobile sizes.
 
-**Final local validation:** 17 offline scripts PASS; 138 mocked Chromium tests PASS (1.4 minutes); 68 regenerated synthetic screenshots; **157,157 / 250,000 gzip bytes** across eight scripts. Full run logs are `.cache/fix-pack-offline-final.log` and `.cache/fix-pack-browser-final.log`. Final page-operation counts are v6 **22 / 12 / 15** (cold network / warm network / wallet), v9 **15 / 13 / 21 / 15** (cold network / warm network / initial wallet / warm wallet). The zero-power connect-only inventory is **10 cold / 8 warm**, with **zero API/log/depositor discovery requests**, measured as actual HTTP JSON-RPC envelopes. The initial focused browser attempt was interrupted on a hidden-link selector; its corrected run caught the inline theme bootstrap CSP violation. Neither partial/failed run is counted as acceptance evidence; the final full run is green.
+**Final local validation:** 17 offline scripts PASS; 138 mocked Chromium tests PASS (1.4 minutes); 68 regenerated synthetic screenshots; **157,160 / 250,000 gzip bytes** across eight scripts. Full run logs are `.cache/fix-pack-offline-final.log` and `.cache/fix-pack-browser-final.log`. Final page-operation counts are v6 **22 / 12 / 15** (cold network / warm network / wallet), v9 **15 / 13 / 21 / 15** (cold network / warm network / initial wallet / warm wallet). The zero-power connect-only inventory is **10 cold / 8 warm**, with **zero API/log/depositor discovery requests**, measured as actual HTTP JSON-RPC envelopes. The initial focused browser attempt was interrupted on a hidden-link selector; its corrected run caught the inline theme bootstrap CSP violation. Neither partial/failed run is counted as acceptance evidence; the final full run is green.
 
 **Next sequence:** fix pack → user-triggered run-live green at the exact final head → manual Cloudflare preview check → authorized merge. Phase 4 holder workspace (selection grid/action bar, merge path/custody, unified claim, per-Squeek page, watch links, Activity, Unknown-safe earnings), Phase 5 slim Network/Genesis (TBD), Phase 6 agent docs/examples, and Phase 7 Lighthouse 90+/mobile/a11y/lazy ABI-art/mock-wallet E2E remain deferred. See the updated [design sequence](DESIGN.md#updated-sequence-2026-11-04-supersedes-earlier-plan). Staking is live under the equal-profile decision. Hosting is Cloudflare Pages only; alerts are in-tab and cron/push/OG need a separately approved backend design.
 
@@ -91,7 +95,7 @@ Final validation below was repeated after the last code and fixture changes. `te
 
 ## Validation and request budgets
 
-- `npm run build`: **PASS**, **157,157 / 250,000 gzip bytes**, all eight external scripts. Settings/Developers lazy loading also asserted in the browser.
+- `npm run build`: **PASS**, **157,160 / 250,000 gzip bytes**, all eight external scripts. Settings/Developers lazy loading also asserted in the browser.
 - `npm test`: **PASS**, 17 deterministic offline scripts. No external RPC required; test-only synthetic code hashes never override production pins.
 - Mocked Chromium: **138 PASS**, last complete run **1.4 minutes**; captures regenerated with `UPDATE_SCREENSHOTS=1`. Roles/test IDs select controls; copy assertions check safety/state, not navigation selectors.
 - `git diff --check`: run before commit.

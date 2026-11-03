@@ -27,8 +27,8 @@
       <div class="toolbar">
 
         <div class="profile-control"><select aria-label="Network deployment" id="profile-select" title="Deployment" data-testid="profile-select"></select><p id="profile-pending-notice" data-testid="profile-pending-notice" class="small hidden" role="status" aria-live="polite"></p></div>
-        <div class="header-badges"><button class="chip" id="profile-status" type="button" data-testid="profile-status" aria-label="Live verification: open Info Trust">Checking…</button>
-        <span class="chip" id="verified-chip" role="status" aria-live="polite" data-testid="verified-chip">verifying…</span>
+        <div class="header-badges"><button class="chip" id="profile-status" type="button" data-testid="profile-status" aria-describedby="verified-chip" aria-label="Live verification: open Info Trust">Checking…</button>
+        <span class="sr-only" id="verified-chip" role="status" aria-live="polite" data-testid="verified-chip">verifying…</span>
         <span class="chip hidden" id="wallet-chip" data-testid="wallet-chip"></span></div>
         <div class="wallet-controls"><div class="wallet-control">
         <button class="btn btn-primary" id="btn-connect" data-testid="wallet-button" aria-haspopup="menu" aria-expanded="false">Connect wallet</button></div>

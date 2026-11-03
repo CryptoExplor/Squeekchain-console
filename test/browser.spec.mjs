@@ -18,7 +18,7 @@ test('offline browser: Wheelhouse identity, default/saved themes, mobile visibil
   await page.getByRole('button', { name: 'Toggle theme' }).click();
   for (const width of [1280, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const id of ['verified-chip', 'btn-connect', 'profile-select']) {
+    for (const id of ['profile-status', 'btn-connect', 'profile-select']) {
       await expect(page.locator(`#${id}`)).toBeVisible();
       const box = await page.locator(`#${id}`).boundingBox();
       expect(box.x).toBeGreaterThanOrEqual(0);

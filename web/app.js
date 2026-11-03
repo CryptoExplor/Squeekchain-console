@@ -331,7 +331,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.cp.button.disabled = true;
     el.cp.reason.textContent = profile.addresses ? "Waiting for verified chain state." : "Unavailable until a mainnet deployment is published and verified.";
     el.verified.textContent = profile.addresses ? "Checking…" : "Not deployed";
-    el.verified.className = "chip";
+    el.verified.className = "sr-only";
     $("profile-status").className = "chip";
     $("profile-status").textContent = profile.addresses ? "Checking…" : "Not deployed";
     renderTrust(null);
@@ -698,9 +698,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderVerification(v) {
       renderTrust(v);
       el.verified.textContent = v.ok && v.trusted ? "Verified" : "Stopped";
-      el.verified.className = `chip ${v.ok && v.trusted ? "ok" : "bad"}`; $("profile-status").className = el.verified.className;
+      el.verified.className = "sr-only"; $("profile-status").className = `chip ${v.ok && v.trusted ? "ok" : "bad"}`;
       $("profile-status").textContent = v.ok && v.trusted ? "Verified" : "Mismatch: stop";
       el.verified.title = v.ok && v.trusted ? `Pinned identities fully verified at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; proxy slots checked at ${v.blockNumber ?? "unknown"}. Two public RPC block hashes agree for this snapshot.` : (v.problems ?? []).join("; ");
+      $("profile-status").title = el.verified.title;
   }
 
   async function refreshNetwork() {
@@ -719,7 +720,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       state.net = null;
       renderNetworkPlaceholder();
       el.verified.textContent = "Stopped";
-      el.verified.className = "chip bad"; $("profile-status").className = "chip bad";
+      el.verified.className = "sr-only"; $("profile-status").className = "chip bad";
       $("profile-status").textContent = "Mismatch: stop";
       renderTrust({ok:false,trusted:false});
       $('trust-result').textContent='Stopped';

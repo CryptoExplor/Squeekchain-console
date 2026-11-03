@@ -649,3 +649,8 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 .mt-20 { margin-top: 20px; }
 .max-w-140 { max-width: 140px; }
 .confirm-details .recipient-warning { color: var(--sqk-gold); background: var(--sqk-gold-soft); padding: 8px; border-block: 1px solid var(--sqk-gold); }
+
+/* One visual verification badge; #verified-chip remains an accessible live region. */
+@media (max-width: 760px) {
+  .topbar .header-badges { grid-template-columns: auto minmax(0, 1fr); }
+}

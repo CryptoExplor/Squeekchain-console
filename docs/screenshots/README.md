@@ -4,7 +4,7 @@
 
 68 captures: Squeeks, Network, Info, Settings, Merge, Mainnet in light/dark × 1280/390, plus eight connected/disconnected header crops, twelve v9 Squeeks/Merge/Unstake captures, sixteen conditional stall/watch/pending captures, four Fee rose captures, and four full-address Recipient-warning captures. Desktop viewport 1280×960; mobile 390×844; header crops use a 900px viewport height, device scale 1. Settings/Merge/Unstake use viewport images; other main states and Fee rose are full-page. Fonts finish loading and animations are disabled. Token #87 deliberately has Unknown fields. Review banners are injected by tests only; they are absent from production.
 
-Header controls are 36px with 8px gaps and 18px theme/refresh/settings glyphs. Geometry and visibility are asserted, including 900/1024px desktop, hash routes and mobile overflow. The old Overview/Wallet gallery was replaced by Network/Squeeks.
+The header has one visible verification badge opening Info → Trust; a separate screen-reader-only live region announces status without duplicating the visual chip. Header controls are 36px with 8px gaps and 18px theme/refresh/settings glyphs. Geometry and visibility are asserted, including 900/1024px desktop, hash routes and mobile overflow. The old Overview/Wallet gallery was replaced by Network/Squeeks.
 
 | View | Light · 1280px | Dark · 1280px | Light · 390px | Dark · 390px |
 |---|---|---|---|---|

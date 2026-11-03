@@ -83,6 +83,9 @@ async function assertCompactHeader(page, width, connected) {
     const rect = node.getBoundingClientRect(), css = getComputedStyle(node);
     return { id: node.id, x: rect.x, right: rect.right, y: rect.y, height: rect.height, radius: css.borderRadius };
   }));
+  expect(geometry.filter(c => c.id === 'profile-status')).toHaveLength(1);
+  expect(geometry.some(c => c.id === 'verified-chip')).toBe(false);
+  await expect(page.getByTestId('verified-chip')).toHaveClass('sr-only');
   expect(new Set(geometry.map(c => c.radius)).size).toBe(1);
   for (const control of geometry) { expect(control.height, control.id).toBe(36); expect(control.x, control.id).toBeGreaterThanOrEqual(0); expect(control.right, control.id).toBeLessThanOrEqual(width); }
   for (const chip of await header.locator('.chip:visible').all()) expect(await chip.evaluate(node => node.scrollHeight <= node.clientHeight)).toBe(true);
