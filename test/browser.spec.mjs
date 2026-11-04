@@ -198,7 +198,8 @@ test('v6 settlement stall uses configuration and snapshot time, not checkpoint l
     await squeek.refresh();
   });
   await page.getByTestId('tab-network').click();
-  await expect(page.getByTestId('settlement-notice')).toHaveText('Rewards paused: settlement stopped at round 1973.');
+  await expect(page.getByTestId('settlement-notice')).toBeHidden();
+  await expect(page.locator('#v6-frozen')).toHaveText('Settlement frozen at round 1973');
   await page.getByTestId('tab-squeeks').click();
   await expect(page.getByTestId('holder-rewards-notice')).toBeVisible();
   await expect(page.getByTestId('btn-claim')).toBeEnabled();

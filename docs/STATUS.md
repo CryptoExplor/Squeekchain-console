@@ -10,9 +10,11 @@ Wheelhouse is a static Cloudflare Pages app at https://wheel-house.pages.dev. Pu
 | Sepolia v9 | Verified network, wallet/deposited NFTs, deposit/withdraw, scoped approvals, wallet/deposited merges, SQK stake/unstake, claim/claim-and-stake, checkpoint, art, token detail, read-only address views, merge planning, Activity and available earnings. |
 | Mainnet | Not deployed; no deployment reads or actions. |
 
-Canonical keys are `sepolia-v6`, `sepolia-v9` and `mainnet`. v9 is the default; saved choices and qualified links preserve context. Wallet identity is independent of profile and watch mode. Explicit Connect/profile selection requests the appropriate wallet network; rejection retains connection and permits a menu retry. Silent restore, cross-tab hints and watch-only navigation do not request network changes.
+Keys are `sepolia-v6`, `sepolia-v9` and `mainnet`. v9 is the default; saved choices and qualified links preserve context. Wallet identity is independent of profile and watch mode. Connect/profile selection requests the wallet network; rejection allows a menu retry. Silent restore, cross-tab hints and watch-only navigation do not request network changes.
 
 Connected pending reads show Loading; failed reads show Unavailable with Retry without reconnecting. A real empty portfolio is distinct from missing data. Account/profile generations reject late reads and simulations. Invalid links recover to owner mode on normal navigation; watched detail scope survives profile changes/reload. Account history excludes ownerless local records and clears pagination on disconnect.
+
+Network has a compact wheel/chain/SQK summary, a lazy seven-day settlements chart and read-only Genesis phase/inventory/connected-wallet counts. Missing values and chart gaps stay Unknown. v6 shows its frozen round and cached supply; no authoritative holder count is cached. Mainnet performs no deployment reads. Checkpoint controls are in Info › Developers; Live wheel history is in Activity.
 
 ## Safety and limits
 
@@ -25,6 +27,6 @@ Connected pending reads show Loading; failed reads show Unavailable with Retry w
 
 ## Open items
 
-User-run live qualification and manual wallet/browser checks remain separate from offline/mocked CI. Fork workflows require explicit loopback setup and suitable holders; discovery is not execution. Accessibility/performance audits beyond the existing mocked checks remain unqualified. Genesis/launch details are not a deployed user workflow.
+Live qualification and manual wallet checks remain separate from mocked CI. Fork workflows require explicit loopback setup and suitable holders; discovery is not execution. Accessibility/performance audits beyond the existing mocked checks remain unqualified. Genesis has no launch, claim or refund actions.
 
 Request ceilings live in `test/budgets.json`; build enforces the all-script 250,000-byte gzip cap. Test output goes to ignored `artifacts/` with seven-day CI retention, never into documentation. Current tests and CI—not copied run reports—are the source of validation results. See [CHANGELOG](CHANGELOG.md) for merged PRs.

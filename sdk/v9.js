@@ -81,6 +81,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
         minted: sqkAmount(tokenSupply),
         capRemaining: sqkAmount(tokenCap > tokenSupply ? tokenCap - tokenSupply : 0n),
       },
+      supply: { total: sqkAmount(tokenSupply), issued: sqkAmount(issuanceState.minted), staked: null },
       checkpoint: {
         corePaused,
         nextRound: String(nextRound),

@@ -28,11 +28,11 @@ for(const profile of ['sepolia-v6','sepolia-v9'])for(const width of [1280,390])t
 });
 test('live Squeeks, plain profile notes, plural rounds and checkpoint issuance source',async({page})=>{
  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.getByTestId('tab-network').click();
- await expect(page.getByTestId('net-issued-label')).toHaveText('SQK issued');await expect(page.getByTestId('net-issued')).toContainText('12,500,000');await expect(page.getByTestId('net-issued')).not.toContainText('25,000,000');await expect(page.getByTestId('issuance-source')).toHaveCount(0);
+ await expect(page.getByTestId('net-issued-label')).toHaveText('Issued by checkpoints');await expect(page.getByTestId('net-issued')).toContainText('12,500,000');await expect(page.getByTestId('net-issued')).not.toContainText('25,000,000');await expect(page.getByTestId('issuance-source')).toHaveCount(0);
  for(const [lag,text] of [['0','0 rounds'],['1','1 round'],['2','2 rounds']]){await page.evaluate(async lag=>{v9.net.mining.lagRounds=lag;await squeek.refresh();},lag);await expect(page.getByTestId('net-lag')).toHaveText(text);}
  await page.evaluate(async()=>{v9.net.core.settledThroughRound='2049';await squeek.refresh();});await expect(page.getByTestId('net-issued')).toContainText('12,500,000');
  await page.evaluate(async()=>{v9.net.mining.issued.sqk='12500001';v9.net.mining.processedThroughRound='2049';await squeek.refresh();});await expect(page.getByTestId('net-issued')).toContainText('12,500,001');await expect(page.getByTestId('issuance-source')).toHaveCount(0);
- await page.evaluate(()=>squeek.switchProfile('sepolia-v6'));await page.getByTestId('tab-network').click();await expect(page.getByTestId('net-squeeks')).toHaveText('512');await expect(page.getByTestId('net-issued-label')).toHaveText('SQK issued');
+ await page.evaluate(()=>squeek.switchProfile('sepolia-v6'));await page.getByTestId('tab-network').click();await expect(page.getByTestId('net-squeeks')).toHaveText('512');await expect(page.getByTestId('net-issued-label')).toHaveText('Issued by checkpoints');
  await expect(page.getByTestId('profile-notice')).toHaveText('Test network. Use test funds only.');await page.evaluate(()=>squeek.destroy());
 });
 test('refreshes coalesce per generation, not across profile changes',async({page})=>{

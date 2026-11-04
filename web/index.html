@@ -45,7 +45,7 @@
       <div id="banner" class="notice hidden" role="status" aria-live="polite" data-testid="banner"></div>
 
 
-      <section id="not-deployed" class="notice hidden" role="status" aria-live="polite" data-testid="not-deployed"><h2>Mainnet · not deployed</h2><p id="not-deployed-note" data-testid="not-deployed-note"></p></section>
+      <section id="not-deployed" class="notice hidden" role="status" aria-live="polite" data-testid="not-deployed"><h2>Mainnet · not deployed</h2><p id="not-deployed-note" data-testid="not-deployed-note"></p><p>Genesis: not open yet</p></section>
       <p id="profile-choice" data-testid="profile-choice" class="notice hidden" role="status"></p>
       <nav class="tabs" role="tablist" aria-label="Console sections">
 
@@ -57,56 +57,21 @@
 
       <!-- ── overview ──────────────────────────────────────────────────────── -->
       <p id="display-age" data-testid="display-age" class="muted small" aria-live="polite"></p><section data-panel="network" id="panel-network" data-testid="panel-network" role="tabpanel" aria-labelledby="tab-network">
-        <div class="section-heading"><div><h2>Network at a glance<span class="brand-dot">.</span></h2></div><div class="row"><span class="label">DISPLAY READS · FOLLOWS THE WHEEL</span><a href="#info/how-it-works" data-testid="network-how-link">How it works</a></div></div>
-        <div class="overview-layout">
-        <div>
-        <div class="panel" id="profile-panel" data-testid="profile-panel">
-          <div class="panel-head">
-            <h2>Chain pulse</h2>
-            <span class="panel-note" id="profile-release" data-testid="profile-release">Unknown</span>
-          </div>
-          <div class="grid cols-4">
-            <div class="stat"><span class="label">Network</span><strong id="net-chain" data-testid="net-chain">Unknown</strong></div>
-            <div class="stat"><span class="label">Kind</span><strong id="net-kind" data-testid="net-kind">Unknown</strong></div>
-            <div class="stat"><span class="label">Settled round</span><strong id="net-round" data-testid="net-round">Unknown</strong><span id="settlement-status" data-testid="settlement-status" role="status"></span></div>
-            <div class="stat"><span class="label">Squeek blocks</span><strong id="net-blocks" data-testid="net-blocks">Unknown</strong></div>
-            <div class="stat"><span class="label">Checkpoint lag</span><strong id="net-lag" data-testid="net-lag">Unknown</strong></div>
-            <div class="stat"><span class="label" id="net-issued-label" data-testid="net-issued-label">SQK issued</span><strong id="net-issued" data-testid="net-issued">Unknown</strong></div>
-            <div class="stat"><span class="label">Squeeks live</span><strong id="net-squeeks" data-testid="net-squeeks">Unknown</strong></div>
-            <div class="stat"><span class="label">Core paused</span><strong id="net-paused" data-testid="net-paused">Unknown</strong></div>
-          </div>
-          <div class="notice hidden" id="profile-notice" data-testid="profile-notice"></div>
-          <p class="notice warn hidden" id="settlement-notice" role="status" aria-live="polite" data-testid="settlement-notice"></p>
+        <div class="section-heading network-heading"><h2>Network<span class="brand-dot">.</span></h2><a href="#info/how-it-works" data-testid="network-how-link">How it works</a></div>
+        <div class="network-slim">
+          <section class="panel wheel-panel network-wheel" aria-label="Wheel">
+            <div class="panel-head"><h2>Wheel</h2><span class="chip" id="wheel-state" data-testid="wheel-state">Unknown</span><a class="stream-link" href="https://sepolia.squeekchain.com/#stream-game" target="_blank" rel="noreferrer">↗ Watch Squeektoshi</a></div>
+            <dl class="network-metrics"><div><dt>RPM</dt><dd id="wheel-rpm" data-testid="wheel-rpm">Unknown</dd></div><div><dt>Speed</dt><dd id="wheel-speed" data-testid="wheel-speed">Unknown</dd></div><div><dt>Distance today</dt><dd id="wheel-distance" data-testid="wheel-distance">Unknown</dd></div></dl>
+            <p class="muted small" id="wheel-note" role="status" data-testid="wheel-note">Waiting for an official device reading.</p>
+          </section>
+          <section class="panel" id="profile-panel" data-testid="profile-panel" aria-label="Chain">
+            <h2>Chain</h2><dl class="network-metrics"><div><dt>Squeek block height</dt><dd class="stat"><strong id="net-blocks" data-testid="net-blocks">Unknown</strong></dd></div><div><dt>Progress</dt><dd class="stat"><strong id="net-progress" data-testid="net-progress">Unknown</strong></dd></div><div><dt>Settled round</dt><dd class="stat"><strong id="net-round" data-testid="net-round">Unknown</strong></dd></div><div><dt>Checkpoint lag</dt><dd class="stat"><strong id="net-lag" data-testid="net-lag">Unknown</strong></dd></div></dl>
+            <p class="notice warn hidden" id="settlement-notice" role="status" aria-live="polite" data-testid="settlement-notice"></p><p class="muted small hidden" id="v6-frozen">Settlement frozen at round 1973</p>
+          </section>
+          <section class="panel" aria-label="SQK"><h2>SQK</h2><dl class="network-metrics"><div><dt>Total supply</dt><dd class="stat"><strong id="net-supply" data-testid="net-supply">Unknown</strong></dd></div><div><dt id="net-issued-label" data-testid="net-issued-label">Issued by checkpoints</dt><dd class="stat"><strong id="net-issued" data-testid="net-issued">Unknown</strong></dd></div><div><dt>Staked</dt><dd class="stat"><strong id="net-staked" data-testid="net-staked">Unknown</strong></dd></div><div class="hidden" id="v6-holders-row"><dt>Holders</dt><dd class="stat"><strong id="net-holders">Unknown</strong></dd></div></dl></section>
+          <section class="panel network-genesis" aria-label="Genesis"><p id="genesis-row" data-testid="genesis-row" role="status">Genesis: not open yet</p><p id="genesis-wallet" data-testid="genesis-wallet" class="muted small hidden"></p></section>
+          <details class="panel network-history" id="settlements-details"><summary>Settlements · last 7 days</summary><div id="settlements-chart" data-testid="settlements-chart" aria-live="polite">Unknown</div></details>
         </div>
-
-        <div class="panel" id="checkpoint-panel" data-testid="checkpoint-panel">
-          <div class="panel-head">
-            <h2>Checkpoint <span class="label">anyone can run it</span></h2>
-            <span class="panel-note">permissionless · no caller reward · you pay gas</span>
-          </div>
-          <p class="muted small" id="cp-explain" data-testid="cp-explain">
-            Turns settled rounds into issued SQK. Holders cannot claim until someone checkpoints, so this is the job
-            a wallet without Squeeks can do.
-          </p>
-          <div class="row">
-            <button class="btn btn-gold" id="btn-checkpoint" disabled="" data-testid="btn-checkpoint">Simulate &amp; checkpoint</button>
-            <span class="mono small" id="cp-reason" data-testid="cp-reason">Unknown</span>
-          </div>
-          <div class="out hidden" id="cp-result" data-testid="cp-result"></div>
-        </div>
-
-        </div>
-        <aside class="panel wheel-panel">
-          <div class="panel-head"><h2>From the wheel</h2><span class="chip" id="wheel-state" data-testid="wheel-state">Unknown</span></div>
-          <div class="wheel-glyph" aria-hidden="true">◎</div>
-          <div class="wheel-speed"><strong id="wheel-rpm" data-testid="wheel-rpm">Unknown</strong><span class="label">RPM</span></div>
-          <p class="muted small" id="wheel-note" role="status" data-testid="wheel-note">Waiting for an official device reading.</p>
-          <div class="mini-metrics"><div><span class="label">Speed</span><strong id="wheel-speed" data-testid="wheel-speed">Unknown</strong></div><div><span class="label">Daily distance</span><strong id="wheel-distance" data-testid="wheel-distance">Unknown</strong></div></div>
-          <a class="btn stream-link" href="https://sepolia.squeekchain.com/#stream-game" target="_blank" rel="noreferrer">↗ Watch Squeektoshi</a>
-          <section class="wheel-live" aria-label="Live wheel"><h3>Live wheel</h3><p id="provisional-blocks" data-testid="provisional-blocks" class="provisional-line hidden"></p><ul id="network-events" data-testid="network-events" class="wheel-feed"></ul><template id="wheel-feed-item"><li><span class="feed-icon" aria-hidden="true"></span><span class="feed-text"></span></li></template><button id="wheel-show-more" class="btn hidden" aria-controls="network-events" aria-expanded="false">Show more</button></section>
-        </aside>
-        </div>
-
 
       </section>
 
@@ -168,7 +133,9 @@
         </div>
       </section>
 
-      <section data-panel="activity" class="hidden" id="panel-activity" data-testid="panel-activity" role="tabpanel" aria-labelledby="tab-activity"><h2>Activity</h2><ol id="account-activity" data-testid="account-activity" aria-live="polite"></ol><button id="history-more" data-testid="history-more" class="btn" hidden>Show more</button></section>
+      <section data-panel="activity" class="hidden" id="panel-activity" data-testid="panel-activity" role="tabpanel" aria-labelledby="tab-activity"><h2>Activity</h2>
+          <section class="wheel-live" aria-label="Live wheel"><h3>Live wheel</h3><p id="provisional-blocks" data-testid="provisional-blocks" class="provisional-line hidden"></p><ul id="network-events" data-testid="network-events" class="wheel-feed"></ul><template id="wheel-feed-item"><li><span class="feed-icon" aria-hidden="true"></span><span class="feed-text"></span></li></template><button id="wheel-show-more" class="btn hidden" aria-controls="network-events" aria-expanded="false">Show more</button></section>
+<ol id="account-activity" data-testid="account-activity" aria-live="polite"></ol><button id="history-more" data-testid="history-more" class="btn" hidden>Show more</button></section>
       <!-- ── art ───────────────────────────────────────────────────────────── -->
       <section data-panel="art" class="hidden" id="panel-art" data-testid="panel-art" role="tabpanel" aria-labelledby="tab-art">
         <div class="section-heading"><div><h2>The DotGrid gallery<span class="brand-dot">.</span></h2></div></div>
@@ -205,6 +172,7 @@
 <section id="info-status" class="panel info-section" tabindex="-1" data-testid="info-status"><h2>Status</h2><p id="capability-profile" data-testid="capability-profile"></p><div id="capability-grid" class="status-list" data-testid="capability-grid"></div></section>
 <section id="info-contracts" class="panel info-section" tabindex="-1" data-testid="info-contracts"><h2>Contracts</h2><p id="contracts-release" data-testid="contracts-release"></p><ul id="contracts-list" data-testid="contracts-list"></ul></section>
 <section id="info-developers" class="info-section" tabindex="-1" data-testid="info-developers"><h2>Developers</h2>
+<div class="panel" id="network-diagnostics"><h3>Display sources</h3><ul id="display-sources" aria-live="polite"></ul><dl class="network-metrics"><div><dt>Network</dt><dd class="stat"><strong id="net-chain" data-testid="net-chain">Unknown</strong></dd></div><div><dt>Kind</dt><dd class="stat"><strong id="net-kind" data-testid="net-kind">Unknown</strong></dd></div><div><dt>Deployment</dt><dd id="profile-release" data-testid="profile-release">Unknown</dd></div><div><dt>Squeeks live</dt><dd class="stat"><strong id="net-squeeks" data-testid="net-squeeks">Unknown</strong></dd></div><div class="stat"><dt>Core paused</dt><dd class="stat"><strong id="net-paused" data-testid="net-paused">Unknown</strong></dd></div></dl><p id="profile-notice" data-testid="profile-notice"></p><p id="settlement-status" data-testid="settlement-status"></p></div>
         <div class="section-heading"><div><h2>Build with Squeekchain<span class="brand-dot">.</span></h2></div></div>
         <div class="panel">
           <div class="panel-head">
@@ -224,6 +192,21 @@
           </div>
           <textarea aria-label="Tool arguments as JSON" id="tool-args" rows="3" spellcheck="false" data-testid="tool-args">{}</textarea>
           <pre class="out hidden" id="tool-result" data-testid="tool-result"></pre>
+        </div>
+        <div class="panel" id="checkpoint-panel" data-testid="checkpoint-panel">
+          <div class="panel-head">
+            <h2>Checkpoint <span class="label">anyone can run it</span></h2>
+            <span class="panel-note">permissionless · no caller reward · you pay gas</span>
+          </div>
+          <p class="muted small" id="cp-explain" data-testid="cp-explain">
+            Turns settled rounds into issued SQK. Holders cannot claim until someone checkpoints, so this is the job
+            a wallet without Squeeks can do.
+          </p>
+          <div class="row">
+            <button class="btn btn-gold" id="btn-checkpoint" disabled="" data-testid="btn-checkpoint">Simulate &amp; checkpoint</button>
+            <span class="mono small" id="cp-reason" data-testid="cp-reason">Unknown</span>
+          </div>
+          <div class="out hidden" id="cp-result" data-testid="cp-result"></div>
         </div>
       <p>Local stdio MCP · read/prepare only, never signs or submits.</p>
 <pre class="out" data-testid="mcp-snippet">{ "mcpServers": { "wheelhouse": { "command": "node", "args": ["/absolute/path/Squeekchain-console/mcp/server.js"] } } }</pre></section>
@@ -254,6 +237,7 @@
 
 
 <div class="sheet-overlay hidden" id="activity-drawer" data-testid="activity-drawer" role="dialog" aria-modal="true" aria-labelledby="activity-title"><div class="sheet"><div class="panel-head"><h2 id="activity-title" data-testid="activity-title">Activity</h2><button class="btn" data-close-sheet="" data-testid="sheet-close">Close</button></div><p id="activity-empty" class="muted" data-testid="activity-empty">No saved transactions.</p><section id="activity-panel" class="panel" aria-label="Transaction Activity" data-testid="activity-panel"><div class="panel-head"><h2>Activity</h2><button id="btn-refresh-activity" class="btn" data-testid="btn-refresh-activity">Refresh receipts</button></div><p class="muted small">Saved in this browser, across profiles. Switching profiles cannot cancel a wallet popup or a broadcast transaction. Receipt reads retry; transactions never do. Final status requires 12 confirmations and public-RPC block agreement.</p><ol id="activity-list" aria-live="polite" data-testid="activity-list"></ol></section></div></div><div class="sheet-overlay hidden" id="settings-sheet" data-testid="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="sheet"><div class="panel-head"><h2 id="settings-title" data-testid="settings-title">Settings</h2><button class="btn" data-close-sheet="" data-testid="sheet-close">Close</button></div>
+
 <section class="settings-section"><h3>Custom RPC</h3><label for="rpc-url">Optional HTTPS RPC (browser-local; avoid URLs with secrets)</label><input id="rpc-url" type="url" placeholder="Default: public Sepolia RPCs" autocomplete="off" spellcheck="false" data-testid="rpc-url" aria-describedby="rpc-secret-warning"><p id="rpc-secret-warning" data-testid="rpc-secret-warning" class="notice warn hidden" role="status">This URL may contain an API key. It stays in this browser; use a public URL if possible.</p><div class="row"><button class="btn" id="btn-save-rpc" data-testid="btn-save-rpc">Save</button><button class="btn" id="btn-test-rpc" data-testid="btn-test-rpc">Test</button><button class="btn" id="btn-remove-rpc" data-testid="btn-remove-rpc">Remove</button></div><p class="muted small">A custom RPC joins the peer set, never replaces the two-peer check. Both Sepolia profiles use verified reads and simulated owner actions; Mainnet is not deployed.</p>
 <p id="rpc-test-result" role="status" aria-live="polite" data-testid="rpc-test-result"></p></section>
 <section class="settings-section"><h3>Cache</h3><button class="btn" id="btn-clear-cache" data-testid="btn-clear-cache">Clear IndexedDB log cache</button><button class="btn" id="btn-clear-activity" data-testid="btn-clear-activity">Clear Activity list</button><p id="cache-result" role="status" aria-live="polite" data-testid="cache-result"></p></section>

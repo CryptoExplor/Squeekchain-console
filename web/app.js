@@ -9,6 +9,7 @@
  *
  * Every action is simulated first and signed in the user's wallet. No key ever reaches this code.
  */
+import { createNetworkView } from './network.js';
 import {
   createDisplayApi, createDisplayCache, displayKey, apiNetwork, apiWallet, createWheelPoller, DAY, DISPLAY_TTL,
   createSqueekchain,
@@ -246,10 +247,19 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const verification=method==='verify'?value:value?.verification;if(verification)renderVerification(verification);
     return value;
   });
-  function resetLoad(){state.holderReadState='idle';workspace?.clear();state.claimQuote=null;verifiedForGeneration=null;loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
+  function resetLoad(){networkView.reset(getProfile(state.profileKey));displaySources.clear();$('display-sources').replaceChildren();state.holderReadState='idle';workspace?.clear();state.claimQuote=null;verifiedForGeneration=null;loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
   const displayCache=createDisplayCache(win.indexedDB),lastGood=new Map();let apiScope;
+  const displaySources=new Map();
+  function recordSource(panel,kind,reason){
+    displaySources.set(panel,{kind,reason});
+    $('display-sources').replaceChildren(...[...displaySources].map(([name,value])=>{const li=doc.createElement('li');li.textContent=`${name} — Source: ${value.kind==='api'?'API':'RPC'}${value.reason?` · ${value.reason}`:''}`;return li;}));
+  }
+  const networkView=createNetworkView({doc,source:recordSource,current:isCurrent,visible:()=>!$('panel-network').classList.contains('hidden'),readContext:()=>{const load=captureLoad();return {load,api:displayApi(load)};}});
+  function refreshNetworkExtras(){const load=captureLoad();return networkView.refresh(load,displayApi(load),state.account);}
+
   function displayApi(load){if(adapterFactory||load.profileKey!=='sepolia-v9')return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
-  function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000)),text=`${source.kind==='api'?'API · 12 blocks behind':'RPC display snapshot'}${age?` · as of ${age} min`:''}`;for(const node of doc.querySelectorAll('.stat'))node.title=text;$('display-age').textContent=age?`as of ${age} min`:'';}
+  function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000));$('display-age').textContent=age?`as of ${age} min`:'';}
+
   function displayVerification(value){
     if(!value.source||value.source.kind==='rpc'){if(value.verification)renderVerification(value.verification);return;}
     if(state.lastReadFailure?.profile===state.profileKey)return;
@@ -274,23 +284,23 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(error.kind==='unavailable'||error.kind==='schema'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
       if(saved&&Date.now()-saved.at<ttl&&(error.kind==='transport'||error.name==='TypeError'))return {...saved.value,source:{...saved.value.source,kind:saved.value.source?.kind==='api'?'api':'cached-rpc',at:saved.at,stale:true}};
       // Unavailable API is not zero. Only the fresh guarded SDK may supply fallback.
-      if(displayApi(load)){const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);return {...value,source:{kind:'rpc',at:Date.now()}};}
+      if(displayApi(load)){for(const panel of kind==='network'?['Chain','SQK']:['Squeeks'])recordSource(panel,'rpc',error.message);const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);return {...value,source:{kind:'rpc',at:Date.now(),reason:error.message}};}
       throw error;
     }
   }
   let wheelEvents=[],wheelSettlements=[],feedLimit=5;
-  function feedRows(id,rows){const root=$(id);root.replaceChildren(...rows.map(row=>{const li=$('wheel-feed-item').content.firstElementChild.cloneNode(true),icon=li.querySelector('.feed-icon'),text=li.querySelector('.feed-text');icon.textContent={round:'◷',sqk:'↗',squeek:'◇'}[row.icon]??'◇';text.textContent=row.text;return li;}));root.title='API · 12 blocks behind';}
+  function feedRows(id,rows){const root=$(id);root.replaceChildren(...rows.map(row=>{const li=$('wheel-feed-item').content.firstElementChild.cloneNode(true),icon=li.querySelector('.feed-icon'),text=li.querySelector('.feed-text');icon.textContent={round:'◷',sqk:'↗',squeek:'◇'}[row.icon]??'◇';text.textContent=row.text;return li;}));root.removeAttribute('title');}
   function renderWheelFeed(){const rows=wheelFeed(wheelEvents,wheelSettlements);feedRows('network-events',rows.slice(0,feedLimit));$('wheel-show-more').classList.toggle('hidden',rows.length<=feedLimit);$('wheel-show-more').setAttribute('aria-expanded',String(feedLimit>5));}
   $('wheel-show-more').onclick=()=>{feedLimit+=5;renderWheelFeed();};
   async function readWheelEvents(){const load=captureLoad(),api=displayApi(load);const result=await api.feed();assertCurrent(load);wheelEvents=result.data.events;renderWheelFeed();return result;}
   async function displayFeeds(load){const api=displayApi(load);if(!api)return;
     for(const [kind,read] of [['events',()=>api.feed()],['settlements',()=>api.settlements()],]){
       try{const result=await read();assertCurrent(load);if(kind==='events')wheelEvents=result.data.events;else if(kind==='settlements')wheelSettlements=result.data.recentSettlements;else feedRows('account-activity',wheelFeed(result.data.events??result.data.activity));renderWheelFeed();}
-      catch(error){if(!isCurrent(load))return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);return;}if(error.kind&&error.kind!=='transport'){if(kind==='events')wheelEvents=[];else if(kind==='settlements')wheelSettlements=[];else $('account-activity').replaceChildren();renderWheelFeed();}}
+      catch(error){if(!isCurrent(load))return;if(error.name==='RpcTrustError'){clearWheelFeed();recordSource('Live wheel','api',error.message);return;}if(error.kind&&error.kind!=='transport'){if(kind==='events')wheelEvents=[];else if(kind==='settlements')wheelSettlements=[];else $('account-activity').replaceChildren();renderWheelFeed();}}
     }
   }
   function clearWheelFeed(){wheelEvents=[];wheelSettlements=[];feedLimit=5;renderWheelFeed();for(const id of ['account-activity','provisional-blocks'])$(id).replaceChildren();$('provisional-blocks').classList.add('hidden');}
-  function clearDisplayMismatch(error){wheelGoodAt=0;lastGood.clear();state.net=null;state.holderReadState='unavailable';renderNetworkPlaceholder();renderHolder(null);for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';clearWheelFeed();showReadFailure(error,'API identity');}
+  function clearDisplayMismatch(error){wheelGoodAt=0;lastGood.clear();state.net=null;state.holderReadState='unavailable';renderNetworkPlaceholder();renderHolder(null);for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';clearWheelFeed();recordSource('Display validation','api',error.message);showReadFailure(Object.assign(new Error('Display source does not match this network.'),{name:'RpcTrustError',kind:'mismatch'}),'Display validation');}
 
   let destroyed = false;
   const telemetry = createTelemetry({ fetcher });
@@ -430,6 +440,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $("not-deployed").classList.toggle("hidden", deployed);
     $("not-deployed-note").textContent = deployed ? "" : getProfile(state.profileKey).notes;
     el.refresh.classList.toggle("hidden", !deployed);
+    $("checkpoint-panel").classList.toggle("hidden",!deployed);
     el.verified.classList.remove('hidden');
     selectTab(currentRoute());
   }
@@ -438,6 +449,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   function renderNetworkPlaceholder() {
     const profile = getProfile(state.profileKey);
+    networkView.reset(profile);
+    if(profile.abiSet==='v9')recordSource('Settlements','api','Not requested: chart closed');
+    for(const id of ['net-supply','net-staked','net-holders','net-progress'])$(id).textContent=UNKNOWN;
+    $('v6-frozen').classList.toggle('hidden',profile.abiSet!=='v6');$('v6-holders-row').classList.toggle('hidden',profile.abiSet!=='v6');
     $("holder-rewards-notice").textContent = ""; $("holder-rewards-notice").classList.add("hidden");
     $("settlement-status").textContent = "";
     el.net.settlement.textContent = "";
@@ -449,7 +464,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.verified.textContent = profile.addresses ? "Checking…" : "Not deployed";
     el.verified.className = "sr-only";
     $('profile-status').title=el.verified.title='';
-    $('net-issued-label').textContent='SQK issued';
+    $('net-issued-label').textContent='Issued by checkpoints';
 
     $("profile-status").className = "chip";
     $("profile-status").textContent = profile.addresses ? "Checking…" : "Not deployed";
@@ -535,7 +550,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(errorIsTransient(err)&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL){$("wheel-note").textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;return;}
       for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = UNKNOWN;
       $("wheel-state").textContent = "Unknown";
-      $("wheel-note").textContent = `${err.message} No live reading to display.`;
+      $("wheel-note").textContent = "No available device reading.";recordSource("Wheel","api",err.message);
     }
   }
 
@@ -699,13 +714,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const advancement=hasRound&&previous!=null&&BigInt(round)>previous&&core.paused!==true?' Mining live: rounds advanced.':'';
     const stalled=settlementStatus(net).stalled===true;
     const notice=stalled?`Rewards paused: settlement stopped at round ${round}.`:'';
-    for (const node of [el.net.settlement,$('holder-rewards-notice')]) { node.textContent=notice; node.classList.toggle('hidden',!stalled); }
+    for (const node of [el.net.settlement,$('holder-rewards-notice')]) { const text=node===el.net.settlement&&getProfile(state.profileKey).abiSet==='v6'?'':notice;node.textContent=text;node.classList.toggle('hidden',!text); }
     $('settlement-status').textContent=advancement.trim();
     setStat(el.net.blocks, core.blockHeight, num);
     setStat(el.net.lag, mining.lagRounds, value => num(value) === UNKNOWN ? UNKNOWN : `${num(value)} ${BigInt(value)===1n?'round':'rounds'}`);
     const v9=getProfile(state.profileKey).abiSet==='v9';
-    setStat(el.net.issued,v9?mining.issued:mining.minted,sqk);
-    $('net-issued-label').textContent='SQK issued';
+    setStat(el.net.issued,net.supply?.issued??(v9?mining.issued:mining.minted),sqk);
+    setStat($('net-supply'),net.supply?.total,sqk);setStat($('net-staked'),net.supply?.staked,sqk);
+    setStat($('net-progress'),core.blockProgress,value=>/^\d+$/.test(String(value))&&BigInt(value)<=1000000000n?`${(Number(value)/10000000).toFixed(1)}%`:UNKNOWN);
+    for(const panel of ['Chain','SQK'])recordSource(panel,net.source?.kind==='api'?'api':'rpc',net.source?.reason??(net.source?.stale?'Cached response; live request unavailable':net.source?.kind==='cached-rpc'?'24-hour display cache':null));
+    $('net-issued-label').textContent='Issued by checkpoints';
     setStat(el.net.squeeks, net.nft?.totalSupply, num);
     setStat(el.net.paused, core.paused, value => value === true ? 'yes' : value === false ? 'no' : UNKNOWN);
     el.net.paused.parentElement.className = `stat ${core.paused === true ? 'bad' : core.paused === false ? 'ok' : ''}`;
@@ -855,6 +873,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       const v = net.source?null:net.verification ?? await readFor(load,"verify");
       if (!isCurrent(load)) return null;
       renderNetwork(net);
+      void refreshNetworkExtras();
       if(net.source){displayVerification(net);displayStamp(net);}else renderVerification(v);
       clearReadBanner();
       return net;
@@ -1255,6 +1274,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(special&&String(route).startsWith('squeek/')){try{rememberWatch(holderRoute(hash),state.watchOnly?activeWatchRoute:null);}catch{/* Invalid routes are reported below. */}}
     if (name === 'info' && section) $("info-" + section)?.scrollIntoView?.({ block: 'start' });
     $('holder-overview').hidden=special&&String(route).startsWith('squeek/');$('squeek-page').hidden=!$('holder-overview').hidden;
+    if(name==='network'&&state.adapter)void refreshNetworkExtras();
     if(name==='activity')void ensureWorkspace().then(w=>w.history());
     if(special&&String(route).startsWith('squeek/')){try{const parsed=holderRoute(hash);void ensureWorkspace().then(w=>w.detail(parsed));}catch(error){routeError(error);}}else workspace?.detail(null);
   }
@@ -1444,10 +1464,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     readEvents:adapterFactory?null:readWheelEvents,
     readBlocks:adapterFactory?null:async()=>displayApi(captureLoad()).blocks(),
     frontier:()=>({settled:state.net?.core?.settledThroughRound,processed:state.net?.mining?.processedThroughRound}),
-    onStatus:async(data,result)=>{workspace?.updatePace(result.stale?null:data);liveMeasurement=result.stale?null:data.measurement;renderProvisional();const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
+    onStatus:async(data,result)=>{recordSource("Wheel","api",result.stale?"Cached response; live request unavailable":null);void refreshNetworkExtras();workspace?.updatePace(result.stale?null:data);liveMeasurement=result.stale?null:data.measurement;renderProvisional();const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
     onFrontier:async()=>{const net=await refreshNetwork();if(!net||net.source?.stale)return false;await refreshAll();if(state.inspected&&!state.status)return false;if(provisionalResult)renderProvisional(provisionalResult);await displayFeeds(captureLoad());if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();return true;},
     onBlocks:renderProvisional,
-    onError:(error,scope)=>{if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);}else if(scope==='status'&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL&&errorIsTransient(error))$('wheel-note').textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;else if(scope==='status'){liveMeasurement=null;renderProvisional();for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}}
+    onError:(error,scope)=>{if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;recordSource(scope==='status'?'Wheel':'Live wheel','api',error.message);if(error.name==='RpcTrustError'){if(state.net?.source?.kind!=='rpc'||state.net.verification?.trusted!==true)clearDisplayMismatch(error);recordSource(scope==='status'?'Wheel':'Live wheel','api',error.message);liveMeasurement=null;renderProvisional();clearWheelFeed();for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}else if(scope==='status'&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL&&errorIsTransient(error))$('wheel-note').textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;else if(scope==='status'){liveMeasurement=null;renderProvisional();for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}}
   });
   if(adapterFactory)poller.start();else void poller.tick();void displayFeeds(captureLoad());
 

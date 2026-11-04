@@ -768,3 +768,49 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 
 /* The detail view has its own owner-gated Path action. */
 #panel-squeeks:has(#squeek-page:not([hidden])) #btn-planner{display:none}
+
+/* Phase 5: one compact Network view; advanced controls/history live in their own tabs. */
+.network-slim { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.network-slim .panel { margin: 0; padding: 14px 18px; }
+.network-slim h2 { font-size: 16px; margin: 0 0 10px; }
+.network-heading { margin-bottom: 12px; }
+.network-wheel, .network-genesis, .network-history { grid-column: 1 / -1; }
+.network-wheel .panel-head { justify-content: flex-start; margin-bottom: 8px; gap: 14px; }
+.network-wheel .panel-head h2 { margin: 0; }
+.network-wheel .stream-link { margin-left: auto; }
+.network-wheel #wheel-note { margin: 6px 0 0; }
+.network-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 0; }
+.network-wheel .network-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.network-metrics dt { color: var(--sqk-gray); font-size: 12px; }
+.network-metrics dd { font-size: 18px; margin: 2px 0 0; overflow-wrap: anywhere; }
+.network-genesis p { margin: 0; }
+.network-genesis p + p { margin-top: 5px; }
+.network-history summary { cursor: pointer; font-size: 14px; }
+.network-history svg { display: block; width: 100%; height: 86px; margin-top: 8px; }
+.network-history .chart-bar { fill: var(--sqk-gold); }
+.network-history .chart-gap { fill: none; stroke: var(--sqk-gray); stroke-dasharray: 2 2; }
+.network-history .chart-zero { fill: var(--sqk-blue); }
+.network-history p { margin: 4px 0 0; }
+#network-diagnostics li { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .network-slim { grid-template-columns: 1fr; }
+  .network-slim .panel { padding: 12px; }
+  .network-wheel .panel-head { flex-wrap: wrap; gap: 8px; }
+  .network-wheel .stream-link { font-size: 12px; }
+  .network-metrics dd { font-size: 16px; }
+}
+
+#panel-network .network-metrics dd.stat { padding: 0; border: 0; border-radius: 0; background: transparent; }
+.network-metrics dd.stat strong { font: inherit; font-variant-numeric: tabular-nums; }
+.network-wheel .stream-link { width: auto; margin-top: 0; }
+.network-wheel #wheel-note { min-height: 0; }
+@media (min-width: 1000px) {
+  main:has(#panel-network:not(.hidden)) { padding-top: 12px; padding-bottom: 24px; }
+  main:has(#panel-network:not(.hidden)) .tabs { margin-bottom: 12px; }
+  #panel-network .network-heading { margin: 12px 0; }
+  .network-slim { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .network-wheel { grid-column: auto; }
+  #panel-network .network-metrics dd.stat strong { font: inherit; }
+  .network-wheel .panel-head { gap: 8px; }
+  .network-wheel .stream-link { font-size: 12px; }
+}
