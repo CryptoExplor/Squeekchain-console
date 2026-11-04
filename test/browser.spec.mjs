@@ -197,7 +197,7 @@ test('v6 settlement stall uses configuration and snapshot time, not checkpoint l
     h.network=()=>({...original(h.frontier),core:{...original(h.frontier).core,genesisTimestamp:'1000',roundDuration:'600'},snapshot:{timestamp:String(1000n+BigInt(h.expected)*600n)},checkpoint:{canCheckpoint:h.ready,roundSettled:h.ready}});
     await squeek.refresh();
   });
-  await page.getByTestId('tab-network').click();
+  await page.getByTestId('tab-squeeks').click();
   await expect(page.getByTestId('settlement-notice')).toBeHidden();
   await expect(page.locator('#v6-frozen')).toHaveText('Settlement frozen at round 1973');
   await page.getByTestId('tab-squeeks').click();

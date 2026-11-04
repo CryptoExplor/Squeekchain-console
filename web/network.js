@@ -1,12 +1,11 @@
-// Read-only Network extras. The existing wheel poller is the only scheduler.
+// Read-only Genesis row. Only the existing wheel poller schedules refreshes.
 const PHASES={awaiting_inventory:'awaiting inventory',pending:'not open yet',open:'open',waiting_for_hamster:'waiting for the wheel',randomness_pending:'preparing draw',processing:'assigning entries',claimable:'claimable',cancelled:'cancelled'};
 export function createNetworkView({doc,source,current,visible,readContext}){
- const $=id=>doc.getElementById(id),details=$('settlements-details');
- let revision=0,genesisFlight,chartFlight,chartAt=0;
+ const $=id=>doc.getElementById(id);
+ let revision=0,genesisFlight;
  function reset(profile){
-  revision++;genesisFlight=chartFlight=null;chartAt=0;
+  revision++;genesisFlight=null;
   $('genesis-row').textContent='Genesis: not open yet';$('genesis-wallet').textContent='';$('genesis-wallet').classList.add('hidden');
-  $('settlements-chart').textContent='Unknown';details.open=false;details.classList.toggle('hidden',profile.abiSet!=='v9');
  }
  async function genesis(load,api,owner){
   if(!api||!visible()||load.profileKey!=='sepolia-v9')return;
@@ -30,19 +29,5 @@ export function createNetworkView({doc,source,current,visible,readContext}){
    }catch(error){if(!valid())return;source('Genesis','api',error.message);$('genesis-row').textContent='Genesis: not open yet';$('genesis-wallet').textContent='';$('genesis-wallet').classList.add('hidden');}
   })();genesisFlight=flight;try{await flight;}finally{if(genesisFlight===flight)genesisFlight=null;}
  }
- async function chart(load,api){
-  if(!api||!visible()||!details.open||load.profileKey!=='sepolia-v9'||Date.now()-chartAt<60000)return;
-  if(chartFlight)return chartFlight;
-  const rev=revision,valid=()=>rev===revision&&current(load);
-  const flight=(async()=>{
-   try{
-    // Neither this module's renderer nor the ranged API is loaded before expansion.
-    const [{renderSettlements},result]=await Promise.all([import('./settlements.js'),api.settlements('7d')]);
-    if(!valid())return;source('Settlements','api',result.stale?'Cached response; live request unavailable':null);
-    renderSettlements($('settlements-chart'),result.data);if(result.stale)$('settlements-chart').querySelector('p').textContent+=` · as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;chartAt=Date.now();
-   }catch(error){if(valid()){$('settlements-chart').textContent='Unknown';source('Settlements','api',error.message);}}
-  })();chartFlight=flight;try{await flight;}finally{if(chartFlight===flight)chartFlight=null;}
- }
- details.addEventListener('toggle',()=>{if(details.open){const {load,api}=readContext();void chart(load,api);}});
- return {reset,genesis,chart,refresh:(load,api,owner)=>Promise.all([genesis(load,api,owner),chart(load,api)])};
+ return {reset,genesis,refresh:genesis};
 }

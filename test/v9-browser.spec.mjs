@@ -51,7 +51,7 @@ test('restored frontend: active policy, one footer, baseline copy, conditional w
  await page.getByTestId('settings-open').click();await expect(page.getByTestId('settings-sheet')).toBeVisible();expect(loaded).toContain('/settings.js');await page.getByTestId('rpc-url').fill('https://rpc.example/');await expect(page.getByTestId('rpc-secret-warning')).toBeHidden();await page.getByTestId('rpc-url').fill('https://rpc.example/?apiKey=private');await expect(page.getByTestId('rpc-secret-warning')).toBeVisible();await page.keyboard.press('Escape');
  await page.getByTestId('info-link-developers').click();await page.getByTestId('btn-copy-manifest').click();expect(loaded).toContain('/developers.js');
  const body=await page.locator('body').textContent();expect(body.match(/not affiliated with Squeekchain/g)).toHaveLength(1);expect(body).toMatch(/Powered by a hamster/);expect(body).toMatch(/Build with Squeekchain/);expect(body).toMatch(/Network/);expect(body).not.toMatch(/undocumented|no v9 transactions|read-only and unverified|all transactions disabled/);
- await page.getByTestId('tab-network').click();await expect(page.locator('.telemetry-source')).toHaveCount(0);await expect(page.getByTestId('panel-network')).toContainText('Settlements · last 7 days');await page.evaluate(()=>squeek.destroy());
+ await page.getByTestId('tab-squeeks').click();await expect(page.locator('.telemetry-source')).toHaveCount(0);await expect(page.getByTestId('panel-explore')).toBeHidden();await expect(page.locator('.network-strip')).toContainText('Official Status');await page.evaluate(()=>squeek.destroy());
 });
 
 for(const [name,v6,v9,expected] of [
@@ -99,7 +99,7 @@ for(const theme of ['light','dark'])for(const width of [1280,390])test(`Fee rose
 for(const width of [1280,390])test(`b705683 layout and live-only badges / ${width}`,async({page})=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);
  await expect(page.locator('.brand .label')).toHaveText('Independent Squeekchain console');
- await expect(page.getByTestId('panel-network').locator('.section-heading h2')).toHaveText('Network.');
+ await expect(page.getByTestId('panel-explore')).toBeHidden();
  await expect(page.getByTestId('btn-checkpoint')).toHaveText('Simulate & checkpoint');await expect(page.getByTestId('cp-explain')).toContainText('Turns settled rounds into issued SQK.');
  await expect(page.locator('.footer-top')).toContainText('Powered by a hamster. Built for the holders.');
  await page.evaluate(()=>squeek.connect());await expect(page.getByTestId('profile-status')).toHaveText('Verified');

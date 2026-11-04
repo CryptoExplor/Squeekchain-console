@@ -31,3 +31,10 @@ export { runPublicReadTool } from './public-tools.js';
 export { createDisplayCache, displayKey, DAY, DISPLAY_TTL } from './display-cache.js';
 export { createDisplayApi, apiNetwork, apiWallet, artworkUrl } from './display-api.js';
 export { createWheelPoller } from './display-poller.js';
+
+export { retryAfterMs } from './retry-after.js';
+export { createSessionVerifier } from './verify.js';
+export { createV9Verifier } from './verify-v9.js';
+export { core9Abi, nft9Abi, staking9Abi } from './abi-v9.js';
+export { DEPLOYMENT } from './record.js';
+export { isLogRangeError } from './rpc-errors.js';

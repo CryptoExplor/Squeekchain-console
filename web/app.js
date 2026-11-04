@@ -175,7 +175,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
   const num = formatNumber;
   const sqk = formatAmount;
-  const setStat = (node, value, formatter = valueText) => Stat(node.closest('.stat')).set(value, formatter);
+  const setStat = (node, value, formatter = valueText) => {const stat=node.closest('.stat');if(stat)Stat(stat).set(value,formatter);else node.textContent=valueText(formatter(value));};
   const json = (v) => JSON.stringify(v, null, 2);
   const actionNames={merge:'Merge Squeeks',mergeDeposited:'Merge deposited',deposit:'Deposit',withdraw:'Withdraw',claim:'Claim',claimAndStake:'Claim and stake',stake:'Stake',unstake:'Unstake',approveNft:'Approve one Squeek',approveAll:'Approve all Squeeks',approveSqk:'Approve SQK'};
   const technical=value=>JSON.stringify(value,(_key,v)=>typeof v==='string'&&v.includes(getProfile('sepolia-v9').identities?.release??'\u0000')?'[internal deployment]':v,2);
@@ -254,7 +254,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     displaySources.set(panel,{kind,reason});
     $('display-sources').replaceChildren(...[...displaySources].map(([name,value])=>{const li=doc.createElement('li');li.textContent=`${name} — Source: ${value.kind==='api'?'API':'RPC'}${value.reason?` · ${value.reason}`:''}`;return li;}));
   }
-  const networkView=createNetworkView({doc,source:recordSource,current:isCurrent,visible:()=>!$('panel-network').classList.contains('hidden'),readContext:()=>{const load=captureLoad();return {load,api:displayApi(load)};}});
+  const networkView=createNetworkView({doc,source:recordSource,current:isCurrent,visible:()=>!$('panel-squeeks').classList.contains('hidden'),readContext:()=>{const load=captureLoad();return {load,api:displayApi(load)};}});
   function refreshNetworkExtras(){const load=captureLoad();return networkView.refresh(load,displayApi(load),state.account);}
 
   function displayApi(load){if(adapterFactory||load.profileKey!=='sepolia-v9')return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
@@ -284,7 +284,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(error.kind==='unavailable'||error.kind==='schema'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
       if(saved&&Date.now()-saved.at<ttl&&(error.kind==='transport'||error.name==='TypeError'))return {...saved.value,source:{...saved.value.source,kind:saved.value.source?.kind==='api'?'api':'cached-rpc',at:saved.at,stale:true}};
       // Unavailable API is not zero. Only the fresh guarded SDK may supply fallback.
-      if(displayApi(load)){for(const panel of kind==='network'?['Chain','SQK']:['Squeeks'])recordSource(panel,'rpc',error.message);const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);return {...value,source:{kind:'rpc',at:Date.now(),reason:error.message}};}
+      if(displayApi(load)){for(const panel of kind==='network'?['Network']:['Squeeks'])recordSource(panel,'rpc',error.message);const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);return {...value,source:{kind:'rpc',at:Date.now(),reason:error.message}};}
       throw error;
     }
   }
@@ -450,9 +450,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderNetworkPlaceholder() {
     const profile = getProfile(state.profileKey);
     networkView.reset(profile);
-    if(profile.abiSet==='v9')recordSource('Settlements','api','Not requested: chart closed');
-    for(const id of ['net-supply','net-staked','net-holders','net-progress'])$(id).textContent=UNKNOWN;
-    $('v6-frozen').classList.toggle('hidden',profile.abiSet!=='v6');$('v6-holders-row').classList.toggle('hidden',profile.abiSet!=='v6');
+    for(const id of ['net-progress','net-squeeks','net-paused'])$(id).textContent=UNKNOWN;
+    $('v6-frozen').classList.toggle('hidden',profile.abiSet!=='v6');
     $("holder-rewards-notice").textContent = ""; $("holder-rewards-notice").classList.add("hidden");
     $("settlement-status").textContent = "";
     el.net.settlement.textContent = "";
@@ -464,7 +463,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.verified.textContent = profile.addresses ? "Checking…" : "Not deployed";
     el.verified.className = "sr-only";
     $('profile-status').title=el.verified.title='';
-    $('net-issued-label').textContent='Issued by checkpoints';
+    $('net-issued-label').textContent='SQK issued';
 
     $("profile-status").className = "chip";
     $("profile-status").textContent = profile.addresses ? "Checking…" : "Not deployed";
@@ -584,7 +583,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(currentRequest()&&String(await p.request({method:'eth_chainId'})).toLowerCase()!==profile.hexChainId)throw new Error('Wallet network did not change. Try switching again.');
   }
 
-  function watching(){return Boolean(state.watchOnly||state.inspected&&state.inspected.toLowerCase()!==state.account?.toLowerCase());}
+  function watching(){return Boolean(win.history.state?.exploreReadOnly||state.watchOnly||state.inspected&&state.inspected.toLowerCase()!==state.account?.toLowerCase());}
   let walletWork=Promise.resolve();
   // Only explicit local Connect/profile/menu actions may open a network prompt.
   async function requestProfileChain(){
@@ -720,10 +719,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     setStat(el.net.lag, mining.lagRounds, value => num(value) === UNKNOWN ? UNKNOWN : `${num(value)} ${BigInt(value)===1n?'round':'rounds'}`);
     const v9=getProfile(state.profileKey).abiSet==='v9';
     setStat(el.net.issued,net.supply?.issued??(v9?mining.issued:mining.minted),sqk);
-    setStat($('net-supply'),net.supply?.total,sqk);setStat($('net-staked'),net.supply?.staked,sqk);
     setStat($('net-progress'),core.blockProgress,value=>/^\d+$/.test(String(value))&&BigInt(value)<=1000000000n?`${(Number(value)/10000000).toFixed(1)}%`:UNKNOWN);
-    for(const panel of ['Chain','SQK'])recordSource(panel,net.source?.kind==='api'?'api':'rpc',net.source?.reason??(net.source?.stale?'Cached response; live request unavailable':net.source?.kind==='cached-rpc'?'24-hour display cache':null));
-    $('net-issued-label').textContent='Issued by checkpoints';
+    for(const panel of ['Network'])recordSource(panel,net.source?.kind==='api'?'api':'rpc',net.source?.reason??(net.source?.stale?'Cached response; live request unavailable':net.source?.kind==='cached-rpc'?'24-hour display cache':null));
+    $('net-issued-label').textContent='SQK issued';
     setStat(el.net.squeeks, net.nft?.totalSupply, num);
     setStat(el.net.paused, core.paused, value => value === true ? 'yes' : value === false ? 'no' : UNKNOWN);
     el.net.paused.parentElement.className = `stat ${core.paused === true ? 'bad' : core.paused === false ? 'ok' : ''}`;
@@ -1252,29 +1250,31 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // Routes are display-only; legacy API tab names remain aliases for integrations.
   function currentRoute() {
-    const parts = win.location.hash.replace(/^#\/?/,'').split('/');
+    const parts = win.location.hash.split('?')[0].replace(/^#\/?/,'').split('/');
     if (profileFromHash(win.location.hash)) parts.shift();
     const hash = parts.join('/');
-    return /^(squeeks|squeek|address|activity|art|network|info)(\/|$)/.test(hash) ? hash : (state.account || state.inspected ? 'squeeks' : 'network');
+    return /^(squeeks|squeek|address|activity|art|explore|network|info)(\/|$)/.test(hash) ? hash+(win.location.hash.includes('?')?'?'+win.location.hash.split('?')[1]:'') : 'squeeks';
   }
   function selectTab(route) {
-    const aliases = { overview: 'network', holdings: 'squeeks', agent: 'info/developers' };
-    route = aliases[route] ?? route;
+    const aliases = { network:'squeeks', overview: 'squeeks', holdings: 'squeeks', agent: 'info/developers' };
+    const query=String(route).split('?')[1]??(win.location.hash.split('?')[0].endsWith('/'+String(route))?win.location.hash.split('?')[1]:'');route=String(route).split('?')[0];route = aliases[route] ?? route;
     const special=/^(address|squeek)\//.test(route);
     let [name, section] = String(route).split('/');if(special)name=String(route).startsWith('address/')?(String(route).split('/')[2]??'squeeks'):'squeeks';
-    if (!['squeeks', 'activity', 'art', 'network', 'info'].includes(name)) name = state.account || state.inspected ? 'squeeks' : 'network';
+    if (!['squeeks', 'activity', 'art', 'explore', 'info'].includes(name)) name = 'squeeks';
     const deployed = Boolean(getProfile(state.profileKey).addresses);
     if(!deployed)name='info';
     doc.querySelectorAll('a[href^="#info/"], a[data-info-route]').forEach(link => { const route = link.dataset.infoRoute ?? link.getAttribute('href').slice(1); link.dataset.infoRoute = route; link.href = `#${state.profileKey}/${route}`; });
     el.tabs.forEach(t => { t.setAttribute('aria-selected', String(t.dataset.tab === name)); t.tabIndex = t.dataset.tab === name ? 0 : -1; });
     el.panels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== name || (!deployed && name !== 'info')));
-    const hash = special?`#/${state.profileKey}/${route}`:`#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers', 'about'].includes(section) ? '/' + section : ''}`;
+    let hash = special?`#/${state.profileKey}/${route}`:`#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers', 'about'].includes(section) ? '/' + section : ''}`;
+    if(query&&['squeeks','explore'].includes(name))hash+='?'+query;
     // replaceState avoids hashchange loops, while tab clicks below create history entries.
     if (win.location.hash !== hash) win.history.replaceState(null, '', hash);
     if(special&&String(route).startsWith('squeek/')){try{rememberWatch(holderRoute(hash),state.watchOnly?activeWatchRoute:null);}catch{/* Invalid routes are reported below. */}}
     if (name === 'info' && section) $("info-" + section)?.scrollIntoView?.({ block: 'start' });
     $('holder-overview').hidden=special&&String(route).startsWith('squeek/');$('squeek-page').hidden=!$('holder-overview').hidden;
-    if(name==='network'&&state.adapter)void refreshNetworkExtras();
+    if(name==='squeeks'&&state.adapter){holdings.refresh();if(!query)void refreshNetworkExtras();}
+    if(name==='explore')void ensureExplore().then(e=>e.show()).catch(error=>recordSource('Explore','rpc',error.message));
     if(name==='activity')void ensureWorkspace().then(w=>w.history());
     if(special&&String(route).startsWith('squeek/')){try{const parsed=holderRoute(hash);void ensureWorkspace().then(w=>w.detail(parsed));}catch(error){routeError(error);}}else workspace?.detail(null);
   }
@@ -1282,12 +1282,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   let activeWatchRoute=null;
   // Session-history display scope only; never an account or transaction authority.
   function watchScope(route){if(route?.kind==='address')return route.address;if(route?.kind!=='squeek')return null;const saved=win.history.state?.holderWatch;if(saved?.profile===route.profile&&saved?.id===route.id)return saved.address==null?null:watchAddress(saved.address);return state.watchOnly?activeWatchRoute:null;}
-  function rememberWatch(route,address){if(route?.kind==='squeek')win.history.replaceState({holderWatch:{profile:route.profile,id:route.id,address}},'',win.location.hash);}
-  const onHashChange = async () => {try{const key=profileFromHash(win.location.hash),route=holderRoute(win.location.hash),watched=watchScope(route);let leftWatch=false;$('holder-route-error').classList.add('hidden');rememberWatch(route,watched);
-    if(watched){const changed=!state.watchOnly||state.inspected?.toLowerCase()!==watched.toLowerCase();state.watchOnly=true;activeWatchRoute=watched;state.inspected=watched;if(changed){resetLoad();state.net=state.status=state.plan=null;renderHolder(null);}}
+  function rememberWatch(route,address){if(route?.kind==='squeek')win.history.replaceState({...win.history.state,holderWatch:{profile:route.profile,id:route.id,address}},'',win.location.hash);}
+  const onHashChange = async () => {try{const key=profileFromHash(win.location.hash),route=holderRoute(win.location.hash),watched=watchScope(route);let leftWatch=false,watchChanged=false;$('holder-route-error').classList.add('hidden');rememberWatch(route,watched);
+    if(watched){const changed=!state.watchOnly||state.inspected?.toLowerCase()!==watched.toLowerCase();state.watchOnly=true;activeWatchRoute=watched;state.inspected=watched;if(changed){watchChanged=true;resetLoad();state.net=state.status=state.plan=null;renderHolder(null);}}
     else if(activeWatchRoute||state.watchOnly){leftWatch=true;activeWatchRoute=null;state.watchOnly=false;state.inspected=state.account;resetLoad();renderHolder(null);}
     if(key&&key!==state.profileKey)await switchProfile(key);else selectTab(currentRoute());
-    if(route?.kind==='address'||leftWatch)await refreshWallet();
+    if(route?.kind==='address'&&(watchChanged||!state.status)||leftWatch)await refreshWallet();
   }catch(error){routeError(error);}};
   win.addEventListener('hashchange', onHashChange);
   for (const tab of el.tabs) {
@@ -1358,7 +1358,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   $('btn-open-activity').onclick = () => openSheet('activity-drawer');
   $('btn-disconnect').onclick = () => {
     const p=provider();wallet.disconnect();void p?.request({method:'wallet_revokePermissions',params:[{eth_accounts:{}}]}).catch(()=>{});
-    $('account-activity').replaceChildren();closeWalletMenu();selectTab('network');el.connect.focus();
+    $('account-activity').replaceChildren();closeWalletMenu();selectTab('squeeks');el.connect.focus();
   };
   el.refresh.onclick = () => {void refreshTelemetry({reset:false});void displayFeeds(captureLoad());return viewTask(()=>refreshAll({force:true}));};
   el.cp.button.onclick = () => viewTask(requestCheckpoint);
@@ -1436,11 +1436,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     await settingsReady; if (!destroyed) openSheet('settings-sheet');
   }
   const images=createImages({cache:displayCache,fetcher,win});
-  async function loadHolderImage(token,load=captureLoad()){let item;try{item=await images.load({profile:getProfile(load.profileKey),token,api:displayApi(load)??state.adapter?.holderApi,fallback:()=>readFor(load,'art',token.tokenId),signal:load.signal});}catch(error){if(isCurrent(load)&&error.name==='RpcTrustError')clearDisplayMismatch(error);throw error;}assertCurrent(load);state.art.set(String(token.tokenId),item);return item;}
-  const canUseHolder=()=>Boolean(!watching()&&!state.busy&&!state.walletPromptPending&&state.account&&state.chainId===11155111);
+  async function loadHolderImage(token,load=captureLoad(),stage=0){let item;try{item=await images.load({profile:getProfile(load.profileKey),token,stage,api:displayApi(load)??state.adapter?.holderApi,fallback:()=>readFor(load,'art',token.tokenId),signal:load.signal});}catch(error){if(isCurrent(load)&&error.name==='RpcTrustError')clearDisplayMismatch(error);throw error;}assertCurrent(load);state.art.set(String(token.tokenId),item);return item;}
+  const canUseHolder=()=>Boolean(!watching()&&!state.busy&&!state.walletPromptPending&&!win.history.state?.exploreReadOnly&&state.account&&state.chainId===11155111);
   async function selectPlannerStep(step,load){try{assertCurrent(load);if(!canUseHolder())return;const fresh=await readFor(load,'walletStatus',state.account);assertCurrent(load);if(step.kind==='custody'){const token=fresh.squeeks.find(t=>String(t.tokenId)===step.tokenId);if(!token||Boolean(token.deposited)!==(step.action==='withdraw'))throw new Error('Pair changed');renderHolder(fresh,fresh.mergePlan);holdings.selectAction(step.action,[token.tokenId]);return;}const a=fresh.squeeks.find(t=>String(t.tokenId)===step.survivor),b=fresh.squeeks.find(t=>String(t.tokenId)===step.donor);if(!a||!b||a.level!==b.level||Boolean(a.deposited)!==Boolean(b.deposited))throw new Error('Pair changed');renderHolder(fresh,fresh.mergePlan);holdings.selectPair(a.tokenId,b.tokenId);if(a.deposited){$('v9-action').value='mergeDeposited';renderActionFields();}else{$('v9-action').value='merge';renderActionFields();}$('merge-selection').scrollIntoView?.({block:'center'});}catch(error){toast(errorMessage(error),'err');}}
-  async function ensureWorkspace(){workspaceReady??=import('./holder-workspace.js').then(({initHolderWorkspace})=>workspace=initHolderWorkspace({doc,win,state,captureLoad,isCurrent,read:readFor,getApi:load=>displayApi(load)??state.adapter?.holderApi,loadImage:loadHolderImage,canAct:canUseHolder,onPair:selectPlannerStep,onAction:async(action,id)=>{if(!canUseHolder())return;selectTab('squeeks');if(action==='claim')return viewTask(()=>requestClaim([id]));const load=captureLoad(),fresh=await readFor(load,'walletStatus',state.account);if(!fresh.squeeks.some(t=>String(t.tokenId)===id))return;renderHolder(fresh,fresh.mergePlan);holdings.selectAction(action,[id]);},onOverview:()=>{win.location.hash=`${state.profileKey}/squeeks`;selectTab('squeeks');},onError:error=>{if(error.name==='RpcTrustError')clearDisplayMismatch(error);},local:()=>activity.list(),quote:!adapterFactory?(load,owner)=>readFor(load,'claimPreview',owner):state.adapter?.holderClaimPreview?(load,owner)=>viewAwait(load,()=>load.adapter.holderClaimPreview(owner)):null}));return workspaceReady;}
-  const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();$('v9-review').focus();},loadImage:loadHolderImage});
+  let explore,exploreReady;
+  async function ensureExplore(){exploreReady??=import('./explore.js').then(({createExploreView})=>explore=createExploreView({doc,win,root:$('explore-content'),capture:captureLoad,current:isCurrent,readerOptions:load=>({profile:getProfile(load.profileKey),rpcUrl:store.get('wheelhouse:rpc')||undefined,signal:load.signal,chainCache,verificationCache}),loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),source:recordSource,onTrustError:clearDisplayMismatch}));return exploreReady;}
+  async function ensureWorkspace(){workspaceReady??=import('./holder-workspace.js').then(({initHolderWorkspace})=>workspace=initHolderWorkspace({doc,win,state,captureLoad,isCurrent,read:readFor,getApi:load=>displayApi(load)??state.adapter?.holderApi,loadImage:loadHolderImage,canAct:canUseHolder,getIndexedHistory:id=>win.history.state?.exploreReadOnly?explore?.history(id)??{unknown:true,rows:[]}:null,onPair:selectPlannerStep,onAction:async(action,id)=>{if(!canUseHolder())return;selectTab('squeeks');if(action==='claim')return viewTask(()=>requestClaim([id]));const load=captureLoad(),fresh=await readFor(load,'walletStatus',state.account);if(!fresh.squeeks.some(t=>String(t.tokenId)===id))return;renderHolder(fresh,fresh.mergePlan);holdings.selectAction(action,[id]);},onOverview:()=>{win.location.hash=`${state.profileKey}/squeeks`;selectTab('squeeks');},onError:error=>{if(error.name==='RpcTrustError')clearDisplayMismatch(error);},local:()=>activity.list(),quote:!adapterFactory?(load,owner)=>readFor(load,'claimPreview',owner):state.adapter?.holderClaimPreview?(load,owner)=>viewAwait(load,()=>load.adapter.holderClaimPreview(owner)):null}));return workspaceReady;}
+  const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();$('v9-review').focus();},loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),onPairs:()=>ensureWorkspace().then(w=>w.planner())});
   $('btn-planner').onclick=()=>ensureWorkspace().then(w=>w.planner());
   $('sqk-claim-host').append($('btn-claim'),$('claim-ids'),$('holder-rewards-notice'));
   // ── boot ──────────────────────────────────────────────────────────────────
@@ -1464,10 +1466,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     readEvents:adapterFactory?null:readWheelEvents,
     readBlocks:adapterFactory?null:async()=>displayApi(captureLoad()).blocks(),
     frontier:()=>({settled:state.net?.core?.settledThroughRound,processed:state.net?.mining?.processedThroughRound}),
-    onStatus:async(data,result)=>{recordSource("Wheel","api",result.stale?"Cached response; live request unavailable":null);void refreshNetworkExtras();workspace?.updatePace(result.stale?null:data);liveMeasurement=result.stale?null:data.measurement;renderProvisional();const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
+    onStatus:async(data,result)=>{void explore?.tick();recordSource("Wheel","api",result.stale?"Cached response; live request unavailable":null);void refreshNetworkExtras();workspace?.updatePace(result.stale?null:data);liveMeasurement=result.stale?null:data.measurement;renderProvisional();const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
     onFrontier:async()=>{const net=await refreshNetwork();if(!net||net.source?.stale)return false;await refreshAll();if(state.inspected&&!state.status)return false;if(provisionalResult)renderProvisional(provisionalResult);await displayFeeds(captureLoad());if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();return true;},
     onBlocks:renderProvisional,
-    onError:(error,scope)=>{if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;recordSource(scope==='status'?'Wheel':'Live wheel','api',error.message);if(error.name==='RpcTrustError'){if(state.net?.source?.kind!=='rpc'||state.net.verification?.trusted!==true)clearDisplayMismatch(error);recordSource(scope==='status'?'Wheel':'Live wheel','api',error.message);liveMeasurement=null;renderProvisional();clearWheelFeed();for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}else if(scope==='status'&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL&&errorIsTransient(error))$('wheel-note').textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;else if(scope==='status'){liveMeasurement=null;renderProvisional();for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}}
+    onError:(error,scope)=>{if(scope==='status')void explore?.tick();if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;recordSource(scope==='status'?'Wheel':'Live wheel','api',error.message);if(error.name==='RpcTrustError'){if(state.net?.source?.kind!=='rpc'||state.net.verification?.trusted!==true)clearDisplayMismatch(error);recordSource(scope==='status'?'Wheel':'Live wheel','api',error.message);liveMeasurement=null;renderProvisional();clearWheelFeed();for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}else if(scope==='status'&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL&&errorIsTransient(error))$('wheel-note').textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;else if(scope==='status'){liveMeasurement=null;renderProvisional();for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}}
   });
   if(adapterFactory)poller.start();else void poller.tick();void displayFeeds(captureLoad());
 
@@ -1496,7 +1498,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { workspace?.destroy();unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
+    destroy: () => { explore?.destroy();workspace?.destroy();unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
   };
 }
 

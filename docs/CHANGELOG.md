@@ -2,9 +2,9 @@
 
 History and review evidence live in the linked merged PRs. This list records durable changes, not per-run reports.
 
-## Unreleased — Network and Genesis
+## Unreleased — Squeek browsing and Explore
 
-Slimmed Network to wheel, chain and separate SQK supply/issuance/staking facts; moved checkpoint controls to Developers and event history to Activity. Added a lazy seven-day chart with explicit gaps, frozen v6 status and schema-v2 read-only Genesis inventory/wallet counts. Kept launch actions absent, mainnet reads disabled and exact API identity/fallback diagnostics in Developers. Existing wheel polling drives updates; no new polling timer.
+Replaced the Network dashboard with shared filterable cards, bounded lazy image loading and a read-only Explore index/leaderboard. Projections resume locally, replay reorgs and suppress aggregates on supply mismatch. Preserved fresh on-chain action checks, typed burn review and display-only Genesis. Network details and exact source diagnostics remain in Developers.
 
 ## [PR #4 — Holder workspace and wallet flows](https://github.com/CryptoExplor/Squeekchain-console/pull/4)
 

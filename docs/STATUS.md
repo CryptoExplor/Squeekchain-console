@@ -14,7 +14,7 @@ Keys are `sepolia-v6`, `sepolia-v9` and `mainnet`. v9 is the default; saved choi
 
 Connected pending reads show Loading; failed reads show Unavailable with Retry without reconnecting. A real empty portfolio is distinct from missing data. Account/profile generations reject late reads and simulations. Invalid links recover to owner mode on normal navigation; watched detail scope survives profile changes/reload. Account history excludes ownerless local records and clears pagination on disconnect.
 
-Network has a compact wheel/chain/SQK summary, a lazy seven-day settlements chart and read-only Genesis phase/inventory/connected-wallet counts. Missing values and chart gaps stay Unknown. v6 shows its frozen round and cached supply; no authoritative holder count is cached. Mainnet performs no deployment reads. Checkpoint controls are in Info › Developers; Live wheel history is in Activity.
+Shared 144px cards have filters, Grid/Table and 40-card pages. Lazy Explore projects official logs locally, checks live count against same-block supply and hides incomplete totals. It includes a 30-wallet leaderboard and 48-hour merges. v6 uses a pins-scoped frozen cache. Index/API data never authorize actions. The Squeeks strip links official Status; Genesis is display-only. Qualification is reported in draft PR #6.
 
 ## Safety and limits
 

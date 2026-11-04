@@ -24,9 +24,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
       await expect(page.getByTestId('holder-count')).toHaveText('3');
       await expect(page.getByTestId('squeek-cards')).toContainText('Unknown');
       if (width === 390) {
-        const cells = await page.getByTestId('squeek-cards').locator('article').first().locator('dd').evaluateAll(nodes => nodes.map(node => ({ label: node.dataset.label, left: node.getBoundingClientRect().left, right: node.getBoundingClientRect().right, display: getComputedStyle(node).display })));
-        expect(cells).toHaveLength(4);
-        for (const cell of cells) { expect(cell.left).toBeGreaterThanOrEqual(0); expect(cell.right).toBeLessThanOrEqual(width); expect(cell.display).toBe('block'); }
+        const box=await page.locator('#squeek-cards article').first().boundingBox();expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);await expect(page.locator('#squeek-cards article img').first()).toHaveAttribute('width','144');
       }
     }
     if (view === 'info') {
@@ -57,7 +55,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
       await expect(page.getByTestId('btn-menu-connect')).toBeHidden();
       await expect(page.getByTestId('verified-chip')).toHaveText('Not deployed');
     }
-    await expect(page.locator('.hero, .page-intro, .network-strip, .action-grid, .eyebrow')).toHaveCount(0);
+    await expect(page.locator('.hero, .page-intro, .action-grid, .eyebrow')).toHaveCount(0);
     await expect(page.getByTestId('activity-drawer')).toBeHidden();
     await expect(page.getByTestId('capability-grid'))[['info','mainnet'].includes(view) ? 'toBeVisible' : 'toBeHidden']();
     await expect(page.getByRole('contentinfo')).toContainText('Independent community console · not affiliated with Squeekchain · Sepolia only · not investment advice');
@@ -131,8 +129,8 @@ for (const width of [900, 1024]) test(`header: single desktop row at ${width}px,
 
 test('structure: hash navigation, Trust shortcut, Info and watch address', async ({ page }) => {
   await installReviewFixture(page);
-  await expect(page).toHaveURL(/#sepolia-v6\/network$/);
-  await page.getByTestId('network-how-link').click();
+  await expect(page).toHaveURL(/#sepolia-v6\/squeeks$/);
+  await page.getByTestId('tab-info').click();await page.getByTestId('info-link-how-it-works').click();
   await expect(page).toHaveURL(/#sepolia-v6\/info\/how-it-works$/);
   await page.getByTestId('tab-info').click();
   await expect(page).toHaveURL(/#sepolia-v6\/info$/);
@@ -207,7 +205,7 @@ test('structure: wallet menu copy, pending dot, Activity drawer and confirmed cl
   await expect(page.getByTestId('settings-sheet')).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByTestId('wallet-button').click(); await page.getByTestId('btn-disconnect').click();
-  await expect(page).toHaveURL(/#sepolia-v6\/network$/);
+  await expect(page).toHaveURL(/#sepolia-v6\/squeeks$/);
   await expect(page.getByTestId('wallet-chip')).toHaveCount(0);
   await page.evaluate(() => window.squeek.destroy());
 });
