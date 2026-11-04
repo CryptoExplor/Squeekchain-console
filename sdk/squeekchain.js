@@ -297,8 +297,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
     if (!from) return { ok: false, checkpoint, reason: "Supply a caller address to simulate checkpoint" };
     await client.simulateContract({ address: addr.mining, abi: miningAbi, functionName: "checkpoint", account: getAddress(from), blockNumber: activeSnapshot.blockNumber });
     const tx = buildCheckpoint();
-    const gas = await client.estimateGas({ ...tx, value: 0n, account: getAddress(from), blockNumber: activeSnapshot.blockNumber });
-    return { ok: true, checkpoint, tx, gas: String(gas) };
+    return { ok: true, checkpoint, tx };
   }
 
   async function claimPreview(owner, tokenIds) {
@@ -316,8 +315,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
       const estimate = await read("mining", miningAbi, "claimable", [COLLECTION, slice]);
       const { result } = await client.simulateContract({ address: addr.mining, abi: miningAbi, functionName: "claim", args: [COLLECTION, slice], account: address, blockNumber: activeSnapshot.blockNumber });
       const built = buildClaim(slice);
-      const gas = await client.estimateGas({ ...built.tx, value: 0n, account: address, blockNumber: activeSnapshot.blockNumber });
-      batches.push({ ...built, amount: sqkAmount(result), estimate: sqkAmount(estimate), gas: String(gas), error: null });
+      batches.push({ ...built, amount: sqkAmount(result), estimate: sqkAmount(estimate), error: null });
     }
     return { ok: true, batches, total: sqkAmount(batches.reduce((sum, batch) => sum + BigInt(batch.amount.base), 0n)) };
   }
@@ -386,8 +384,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
     if (positions.some(p => BigInt(p.nextMergeBlock) > BigInt(core.blockHeight))) throw new Error("Merge cooldown active (completed Squeek blocks)");
     await client.simulateContract({ address: addr.mining, abi: miningAbi, functionName: "merge", args: [0, ...ids], account: address, blockNumber: activeSnapshot.blockNumber });
     const built = buildMerge(survivorId, donorId);
-    const gas = await client.estimateGas({ ...built.tx, value: 0n, account: address, blockNumber: activeSnapshot.blockNumber });
-    return { ok: true, ...built, nextLevel: positions[0].level + 1, gas: String(gas), warning: `Squeek #${donorId} is burned forever; #${survivorId} survives` };
+    return { ok: true, ...built, nextLevel: positions[0].level + 1, warning: `Squeek #${donorId} is burned forever; #${survivorId} survives` };
   }
 
   async function art(tokenId) {

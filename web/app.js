@@ -635,6 +635,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       // A profile switch cannot cancel this wallet popup or an already-broadcast transaction.
       if(ticket.cancelled)throw Object.assign(new Error('Wallet request cancelled'),{walletOutcome:true});
       ticket.rpcPending=true;
+      // The wallet sets network gas and fees; never forward preview fee/gas overrides.
       const response=Promise.resolve().then(()=>p.request({method:'eth_sendTransaction',params:[{from:owner,to:tx.to,data:tx.data,value:`0x${BigInt(tx.value??0).toString(16)}` }]})).then(result=>{
         activity.record(result,label,CHAIN.id,load.profileKey,owner);void activity.refresh();
         if(ticket.cancelled||!isCurrent(load))void followLateHash(result,load.profileKey,owner);
@@ -904,7 +905,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     const result = await sendTransaction(preview.tx, "Checkpoint", owner, load);
     await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});
-    return { ok: true, ...result, gas: preview.gas };
+    return { ok: true, ...result };
   }
 
   const recipientOf=(preview,owner)=>String(preview.recipient??owner).toLowerCase();
@@ -969,7 +970,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!isCurrent(load) || owner?.toLowerCase() !== (state.account ?? state.inspected)?.toLowerCase()) throw new Error("Wallet or profile changed. Start again.");
     const preview = await readFor(load, "mergePreview", owner, pair.survivor, pair.donor, { confirm });
     if (!preview.ok) return preview;
-    const sign = await confirmModal({ title: "Review simulated merge", body: `${preview.warning}. Result: level ${preview.nextLevel}. Simulated gas ≈ ${preview.gas}. Keep #${pair.survivor}; permanently burn #${pair.donor}.`, confirmLabel: "Review in wallet" });
+    const sign = await confirmModal({ title: "Review simulated merge", body: `${preview.warning}. Result: level ${preview.nextLevel}. Keep #${pair.survivor}; permanently burn #${pair.donor}.`, confirmLabel: "Review in wallet" });
     if (!sign) return { ok: false, reason: "cancelled" };
     if (!isCurrent(load) || owner?.toLowerCase() !== state.account?.toLowerCase()) throw new Error("Connect the owner wallet and start again.");
     // Fresh verification, ownership, eligibility and simulation after human review.
@@ -1020,7 +1021,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const body=mergeLabel?`${mergeLabel}. #${input.donor} is BURNED permanently and cannot be restored. #${input.survivor} survives at level ${preview.nextLevel}.`:action==='unstake'?'The quoted exit fee is burned.':`${actionNames[action]??'Review action'}. ${preview.amount?.sqk?'Rewards: '+preview.amount.sqk+' SQK.':''}`;
     const amountText=preview.amount?.sqk!=null?`${preview.amount.sqk} SQK`:typeof preview.amount==='string'?`${formatEther(BigInt(preview.amount))} SQK`:null;
     const scopeText=preview.scope==='collection'?'ALL current and future Squeeks':preview.scope==='token'?`Only Squeek #${preview.tokenId??input.tokenId}`:preview.scope;
-    const details=action==='unstake'?[['Amount',`${formatEther(BigInt(preview.amount))} SQK`],['Maximum fee',`${preview.fee.sqk} SQK`],['You receive',`${preview.net.sqk} SQK`],['Deadline',new Date(Number(preview.deadline)*1000).toLocaleString(undefined,{timeZoneName:'short'})],['Gas estimate',preview.gas]]:[['Spender',preview.spender],['Amount',amountText],['Scope',scopeText],['Squeeks',preview.tokenIds?.map(id=>`#${id}`).join(', ')],['Contract',preview.tx?.to],['Gas estimate',preview.gas],...recipientDetails(preview,owner)].filter(([,value])=>value!=null);
+    const details=action==='unstake'?[['Amount',`${formatEther(BigInt(preview.amount))} SQK`],['Maximum fee',`${preview.fee.sqk} SQK`],['You receive',`${preview.net.sqk} SQK`],['Deadline',new Date(Number(preview.deadline)*1000).toLocaleString(undefined,{timeZoneName:'short'})]]:[['Spender',preview.spender],['Amount',amountText],['Scope',scopeText],['Squeeks',preview.tokenIds?.map(id=>`#${id}`).join(', ')],['Contract',preview.tx?.to],...recipientDetails(preview,owner)].filter(([,value])=>value!=null);
     if (!await confirmModal({title:mergeLabel??(action==='unstake'?'Review unstake fee':`Review ${actionNames[action]??'action'}`),body:body+(preview.warning?` ${preview.warning}`:''),details,confirmLabel:'Review in wallet'})) return {ok:false,reason:'cancelled'};
     assertCurrent(load);
     if (state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error('Wallet changed');

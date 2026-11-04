@@ -143,8 +143,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
   async function simulate(owner, contract, abi, functionName, args, details={}) {
     const simulation = await client.simulateContract({address:addr[contract],abi,functionName,args,account:owner,blockNumber:activeSnapshot.blockNumber});
     const tx={to:addr[contract],data:encodeFunctionData({abi,functionName,args}),value:'0',chainId:11155111};
-    const gas=await client.estimateGas({...tx,value:0n,account:owner,blockNumber:activeSnapshot.blockNumber});
-    return {ok:true,action:functionName,tx,gas:String(gas),...details,simulatedResult:simulation.result == null ? null : String(simulation.result)};
+    return {ok:true,action:functionName,tx,...details,simulatedResult:simulation.result == null ? null : String(simulation.result)};
   }
   async function actionPreview(owner, action, input={}) {
     owner=getAddress(owner.toLowerCase());
@@ -214,7 +213,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
     const result=await actionPreview(owner,'claim');
     if(!result.ok) return result;
     const amount=sqkAmount(BigInt(result.simulatedResult));
-    return {...result,total:amount,batches:[{tx:result.tx,gas:result.gas,tokenIds:[],amount}]};
+    return {...result,total:amount,batches:[{tx:result.tx,tokenIds:[],amount}]};
   }
   async function art(tokenId) { return {tokenId:String(tokenId),...parseSqueekMetadata(await read('nft',nft9Abi,'tokenURI',[positive(tokenId)]))}; }
   return { profile,addresses:addr,client,invalidateChain:context.invalidateChain,rpcDiagnostics:()=>context.rpcDiagnostics?.()??[],

@@ -13,6 +13,8 @@ import { DEFAULT_PROFILE, PROFILES } from '../sdk/deployments.js';
 import { TOOL_SPECS } from '../sdk/tools.js';
 import { parseSqueekMetadata } from '../sdk/metadata.js';
 
+function assertGasFree(value){if(value&&typeof value==='object')for(const[key,item]of Object.entries(value)){assert.ok(!['gas','gasPrice','maxFeePerGas','maxPriorityFeePerGas'].includes(key),'Gas field in preview: '+key);assertGasFree(item);}}
+
 const owner = '0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54';
 const other = '0x0000000000000000000000000000000000000001';
 const hash = `0x${'ab'.repeat(32)}`, wrongHash = `0x${'cd'.repeat(32)}`;
@@ -74,7 +76,7 @@ function fakeClient({ alter = (_request, value) => value } = {}) {
       throw new Error(`Unmocked ${fn}`);
     }),
     simulateContract: tracked('simulateContract', () => ({ result: 10n ** 18n })),
-    estimateGas: tracked('estimateGas', () => 100000n),
+    estimateGas: tracked('estimateGas', () => {throw new Error('Gas estimation is forbidden');}),
     getContractEvents: tracked('getContractEvents', request => {
       assert.equal(request.toBlock, blockNumber);
       return request.args.from ? [] : [1n, 2n].map((tokenId, logIndex) => ({ blockNumber, logIndex, args: { tokenId, from: other, to: owner } }));
@@ -167,14 +169,14 @@ assert.equal((await sdk.walletStatus(owner)).totals.count, 2);const detail=await
 assert.match((await sdk.art('1')).artworkIntegrity, /Unknown/);
 const many = await sdk.claimPreview(owner, Array.from({ length: 33 }, (_, i) => String(i + 1)));
 assert.deepEqual(many.batches.map(batch => batch.tokenIds.length), [32, 1]);
-assert.ok(checks >= 5);
+assert.ok(checks >= 5);assertGasFree(claim);assertGasFree(many);assert.equal(client.requests.some(r=>r.name==='estimateGas'),false);assert.equal(client.requests.filter(r=>r.name==='simulateContract').length,5);
 const failedSimulation = fakeClient({ alter: (request, value) => { if (request.name === 'simulateContract') throw new Error('Fixture revert'); return value; } });
 const failedSdk = createFixtureSdk({ rpcContext: { client: failedSimulation, snapshot: async () => snapshot, check: async () => {} } });
 await assert.rejects(failedSdk.claimPreview(owner, ['1']), /Fixture revert/);
 assert.ok(!failedSimulation.requests.some(request => request.name === 'estimateGas'));
 const finalMismatch = createFixtureSdk({ rpcContext: { client: fakeClient(), snapshot: async () => snapshot, check: async () => { throw new RpcTrustError('Reorg mismatch'); } } });
 await assert.rejects(finalMismatch.claimPreview(owner, ['1']), /Reorg mismatch/);
-console.log('PASS SDK: pinned read/storage/code/multicall/simulation/gas/balance, sorted batches, actual payout, ownership, merge, checkpoint, art, reverts and final hash guard');
+console.log('PASS SDK: pinned read/storage/code/multicall/simulation/balance (no gas estimation), sorted batches, actual payout, ownership, merge, checkpoint, art, reverts and final hash guard');
 
 for (const file of ['src/cli.js', 'src/actions.js', 'src/chain.js', 'src/config.js', 'mcp/server.js', 'web/app.js']) {
   const source = fs.readFileSync(file, 'utf8');
@@ -235,7 +237,8 @@ async function callWire(address, data, at) {
   }
   const abi = abiFor(address);
   const { functionName, args = [] } = decodeFunctionData({ abi, data });
-  const result = await wireClient.readContract({ address, abi, functionName, args, blockNumber: at });
+  const mutable=abi.find(item=>item.type==='function'&&item.name===functionName).stateMutability;
+  const result = ['nonpayable','payable'].includes(mutable)?(await wireClient.simulateContract({address,abi,functionName,args,blockNumber:at})).result:await wireClient.readContract({ address, abi, functionName, args, blockNumber: at });
   const outputs = abi.find(item => item.type === 'function' && item.name === functionName).outputs;
   const values = outputs.map((output, index) => fill(output, outputs.length === 1 ? result : result[index]));
   return encodeFunctionResult({ abi, functionName, result: outputs.length === 1 ? values[0] : values });
@@ -251,7 +254,8 @@ globalThis.fetch = async (_url, init) => {
   else if (method === 'eth_getStorageAt') result = await wireClient.getStorageAt({ address: params[0], slot: params[1], blockNumber: BigInt(params[2]) });
   else if (method === 'eth_getCode') result = await wireClient.getCode({ address: params[0], blockNumber: BigInt(params[1]) });
   else if (method === 'eth_getBalance') result = toHex(10n ** 18n);
-  else if (method === 'eth_call') result = await callWire(params[0].to, params[0].data, BigInt(params[1]));
+  else if(method==='eth_estimateGas')throw new Error('Unexpected eth_estimateGas');
+  else if (method === 'eth_call') {assert.equal(params[1],toHex(blockNumber));result = await callWire(params[0].to, params[0].data, BigInt(params[1]));}
   else if (method === 'eth_getLogs') {
     result = params[0].topics[2] ? [1n, 2n].map((id, index) => ({
       address: DEPLOYMENT.nft, blockNumber: toHex(blockNumber), blockHash: hash,
@@ -289,6 +293,9 @@ try {
   console.log(`PASS actual wire budget: cold network ${cold}; warm network ${warmCount}; wallet ${wire.length} requests; art batch one eth_call`);
   // Feature-isolated SDK fallback: cold detail + art; warm detail reuses cached art.
   const pageSdk=createFixtureSdk({rpcContext:createRpcContext()});wire.length=0;await pageSdk.squeekStatus('1');await pageSdk.art('1');const pageCold=wire.length;wire.length=0;await pageSdk.squeekStatus('1');const pageWarm=wire.length;assert.ok(pageWarm<=25);fs.writeFileSync('docs/audit/v6-squeek-page-budget.json',JSON.stringify({profile:'sepolia-v6',scope:'Synthetic actual-HTTP SDK detail+art cold; detail-only with cached art warm. Excludes app shell.',cold:pageCold,warm:pageWarm},null,2)+'\n');console.log(`PASS v6 Squeek page SDK HTTP: cold ${pageCold}, warm ${pageWarm}`);
+  const actions=[['checkpoint',()=>wireSdk.checkpointPreview(owner)],['claim-32',()=>wireSdk.claimPreview(owner,Array.from({length:32},(_,i)=>String(i+1)))],['claim-33',()=>wireSdk.claimPreview(owner,Array.from({length:33},(_,i)=>String(i+1)))],['merge',()=>wireSdk.mergePreview(owner,'1','2',{confirm:'BURN-2'})]],actionCounts=[];
+  for(const[action,preview]of actions){wire.length=0;const simulationsBefore=wireClient.requests.filter(r=>r.name==='simulateContract').length;const result=await preview();assert.equal(result.ok,true,action);assertGasFree(result);assert.equal(wireClient.requests.filter(r=>r.name==='simulateContract').length-simulationsBefore,result.batches?.length??1,action+' keeps snapshot simulation');const requests=wire.flat();assert.equal(requests.some(r=>r.method==='eth_estimateGas'),false);assert.equal(result.batches?.length??1,action==='claim-33'?2:1);actionCounts.push({action,httpRequests:wire.length,estimateGasRequests:requests.filter(r=>r.method==='eth_estimateGas').length,simulations:result.batches?.length??1});}
+  fs.writeFileSync('docs/audit/gas-cleanup-v6-requests.json',JSON.stringify(actionCounts,null,2)+'\n');console.log('PASS v6 action previews: every snapshot simulation retained; no eth_estimateGas or gas fields');
   const wireFetch = globalThis.fetch, contacted = [];
   globalThis.fetch = async (url, init) => {
     contacted.push(url);

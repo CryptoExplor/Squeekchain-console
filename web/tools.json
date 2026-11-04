@@ -136,7 +136,7 @@
     },
     {
       "name": "squeek_checkpoint_preview",
-      "description": "Whether checkpoint() can advance now (corePaused / roundSettled), with the reason when it cannot, the unsigned transaction and a gas estimate. checkpoint() is permissionless: no Squeek needed, no caller reward.",
+      "description": "Whether checkpoint() can advance now (corePaused / roundSettled), with the reason when it cannot, the unsigned transaction after simulation. checkpoint() is permissionless: no Squeek needed, no caller reward.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -224,7 +224,7 @@
     },
     {
       "name": "squeek_merge_preview",
-      "description": "Simulate one merge for a survivor/donor pair: gas estimate, resulting level, and an explicit irreversibility warning. Signs nothing.",
+      "description": "Simulate one merge for a survivor/donor pair: resulting level and an explicit irreversibility warning. Signs nothing.",
       "inputSchema": {
         "type": "object",
         "properties": {
