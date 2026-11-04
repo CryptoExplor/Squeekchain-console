@@ -1,12 +1,12 @@
 import {test,expect} from '@playwright/test';
 const owner='0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54',other='0x1111111111111111111111111111111111111111';
-async function boot({multiple=false,hold=false,disconnected=false}={}){
+async function boot({multiple=false,hold=false,disconnected=false,profile='sepolia-v6',fail=false,empty=false,holdProfiles=false}={}){
  const {mount}=await import('/app.js');
  if(disconnected)localStorage.setItem('wheelhouse:disconnected','true');
- localStorage.setItem('squeekchain:profile','sepolia-v6');history.replaceState(null,'','#sepolia-v6/squeeks');
+ localStorage.setItem('squeekchain:profile',profile);history.replaceState(null,'',`#${profile}/squeeks`);
  const owner='0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54',verification={ok:true,trusted:true,blockNumber:'100'};
  const net={core:{settledThroughRound:'10',blockHeight:'100',paused:false},mining:{lagRounds:'0',minted:{sqk:'1'}},nft:{totalSupply:'3'},checkpoint:{canCheckpoint:true},verification};
- const h=window.sessions={calls:[],loads:[],reads:[],hold,verification};
+ const h=window.sessions={calls:[],loads:[],reads:[],hold,fail,empty,holdProfiles,verification};
  function provider(name){const handlers=new Map();return {info:{rdns:'test.'+name,name},
  request:async({method})=>{h.calls.push({name,method});if(method==='eth_accounts'||method==='eth_requestAccounts')return (localStorage.getItem('mock-wallet-account')??owner)?[localStorage.getItem('mock-wallet-account')??owner]:[];if(method==='eth_chainId')return '0xaa36a7';if(method==='eth_getBalance')return '0x1bc16d674ec8000';throw new Error('No signing');},
  on(type,fn){if(!handlers.has(type))handlers.set(type,new Set());handlers.get(type).add(fn);},removeListener(type,fn){handlers.get(type)?.delete(fn);},
@@ -16,10 +16,10 @@ async function boot({multiple=false,hold=false,disconnected=false}={}){
  if(multiple)addEventListener('eip6963:requestProvider',h.announce);
  h.change=account=>{localStorage.setItem('mock-wallet-account',account);squeek.wallet.provider().emit('accountsChanged',account?[account]:[]);};
  const native=document.getElementById.bind(document);document.getElementById=id=>{const element=native(id);if(!element)throw new Error('Missing runtime app element #'+id);return element;};
- window.squeek=mount({profileBalanceReader:async()=>({'sepolia-v6':{wallet:'0',staked:'0',nftPower:'0'},'sepolia-v9':{wallet:'0',staked:'0',nftPower:'0'}}),
+ window.squeek=mount({profileBalanceReader:async()=>{if(h.holdProfiles)await new Promise(resolve=>h.releaseProfiles=()=>{h.holdProfiles=false;resolve();});return {'sepolia-v6':{wallet:'0',staked:'0',nftPower:'0'},'sepolia-v9':{wallet:'0',staked:'0',nftPower:'0'}};},
  adapterFactory:(key,load)=>{h.loads.push({key,...load});return {
  networkStatus:async()=>({...net,verification:h.verification}),verify:async()=>h.verification,
- walletStatus:async account=>{const value={owner:account,net,verification,totals:{count:2,claimable:{sqk:'0'}},mergePlan:{pairs:[]},squeeks:[{tokenId:'41',level:1},{tokenId:'42',level:1}]};if(h.hold&&account===owner)return new Promise(resolve=>h.reads.push({account,...load,resolve:()=>resolve(value)}));return value;},art:async()=>({image:'data:image/svg+xml;base64,PHN2Zy8+'})};},
+ walletStatus:async account=>{if(h.fail)throw new Error('Fixture holdings unavailable');const value={owner:account,net,verification,totals:{count:2,claimable:{sqk:'0'}},mergePlan:{pairs:[]},squeeks:[{tokenId:'41',level:1},{tokenId:'42',level:1}]};if(h.empty){value.totals.count=0;value.totals.claimable={base:'0',sqk:'0'};value.squeeks=[];}if(h.hold&&account===owner)return new Promise(resolve=>h.reads.push({account,...load,resolve:()=>resolve(value)}));return value;},art:async()=>({image:'data:image/svg+xml;base64,PHN2Zy8+'})};},
  fetcher:async()=>{throw new Error('No external reads');},activityReader:async()=>{throw new Error('No receipt reads');}});
 }
 async function install(page,options){await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());await page.addInitScript(()=>window.__squeekMounted=true);await page.goto('/');await page.evaluate(boot,options);}
@@ -48,4 +48,25 @@ test('profile switch keeps wallet, aborts old reads, clears profile data and rel
  await install(page);await expect(page.getByTestId('holder-count')).toHaveText('2');await page.evaluate(()=>{sessions.hold=true;squeek.state.plan={pairs:[{survivor:'old'}]};void squeek.refresh();squeek.activity.record('0x'+'ab'.repeat(32),'Pending fixture',11155111,'sepolia-v6');});await page.waitForFunction(()=>sessions.reads.length===1);
  await page.evaluate(()=>{window.switching=squeek.switchProfile('sepolia-v9');});expect(await page.evaluate(()=>({account:squeek.state.account,status:squeek.state.status,net:squeek.state.net,plan:squeek.state.plan,aborted:sessions.reads[0].signal.aborted,generation:sessions.loads.at(-1).generation>sessions.reads[0].generation}))).toEqual({account:owner,status:null,net:null,plan:null,aborted:true,generation:true});
  await page.evaluate(()=>{sessions.hold=false;sessions.reads[0].resolve();sessions.reads[1].resolve();});await page.evaluate(()=>switching);await expect(page.getByTestId('holder-owner')).toHaveAttribute('title',owner);expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);await page.evaluate(()=>squeek.destroy());
+});
+
+for(const profile of ['sepolia-v6','sepolia-v9']){
+ test(`connected wallet with pending holdings never asks to connect ${profile}`,async({page})=>{
+  await install(page,{profile,hold:true});await expect(page.getByTestId('wallet-button')).toContainText('0x5989');await expect.poll(()=>page.evaluate(()=>sessions.reads.length)).toBe(1);await expect(page.getByTestId('holder-empty')).toContainText('Loading Squeeks and SQK…',{timeout:1500});await expect(page.locator('#holder-connect')).toBeHidden();await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('holder-count')).toHaveText('Unknown');await page.evaluate(()=>{sessions.hold=false;sessions.reads[0].resolve();});await expect(page.getByTestId('holder-count')).toHaveText('2');await expect(page.getByTestId('holder-empty')).toBeHidden();expect(await page.evaluate(()=>sessions.calls.some(c=>c.method==='eth_requestAccounts'))).toBe(false);await page.evaluate(()=>squeek.destroy());
+ });
+ test(`connected failed holdings can retry without reconnecting ${profile}`,async({page})=>{
+  await install(page,{profile,fail:true});await expect(page.getByTestId('wallet-button')).toContainText('0x5989');await expect(page.getByTestId('holder-empty')).toContainText('Squeeks and SQK unavailable.');await expect(page.locator('#holder-connect')).toBeHidden();await expect(page.getByTestId('holder-retry')).toBeEnabled();await expect(page.getByTestId('holder-count')).toHaveText('Unknown');await expect(page.getByTestId('btn-claim')).toBeDisabled();expect(await page.evaluate(()=>squeek.state.status)).toBeNull();for(const width of [390,750,1280]){await page.setViewportSize({width,height:960});await page.evaluate(()=>document.fonts.ready);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`artifacts/holder-connected-${profile}-unavailable-${width}.png`,fullPage:true});}await page.evaluate(()=>sessions.fail=false);await page.getByTestId('holder-retry').click();await expect(page.getByTestId('holder-count')).toHaveText('2');await expect(page.getByTestId('holder-empty')).toBeHidden();expect(await page.evaluate(()=>sessions.calls.some(c=>c.method==='eth_requestAccounts'))).toBe(false);await page.evaluate(()=>sessions.change(''));await expect(page.locator('#holder-connect')).toBeVisible();await expect(page.getByTestId('holder-empty')).toContainText('Connect your wallet to see your Squeeks and SQK.');await page.evaluate(()=>squeek.destroy());
+ });
+ test(`connected wallet remains loading during profile discovery ${profile}`,async({page})=>{
+  await install(page,{profile,holdProfiles:true});await expect(page.getByTestId('wallet-button')).toContainText('0x5989');await page.waitForFunction(()=>typeof sessions.releaseProfiles==='function');await expect(page.locator('#holder-connect')).toBeHidden();await expect(page.getByTestId('holder-empty')).toContainText('Loading Squeeks and SQK…');await page.evaluate(()=>sessions.releaseProfiles());await expect(page.getByTestId('holder-count')).toHaveText('2');await page.evaluate(()=>squeek.destroy());
+ });
+ test(`connected empty wallet is an empty portfolio, not disconnected ${profile}`,async({page})=>{
+  await install(page,{profile,empty:true});await expect(page.getByTestId('holder-count')).toHaveText('0');await expect(page.getByTestId('holder-empty')).toBeHidden();await expect(page.locator('#holder-connect')).toBeHidden();await expect(page.getByTestId('nft-empty')).toBeVisible();await page.evaluate(()=>squeek.destroy());
+ });
+}
+test('watch-only failed holdings retry without asking for a wallet',async({page})=>{
+ await install(page,{disconnected:true,fail:true});await page.getByTestId('watch-input').fill(owner);await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeVisible();await expect(page.locator('#holder-connect')).toBeHidden();await expect(page.getByTestId('holder-empty')).toContainText('Squeeks and SQK unavailable.');await page.evaluate(()=>sessions.fail=false);await page.getByTestId('holder-retry').click();await expect(page.getByTestId('holder-count')).toHaveText('2');await expect(page.getByTestId('btn-claim')).toBeDisabled();expect(await page.evaluate(()=>squeek.state.account)).toBeNull();expect(await page.evaluate(()=>sessions.calls.some(c=>c.method==='eth_requestAccounts'))).toBe(false);await page.evaluate(()=>squeek.destroy());
+});
+test('wrong-chain wallet asks for Sepolia, not another connection',async({page})=>{
+ await install(page);await expect(page.getByTestId('holder-count')).toHaveText('2');await page.evaluate(()=>squeek.wallet.provider().emit('chainChanged','0x1'));await expect(page.getByTestId('holder-empty')).toContainText('Switch to Sepolia to see your Squeeks and SQK.');await expect(page.locator('#holder-connect')).toBeHidden();await expect(page.getByTestId('holder-retry')).toBeHidden();await expect(page.getByTestId('btn-claim')).toBeDisabled();await page.evaluate(()=>squeek.wallet.provider().emit('chainChanged','0xaa36a7'));await expect(page.getByTestId('holder-count')).toHaveText('2');await page.evaluate(()=>squeek.destroy());
 });

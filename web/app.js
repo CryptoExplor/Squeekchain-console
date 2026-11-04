@@ -132,6 +132,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     watchOnly: false,
     claimQuote: null,
     status: null,
+    holderReadState: 'idle',
     plan: null,
     art: new Map(),
     get walletPromptPending(){return outstandingPrompts.has(wallet.provider());},
@@ -244,7 +245,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const verification=method==='verify'?value:value?.verification;if(verification)renderVerification(verification);
     return value;
   });
-  function resetLoad(){workspace?.clear();state.claimQuote=null;verifiedForGeneration=null;loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
+  function resetLoad(){state.holderReadState='idle';workspace?.clear();state.claimQuote=null;verifiedForGeneration=null;loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
   const displayCache=createDisplayCache(win.indexedDB),lastGood=new Map();let apiScope;
   function displayApi(load){if(adapterFactory||load.profileKey!=='sepolia-v9')return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
   function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000)),text=`${source.kind==='api'?'API · 12 blocks behind':'RPC display snapshot'}${age?` · as of ${age} min`:''}`;for(const node of doc.querySelectorAll('.stat'))node.title=text;$('display-age').textContent=age?`as of ${age} min`:'';}
@@ -288,7 +289,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
   }
   function clearWheelFeed(){wheelEvents=[];wheelSettlements=[];feedLimit=5;renderWheelFeed();for(const id of ['account-activity','provisional-blocks'])$(id).replaceChildren();$('provisional-blocks').classList.add('hidden');}
-  function clearDisplayMismatch(error){wheelGoodAt=0;lastGood.clear();state.net=null;renderNetworkPlaceholder();renderHolder(null);for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';clearWheelFeed();showReadFailure(error,'API identity');}
+  function clearDisplayMismatch(error){wheelGoodAt=0;lastGood.clear();state.net=null;state.holderReadState='unavailable';renderNetworkPlaceholder();renderHolder(null);for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';clearWheelFeed();showReadFailure(error,'API identity');}
 
   let destroyed = false;
   const telemetry = createTelemetry({ fetcher });
@@ -380,7 +381,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     state.adapter = null;
     if(!watching())state.inspected=state.account;
     state.net = state.status = state.plan = null;
-    state.lastReadFailure=null;
+    state.lastReadFailure=null;state.holderReadState='idle';
 
     state.receipts = [];
     wheelGoodAt=0;clearWheelFeed();
@@ -729,6 +730,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('watch-chip').title=viewing?state.inspected:'';
     el.holder.watchRow.classList.remove('hidden');
   }
+  function renderHolderPlaceholder() {
+    // A missing holdings snapshot is not a disconnected wallet.
+    const disconnected=!state.account&&!state.inspected&&!state.watchOnly;
+    const wrongChain=Boolean(state.account&&!watching()&&state.chainId!==11155111);
+    const failed=state.holderReadState==='unavailable';
+    $('holder-empty-message').textContent=disconnected?'Connect your wallet to see your Squeeks and SQK.':wrongChain?'Switch to Sepolia to see your Squeeks and SQK.':failed?'Squeeks and SQK unavailable.':'Loading Squeeks and SQK…';
+    $('holder-connect').classList.toggle('hidden',!disconnected);
+    $('holder-retry').classList.toggle('hidden',disconnected||wrongChain||!failed);
+    $('holder-retry').disabled=disconnected||wrongChain||!failed;
+  }
   function renderHolder(status, plan = null) {
     renderWatchMode();
     if(state.status!==status)state.claimQuote=null;
@@ -746,6 +757,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
     if (!status) {
+      renderHolderPlaceholder();
       holdings.render(null);
       for (const node of [el.holder.count, el.holder.power, el.holder.share, el.holder.claimable]) setStat(node, null);
       el.holder.tbody.replaceChildren(); el.holder.head.replaceChildren(); el.holder.mergeList.replaceChildren();
@@ -838,6 +850,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       return null;
     }
     const load = captureLoad();
+    state.holderReadState='loading';
+    if(!state.status)renderHolderPlaceholder();
     try {
       const status = options.prefetched??await displayRead(load,"wallet",owner,options);
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
@@ -847,14 +861,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         plan = await readFor(load, "mergePlan", owner, { status });
       }
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
+      state.holderReadState='ready';
       renderHolder(status, plan);
       if(status.net&&(status.verification||status.source)){renderNetwork({...status.net,snapshot:status.snapshot??status.net.snapshot});if(status.source){displayVerification(status);displayStamp(status);}else renderVerification(status.verification);}
       clearReadBanner();
       return status;
     } catch (err) {
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
+      state.holderReadState='unavailable';
       renderHolder(null);
-  renderWalletChip();if(err.name==='RpcTrustError'){state.net=null;renderNetworkPlaceholder();}
+      renderWalletChip();if(err.name==='RpcTrustError'){state.net=null;renderNetworkPlaceholder();}
       showReadFailure(err,'Wallet read');
       return null;
     }
@@ -1314,6 +1330,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     return requestMerge({ survivor: String(BigInt(survivor)), donor: String(BigInt(donor)), nextLevel: Number(position.level) + 1 });
   });
   el.holder.refresh.onclick = () => viewTask(()=>refreshWallet({force:true}));
+  $('holder-retry').onclick = () => viewTask(()=>refreshWallet({force:true}));
   el.holder.owner.onclick=async()=>{const address=el.holder.owner.title;if(!address)return;try{await win.navigator.clipboard.writeText(address);toast('Address copied','ok');}catch{toast('Clipboard unavailable','warn');}};
   $('btn-exit-watch').onclick = () => viewTask(async()=>{
     state.watchOnly=false;activeWatchRoute=null;state.inspected=state.account;resetLoad();el.holder.watchInput.value='';renderHolder(null);win.history.pushState(null,'',`#${state.profileKey}/squeeks`);selectTab('squeeks');
