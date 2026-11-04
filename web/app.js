@@ -290,7 +290,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
   }
   function clearWheelFeed(){for(const id of ['account-activity','provisional-blocks'])$(id).replaceChildren();$('provisional-blocks').classList.add('hidden');}
-  function clearDisplayMismatch(error){lastGood.clear();state.net=null;state.holderReadState='unavailable';renderNetworkPlaceholder();renderHolder(null);networkStrip.offline();for(const id of ['wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;clearWheelFeed();recordSource('Display validation','api',error.message);showReadFailure(Object.assign(new Error('Display source does not match this network.'),{name:'RpcTrustError',kind:'mismatch'}),'Display validation');}
+  function clearDisplayMismatch(error){lastGood.clear();state.net=null;state.holderReadState='unavailable';renderNetworkPlaceholder();renderHolder(null);networkStrip.invalidate();for(const id of ['wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;clearWheelFeed();recordSource('Display validation','api',error.message);showReadFailure(Object.assign(new Error('Display source does not match this network.'),{name:'RpcTrustError',kind:'mismatch'}),'Display validation');}
 
   let destroyed = false;
   const telemetry = createTelemetry({ fetcher });
@@ -560,8 +560,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     void offlineNetwork(load);
   }
   function wheelReading(load,data,result={}) {
-    wheelOffline=!networkStrip.reading(data,result)||result.stale===true;
-    if(wheelOffline)wheelFailure(load);
+    networkStrip.reading(data,result);wheelOffline=result.stale===true;
+    if(result.stale===true)wheelFailure(load);
     else if(state.net)networkStrip.network(state.net);
   }
   async function refreshTelemetry({ reset = true } = {}) {
@@ -1500,7 +1500,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         if(state.net?.source?.kind!=='rpc'||state.net.verification?.trusted!==true)clearDisplayMismatch(error);
         recordSource(scope==='status'?'Wheel':'Live wheel','api',error.message);clearWheelFeed();
       }
-      if(scope==='status'||error.name==='RpcTrustError'){liveMeasurement=null;renderProvisional();wheelFailure(captureLoad());}
+      if(scope==='status'){liveMeasurement=null;renderProvisional();wheelFailure(captureLoad());}
     }
   });
   if(adapterFactory)poller.start();else void poller.tick();

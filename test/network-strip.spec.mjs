@@ -27,3 +27,9 @@ test('legacy freeze stays inside strip; Activity only opens drawer; unlisted cus
   await page.locator('#holder-history-link').click();await expect(page.getByTestId('activity-drawer')).toBeVisible();expect(await page.locator('#activity-panel > p').count()).toBe(0);await page.getByTestId('activity-drawer').getByTestId('sheet-close').click();
   await page.getByTestId('settings-open').click();await page.getByTestId('rpc-url').fill('https://ethereum-sepolia-rpc.publicnode.com.evil.invalid/');await page.getByTestId('btn-save-rpc').click();await expect(page.getByTestId('rpc-test-result')).toContainText('CSP-listed host');expect(await page.evaluate(()=>localStorage.getItem('wheelhouse:rpc'))).toBeNull();expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
+test('before the first device reading: successful empty status stays dash, actual status failure shows offline',async({page})=>{
+ await installV9Fixture(page,{telemetry:true,emptyStatus:true});
+ await expect(page.locator('#wheel-state')).toHaveText('—');await expect(page.locator('#wheel-reading')).toBeHidden();
+ await page.evaluate(async()=>{v9.statusBlocked=true;await squeek.pollDisplay();});await expect(page.locator('#wheel-state')).toHaveText('Wheel offline');
+ await page.evaluate(async()=>{v9.statusBlocked=false;v9.emptyStatus=false;await squeek.pollDisplay();});await expect(page.locator('#wheel-state')).toHaveText('Running');await expect(page.locator('#wheel-rpm')).toHaveText('12.5');await page.evaluate(()=>squeek.destroy());
+});

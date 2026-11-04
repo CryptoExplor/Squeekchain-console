@@ -50,7 +50,7 @@ export function createNetworkStrip(doc,{now=()=>Date.now()}={}) {
     },
     reading(data,{stale=false}={}) {
       const view=telemetryView(data,now());
-      if(view.state==='Unknown'){offline();return false;}
+      if(view.state==='Unknown'){if(last)offline();else loading();return false;}
       last={state:view.state,rpm:view.rpm,at:Date.parse(data.measurement.receivedAt)};
       for(const[id,value]of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;
       $('wheel-reading').hidden=false;
@@ -59,6 +59,7 @@ export function createNetworkStrip(doc,{now=()=>Date.now()}={}) {
       if(stale||view.state==='Stale')offline();
       return true;
     },
+    invalidate(){if(last)offline();else loading();},
     offline,
   };
 }

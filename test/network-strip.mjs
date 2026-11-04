@@ -7,6 +7,7 @@ const html=fs.readFileSync('web/index.html','utf8'),doc=new JSDOM(html).window.d
 assert.equal(new Set([...doc.querySelectorAll('[id]')].map(n=>n.id)).size,doc.querySelectorAll('[id]').length,'no duplicate element IDs');assert.equal($('verified-chip').dataset.testid,'verified-chip');
 let clock=Date.now();const strip=createNetworkStrip(doc,{now:()=>clock});
 strip.reset('sepolia-v9');assert.equal($('wheel-state').textContent,'—');assert.ok($('wheel-line').classList.contains('muted'));assert.ok($('wheel-reading').hidden);assert.ok($('strip-block').hidden);
+assert.equal(strip.reading({measurement:null}),false);assert.equal($('wheel-state').textContent,'—','successful source with no first reading is not offline');
 strip.offline();assert.equal($('wheel-state').textContent,'Wheel offline');assert.equal($('wheel-rpm').textContent,'');assert.ok($('wheel-reading').hidden);
 strip.network({core:{blockHeight:'8430',blockProgress:'478838171'}});assert.equal($('strip-height').textContent,'8,430');assert.equal($('strip-percent').textContent,'47.9%');assert.equal($('strip-block').hidden,false);
 const data={measurement:{receivedAt:new Date(clock).toISOString(),freshness:'online',coreStatus:'ACTIVE',rpmMilli:12500,speedMmPerSecond:800,distanceMm:1000000}};
