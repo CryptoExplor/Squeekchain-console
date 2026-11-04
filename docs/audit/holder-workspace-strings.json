@@ -1,0 +1,154 @@
+{
+  "scope": "Phase 4 added or newly surfaced user-facing copy. Templates represent every dynamic expansion; API trait names/values, addresses, token IDs and quantities are data, not a finite copy list. Reused labels are explicitly included. Technical validation messages are separated from ordinary views.",
+  "navigationAndWatch": [
+    "Activity",
+    "Copy link",
+    "Path to level",
+    "Link copied",
+    "Clipboard unavailable",
+    "Viewing {short address}",
+    "Viewing #{id}",
+    "Viewing only",
+    "Exit",
+    "Invalid address",
+    "Invalid Squeek",
+    "Invalid link"
+  ],
+  "planner": [
+    "Path to level",
+    "Squeek to level",
+    "Target level",
+    "#{id} · level {level}",
+    "Level {level}",
+    "Do next step",
+    "{N} donor{s} burned · final level {level|Unknown} · power {power|Unknown}",
+    "Keep #{survivor} · burn #{donor} → level {level} · {Ready|Cooldown|Unknown}",
+    " · {N} Squeek blocks · {Unknown|~N min}",
+    "Missing · needs {N} more level-{level} Squeek{s}",
+    "{Deposit|Withdraw} #{id} · Ready",
+    "Pair changed",
+    "Ready",
+    "Cooldown",
+    "Missing",
+    "Checking…",
+    "Unknown"
+  ],
+  "tokenPage": [
+    "Squeeks",
+    "Squeek #{id}",
+    "Viewing #{id}",
+    "Wallet",
+    "Deposited",
+    "Burned",
+    "Owner",
+    "Level",
+    "Power",
+    "Custody",
+    "Merge state",
+    "Next merge height",
+    "Unclaimed rewards",
+    "Ready",
+    "Cooldown",
+    "Maximum level",
+    "Closed",
+    "Unknown",
+    "Path to level",
+    "Deposit",
+    "Withdraw",
+    "Claim",
+    "History",
+    "Show more",
+    "No activity",
+    "Checking…",
+    "{trait name}",
+    "{trait value}"
+  ],
+  "claims": [
+    "SQK",
+    "Claimable",
+    "Claim",
+    "Claim and stake",
+    "Recipient",
+    "{amount} SQK",
+    "Unknown"
+  ],
+  "activity": [
+    "Activity",
+    "History",
+    "Show more",
+    "No activity",
+    "Unknown",
+    "Claimed",
+    "Recipient changed",
+    "Claimed and staked",
+    "Staked",
+    "Unstaked",
+    "Deposited",
+    "Withdrew",
+    "Merged",
+    "Claimed Squeek",
+    "Transferred",
+    "Merged #{donor} into #{survivor}",
+    "{action} #{id}",
+    "{action} {amount} SQK",
+    " · received {amount} SQK",
+    "{existing transaction label} · {existing lifecycle status}",
+    "now",
+    "{N}m",
+    "{N}h",
+    "{N}d"
+  ],
+  "earnings": [
+    "Earnings",
+    "7-day earnings: {date} {amount SQK|Unknown}; …",
+    "{MM-DD}",
+    "{amount} SQK",
+    "Unknown",
+    "Lifetime claimed",
+    "Lifetime compounded"
+  ],
+  "technicalValidationMessages": [
+    "History changed",
+    "Invalid account",
+    "Invalid cursor",
+    "Activity account mismatch",
+    "Invalid activity",
+    "Invalid activity entry",
+    "Invalid activity amount",
+    "Choose a higher level",
+    "Invalid Squeek",
+    "Unknown"
+  ],
+  "removedOrReplaced": [
+    {
+      "before": "implicit watch exit when the viewed address equals the connected address",
+      "after": "explicit read-only scope until Exit; address links remain read-only even for the connected owner",
+      "kind": "behavior, not a literal UI string"
+    },
+    {
+      "before": "ready / cooldown / terminal / merges_closed (raw API enum values in the new detail view)",
+      "after": "Ready / Cooldown / Maximum level / Closed",
+      "kind": "pre-publication copy normalization"
+    },
+    {
+      "before": "API-derived claimable amount in the SQK action card",
+      "after": "canonical preview amount or Unknown",
+      "kind": "dynamic value, not a literal UI string"
+    },
+    {
+      "before": "enter a valid 0x address",
+      "after": "Invalid address",
+      "location": "watch address validation"
+    },
+    {
+      "before": "Account activity",
+      "after": "Activity",
+      "location": "dedicated activity tab/view heading"
+    }
+  ],
+  "unchangedConstraints": "No new helper paragraphs, Subtract copy, visible release IDs, method/storage/slot/digest/revision copy, or affiliation footer added. Existing typed BURN confirmation and collapsed Technical details remain unchanged. Existing contract errors and transaction lifecycle labels remain supplied by the established components.",
+  "baselineLiteralStringsRemoved": [
+    "enter a valid 0x address",
+    "Account activity"
+  ]
+}
