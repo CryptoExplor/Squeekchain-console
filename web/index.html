@@ -26,7 +26,7 @@
       </div>
       <div class="toolbar">
 
-        <div class="profile-control"><select aria-label="Network deployment" id="profile-select" title="Deployment" data-testid="profile-select"></select><p id="profile-pending-notice" data-testid="profile-pending-notice" class="small hidden" role="status" aria-live="polite"></p></div>
+        <div class="profile-control"><select aria-label="Network deployment" id="profile-select" title="Deployment" data-testid="profile-select"></select></div>
         <div class="header-badges"><button class="chip" id="profile-status" type="button" data-testid="profile-status" aria-describedby="verified-chip" aria-label="Live verification: open Info Trust">Checking…</button>
         <span class="sr-only" id="verified-chip" role="status" aria-live="polite" data-testid="verified-chip">verifying…</span>
         </div>
@@ -112,16 +112,13 @@
 
       <!-- ── holdings ──────────────────────────────────────────────────────── -->
       <section data-panel="squeeks" class="hidden" id="panel-squeeks" data-testid="panel-squeeks" role="tabpanel" aria-labelledby="tab-squeeks">
-        <div class="section-heading"><div><h2>Squeeks</h2></div></div>
+        <div class="section-heading squeeks-heading"><h2 id="squeeks-title">Squeeks</h2><div class="wallet-heading-actions"><button class="btn wallet-address hidden" id="holder-owner" data-testid="holder-owner" aria-label="Copy inspected wallet address"></button><button class="btn icon-button" id="btn-holder-refresh" data-testid="btn-holder-refresh" aria-label="Refresh Squeeks" title="Refresh Squeeks">↻</button></div></div>
 
         <div class="row" id="watch-row" data-testid="watch-row">
             <input aria-label="View address" id="watch-input" placeholder="0x… (view only)" spellcheck="false" data-testid="watch-input">
             <button class="btn" id="btn-watch" data-testid="btn-watch">View address</button>
           </div><div class="holder-workspace">
-          <div class="panel-head">
-            <h2>Your wallet</h2>
-            <span class="panel-note" id="holder-owner" data-testid="holder-owner">Unknown</span>
-          </div>
+
 
 
 <div id="watch-mode" data-testid="watch-mode" class="row hidden" role="status"><span id="watch-chip" data-testid="watch-chip" class="chip"></span><button id="btn-exit-watch" data-testid="btn-exit-watch" class="btn" type="button">Exit</button></div>
@@ -135,27 +132,28 @@
             <div class="row">
               <input id="claim-ids" aria-label="Token IDs to claim" placeholder="IDs: 1, 2, 3 · blank = all owned" spellcheck="false" data-testid="claim-ids">
               <button class="btn btn-primary" id="btn-claim" disabled="" data-testid="btn-claim">Claim</button><span id="holder-rewards-notice" data-testid="holder-rewards-notice" class="notice warn hidden" role="status" aria-live="polite"></span>
-              <button class="btn" id="btn-plan" data-testid="btn-plan">Refresh merge plan</button>
-              <span class="mono small muted" id="holder-hint" data-testid="holder-hint"></span>
+
+
             </div>
             <p id="claim-update" data-testid="claim-update" class="notice hidden" role="status" aria-live="polite"></p><div class="out hidden" id="claim-result" data-testid="claim-result"></div>
 
-            <section class="workspace-section" aria-labelledby="squeeks-title"><h2 id="squeeks-title">Squeeks</h2>
-            <p id="nft-empty" class="notice hidden" data-testid="nft-empty">No Squeeks in this wallet</p>
-            <div id="squeek-cards" class="squeek-grid" data-testid="squeek-cards"></div>
-            <table hidden aria-hidden="true"><thead id="squeeks-head" data-testid="squeeks-head"></thead><tbody id="squeeks-tbody" data-testid="squeeks-tbody"></tbody></table>
-            <div class="selection-bar"><span id="selection-count" role="status">0 selected</span><button class="btn" data-action="merge">Merge</button><span id="nft-v9-buttons"><button class="btn" data-action="deposit">Deposit</button><button class="btn" data-action="withdraw">Withdraw</button><button class="btn" data-action="mergeDeposited">Merge deposited</button></span></div>
-            <section id="v9-actions" data-testid="v9-actions" class="hidden" aria-label="Squeek permissions"><h3>Deposit permissions</h3><div class="row"><button class="btn" data-action="approveNft">Approve one Squeek</button><button class="btn" data-action="approveAll">Approve all Squeeks</button></div></section>
-            <div id="nft-action-host"></div>            <h3 class="mt-20">Merge Squeeks</h3>
-            <p class="mono small muted" id="merge-note" data-testid="merge-note">Merging burns the donor NFT permanently and raises the survivor one level.</p>
-            <ul class="plan" id="merge-list" data-testid="merge-list"></ul>
-            <div class="mt-16 row">
-              <input id="merge-survivor" aria-label="Survivor token ID" placeholder="Keep token ID" inputmode="numeric" data-testid="merge-survivor">
-              <input id="merge-donor" aria-label="Donor token ID to burn" placeholder="Burn token ID" inputmode="numeric" data-testid="merge-donor">
-              <button class="btn" id="btn-custom-merge" disabled="" data-testid="btn-custom-merge">Review my pair</button>
-            </div>
-            <p class="small muted">Choose which image and token ID survives. Type BURN-&lt;id&gt; to confirm the permanent burn, then review what will happen before opening your wallet.</p>
-
+            <section class="workspace-section" aria-labelledby="squeeks-title">
+              <p id="nft-empty" class="notice hidden" data-testid="nft-empty">No Squeeks in this wallet</p>
+              <div id="squeek-controls" class="hidden">
+                <div class="squeek-toolbar">
+                  <div class="selection-bar"><span id="selection-count" role="status">0 selected</span><button class="btn" data-action="merge" disabled>Merge</button><span id="nft-v9-buttons" class="action-group"><button class="btn" data-action="deposit" disabled>Deposit</button><button class="btn" data-action="withdraw" disabled>Withdraw</button><button class="btn" data-action="mergeDeposited" disabled>Merge deposited</button></span></div>
+                  <div id="v9-actions" data-testid="v9-actions" class="permission-group hidden" aria-label="Squeek permissions"><span class="label">Deposit permissions</span><button class="btn" data-action="approveNft" disabled>Approve one Squeek</button><button class="btn" data-action="approveAll" disabled>Approve all Squeeks</button></div>
+                </div>
+                <div class="squeek-action-grid">
+                  <section class="ids-panel" aria-label="Squeek ID preview"><h3 id="nft-action-label">Squeek IDs</h3><div id="nft-action-host"></div></section>
+                  <section class="merge-panel" aria-labelledby="merge-heading"><h3 id="merge-heading">Merge Squeeks</h3><p id="merge-selection" role="status">Choose two same-level Squeeks</p><p id="merge-level" class="small"></p><p class="small muted" id="merge-note" data-testid="merge-note"></p><ul class="plan" id="merge-list" data-testid="merge-list" hidden></ul>
+                    <div class="pair-inputs"><label>Keep<input id="merge-survivor" aria-label="Survivor token ID" placeholder="Keep ID" inputmode="numeric" data-testid="merge-survivor"></label><label>Burn<input id="merge-donor" aria-label="Donor token ID to burn" placeholder="Burn ID" inputmode="numeric" data-testid="merge-donor"></label><button class="btn" id="btn-custom-merge" disabled data-testid="btn-custom-merge">Review my pair</button></div>
+                    <p id="merge-burn-step" class="small muted">BURN confirmation is required before simulation. The donor burn is permanent.</p>
+                  </section>
+                </div>
+              </div>
+              <div id="squeek-cards" class="squeek-grid" data-testid="squeek-cards"></div>
+              <table hidden aria-hidden="true"><thead id="squeeks-head" data-testid="squeeks-head"></thead><tbody id="squeeks-tbody" data-testid="squeeks-tbody"></tbody></table>
             </section>
             <section class="workspace-section" aria-labelledby="sqk-title"><h2 id="sqk-title">SQK</h2><p id="sqk-empty" data-testid="sqk-empty" class="notice hidden">No SQK yet</p>
             <dl class="sqk-facts"><div><dt>Balance</dt><dd id="sqk-balance">Unknown</dd></div><div><dt>Claimable</dt><dd id="sqk-claimable">Unknown</dd></div><div><dt>Staked</dt><dd id="sqk-staked">Unknown</dd></div><div><dt>Fresh</dt><dd id="sqk-fresh">Unknown</dd></div><div><dt>Mature</dt><dd id="sqk-mature">Unknown</dd></div></dl>
@@ -247,7 +245,7 @@
       </div>
     </div>
 
-    <div class="toasts" id="toasts" aria-live="polite" data-testid="toasts"></div>
+    <div class="toasts" id="toasts" role="region" aria-label="Notifications" aria-live="polite" data-testid="toasts"></div>
     <script type="module" src="./app.js"></script>
 
 

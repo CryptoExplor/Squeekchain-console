@@ -76,11 +76,14 @@ export function TokenCard({ doc, item, onOpen }) {
   card.append(image, label); card.onclick = onOpen;
   return card;
 }
-export function Toast({ doc, host, message, kind = '', timeout = 7000 }) {
+export function Toast({ doc, host, message, kind = '', timeout = kind === 'err' ? 0 : 6000, action, onAction }) {
   const node = doc.createElement('div'); node.dataset.component = 'Toast';
-  node.className = `toast ${kind}`; node.setAttribute('role', kind === 'err' ? 'alert' : 'status');
-  node.textContent = message; host.append(node);
-  doc.defaultView.setTimeout(() => node.remove(), timeout);
+  node.className = `toast ${kind}`; node.setAttribute('role', kind === 'err' ? 'alert' : 'status');node.setAttribute('aria-atomic','true');
+  const text=doc.createElement('span');text.className='toast-message';text.textContent=message;node.append(text);
+  let timer;const close=()=>{doc.defaultView.clearTimeout(timer);node.remove();};
+  if(action&&onAction){const button=doc.createElement('button');button.className='btn toast-action';button.textContent=action;button.onclick=()=>{close();onAction();};node.append(button);}
+  const dismiss=doc.createElement('button');dismiss.className='btn toast-close';dismiss.textContent='×';dismiss.setAttribute('aria-label','Dismiss notification');dismiss.onclick=close;node.append(dismiss);host.append(node);
+  if(timeout>0)timer=doc.defaultView.setTimeout(close,timeout);
   return node;
 }
 

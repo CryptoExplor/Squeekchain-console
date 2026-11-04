@@ -75,8 +75,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       share: $("holder-share"),
       claimable: $("holder-claimable"),
       claim: $("btn-claim"),
-      plan: $("btn-plan"),
-      hint: $("holder-hint"),
+      refresh: $("btn-holder-refresh"),
       claimOut: $("claim-result"),
       head: $("squeeks-head"),
       tbody: $("squeeks-tbody"),
@@ -135,7 +134,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
 
   // ── helpers ────────────────────────────────────────────────────────────────
-  const toast = (msg, kind = "") => Toast({ doc, host: el.toasts, message: msg, kind });
+  const toast = (msg, kind = "", options = {}) => Toast({ doc, host: el.toasts, message: msg, kind, ...options });
+  function pendingSwitchNotice(){const count=activity.list().filter(item=>!['confirmed','reverted'].includes(item.status)).length;if(count)toast(`${count} transaction${count===1?'':'s'} still pending. Switching won't cancel ${count===1?'it':'them'}.`,'warn',{action:'View',onAction:()=>openSheet('activity-drawer')});}
   let readBanner=false;
   const header=doc.querySelector('.topbar');
   const positionBanner=()=>doc.documentElement.style.setProperty('--header-bottom',`${Math.max(0,header?.getBoundingClientRect().bottom??0)}px`);
@@ -289,6 +289,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const chainCache = new Map();
   const discoveryCache = createDiscoveryStore(win.indexedDB);
   let receiptContext, receiptRpcUrl;
+  const activityNotices=new Map();let activityReady=false;
   const activity = createActivity({ storage: store, eventTarget:win, onChange: renderActivity, receiptReader: activityReader ?? (async (item, { signal }) => {
     const rpcUrl = store.get('wheelhouse:rpc') || undefined;
     if (!receiptContext || rpcUrl !== receiptRpcUrl) {
@@ -308,8 +309,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!state.account) renderWalletChip();
     $('activity-empty').classList.toggle('hidden', items.length !== 0);
     const pending = items.filter(item => !['confirmed', 'reverted'].includes(item.status)).length;
-    $('profile-pending-notice').textContent = pending ? "Pending transactions continue; switching can't cancel them." : '';
-    $('profile-pending-notice').classList.toggle('hidden',!pending);
+    for(const item of items){const key=item.hash.toLowerCase(),before=activityNotices.get(key);if(activityReady&&before!==item.status){if(!before)toast(`${item.label} submitted.`, '', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='confirmed')toast(`${item.label} confirmed.`, 'ok', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='reverted')toast(`${item.label} failed.`, 'err', {action:'View',onAction:()=>openSheet('activity-drawer')});}activityNotices.set(key,item.status);}
+    activityReady=true;
     $('pending-count').textContent = String(pending);
     $('pending-count').classList.toggle('hidden', !pending);
     $('btn-open-activity').setAttribute('aria-label', `Activity, ${pending} pending`);
@@ -355,6 +356,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   async function switchProfile(profileKey, { preserveWallet = false } = {}) {
+    if(getProfile(profileKey).key!==state.profileKey)pendingSwitchNotice();
     $('fee-rose').classList.add('hidden');
     $('claim-update').classList.add('hidden');
     // The signer belongs to the wallet store, never to a deployment profile.
@@ -387,11 +389,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       node.classList.add("hidden");
     }
     for (const node of [el.holder.count, el.holder.power, el.holder.share, el.holder.claimable]) node.textContent = UNKNOWN;
-    el.holder.hint.textContent = el.holder.mergeNote.textContent = "";
-    for (const id of ["claim-ids", "merge-survivor", "merge-donor", "watch-input", "art-token", "tool-args", "modal-input"]) $(id).value = "";
+    el.holder.mergeNote.textContent = "";
+    for (const id of ["claim-ids", "merge-survivor", "merge-donor", "watch-input", "art-token", "tool-args", "modal-input", "v9-ids", "v9-token", "v9-survivor", "v9-donor", "v9-amount"]) $(id).value = "";
     el.modal.body.replaceChildren();
     el.modal.title.textContent = "";
-    el.toasts.replaceChildren();
+
     networkPanel.setBusy(false);
     store.set("squeekchain:profile", state.profileKey);
     renderWalletChip();
@@ -574,6 +576,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(!changed||(!next.account&&!previous.account&&next.chainId===previous.chainId))return;
     const wasWatch=state.inspected&&state.inspected.toLowerCase()!==previous.account?.toLowerCase();
     resetLoad();chainCache.clear();dialog.close();state.lastReadFailure=null;closeWalletMenu();state.profileCounts={};
+    if(previous.account&&next.account?.toLowerCase()!==previous.account.toLowerCase())pendingSwitchNotice();
     if(!wasWatch)state.inspected=next.account;
     renderHolder(null);renderProfileOptions();renderCheckpointGate();renderActivity(activity.list());
     if(next.status==='wrong-chain'){showBanner('Wrong chain: Sepolia required. Actions stopped.','warn');return;}
@@ -624,13 +627,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     } catch(error){if(error?.code===4001||/reject|closed|cancel/i.test(error?.message??''))error.walletOutcome=true;throw error;} finally { releaseSigning(ticket); }
 
     assertCurrent(load);
-    toast(`${label} submitted ${hash.slice(0, 12)}…`);
+
     const receipt = await viewAwait(load, () => activity.wait(hash));
     const ok = receipt.receiptStatus === "success";
     if (!ok) throw new Error(`${label} reverted. Stopped; no changed-input retry.`);
     const result = { hash, ok, blockNumber: receipt.blockNumber, status: receipt.status };
     state.receipts.push(result);
-    toast(`${label} mined in block ${receipt.blockNumber}. Activity tracks confirmations.`, "ok");
+
     return result;
   }
 
@@ -716,7 +719,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const caps = capabilities();
     const isV9 = getProfile(state.profileKey).abiSet === 'v9';
     el.holder.power.parentElement.querySelector('.label').textContent = isV9 ? 'Deposited' : 'Power';
-    el.holder.owner.textContent = valueText(status?.owner);
+    const inspected=status?.owner??state.inspected??state.account;
+    el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);
+    el.holder.refresh.disabled=!state.adapter||!inspected;
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
     if (!status) {
@@ -733,24 +738,18 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     setStat(el.holder.power, isV9 ? totals.deposited : totals.power, num);
     setStat(el.holder.share, totals.sharePercent, value => num(value, 4) === UNKNOWN ? UNKNOWN : `${num(value, 4)}%`);
     setStat(el.holder.claimable, totals.claimable, sqk);
-    el.holder.hint.textContent = num(totals.count) === UNKNOWN ? "Holdings count Unknown; actions remain disabled." : !has
-      ? "this address owns no Squeeks — it can still run checkpoints"
-      : !caps.claim
-        ? caps.reasons.unavailable
-        : signerOwns
-          ? totals.estimatedSqkPerDay
-            ? `≈${num(totals.estimatedSqkPerDay)} SQK/day at current share`
-            : ""
-          : "view only: connect this wallet to claim or merge";
     el.holder.claim.disabled = state.busy || num(totals.count) === UNKNOWN || (!has && !isV9) || !signerOwns || !caps.claim;
     $("btn-custom-merge").disabled = state.busy || !has || !signerOwns || !caps.merge;
     $("claim-ids").disabled = !caps.claim || isV9;
     $("claim-ids").classList.toggle("hidden", isV9);
-    $("v9-actions").classList.toggle("hidden", !isV9);$("action-fields").classList.toggle("hidden",!isV9);
+    $("v9-actions").classList.toggle("hidden", !isV9);$("action-fields").classList.remove("hidden");
     $("v9-review").disabled = !signerOwns || state.busy;
 
 
     holdings.render(status);
+    if(!isV9&&$('v9-action').value!=='merge'){$('v9-action').value='merge';renderActionFields();}
+    else if(isV9&&$('v9-action').value==='merge'){$('v9-action').value='deposit';renderActionFields();}
+    updatePreviewGate();
 
     // merge plan
     el.holder.mergeList.replaceChildren();
@@ -1006,20 +1005,34 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(action==='claimAndStake'&&BigInt(fresh.amount.base)>BigInt(preview.amount.base)){showClaimIncrease(preview.amount,fresh.amount);showOut($('v9-result'),fresh);}
     const result=await sendTransaction(fresh.tx,actionNames[action]??'Action',owner,load);await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});return result;
   }
+  function updatePreviewGate(){
+    const owner=state.status?.owner,signer=Boolean(!state.busy&&state.account&&owner?.toLowerCase()===state.account.toLowerCase()&&state.chainId===11155111&&state.status?.totals?.count!=null),action=$('v9-action').value;
+    const rows=state.status?.squeeks??[],ids=$('v9-ids').value.split(/[\s,]+/).filter(Boolean),find=id=>rows.find(t=>String(t.tokenId)===id),validIds=ids.length>0&&new Set(ids).size===ids.length&&ids.every(id=>/^\d+$/.test(id)&&find(id));
+    let valid=true;
+    if(['deposit','withdraw'].includes(action))valid=validIds&&ids.every(id=>Boolean(find(id).deposited)===(action==='withdraw'));
+    if(['merge','mergeDeposited'].includes(action)){const pair=ids.map(find);valid=validIds&&ids.length===2&&pair[0].level!=null&&pair[0].level===pair[1].level&&pair.every(t=>Boolean(t.deposited)===(action==='mergeDeposited'));}
+    if(action==='approveNft')valid=Boolean(find($('v9-token').value)&&!find($('v9-token').value).deposited);
+    if(['stake','unstake','approveSqk'].includes(action))valid=/^\d+(?:\.\d{1,18})?$/.test($('v9-amount').value)&&Number($('v9-amount').value)>0;
+    $('v9-review').disabled=!signer||!valid;
+  }
   function renderActionFields() {
     $('fee-rose').classList.add('hidden');
     const action=$('v9-action').value;
     const host=['claimAndStake','stake','unstake','approveSqk'].includes(action)?$('sqk-action-host'):$('nft-action-host');host.append($('action-fields'));
-    for(const [id,visible] of [['v9-ids',['deposit','withdraw'].includes(action)],['v9-token',action==='approveNft'],['v9-amount',['stake','unstake','approveSqk'].includes(action)],['v9-survivor',action==='mergeDeposited'],['v9-donor',action==='mergeDeposited']]) {
+    for(const [id,visible] of [['v9-ids',['deposit','withdraw','merge','mergeDeposited'].includes(action)],['v9-token',action==='approveNft'],['v9-amount',['stake','unstake','approveSqk'].includes(action)],['v9-survivor',false],['v9-donor',false]]) {
       $(id).closest('label').classList.toggle('hidden',!visible); if(!visible)$(id).value='';
     }
+    $('nft-action-label').textContent=action==='merge'?'Squeek IDs':`${actionNames[action]??'Squeek IDs'} · Squeek IDs`;
+    updatePreviewGate();
     $('approval-scope').classList.toggle('hidden',!['approveAll','approveNft','approveSqk'].includes(action));
     $('approval-scope').textContent=action==='approveAll'?'Allows ALL current and future NFTs.':action==='approveNft'?'Allows only this NFT (preferred).':'Allows exactly this SQK amount.';
   }
   $('v9-action').onchange=renderActionFields;renderActionFields();
+  for(const id of ['v9-ids','v9-token','v9-amount'])$(id).addEventListener('input',updatePreviewGate);
   $('v9-review').onclick = () => viewTask(() => {
     const input = {tokenIds:$('v9-ids').value.split(/[\s,]+/).filter(Boolean),tokenId:$('v9-token').value,survivor:$('v9-survivor').value,donor:$('v9-donor').value};
     const raw=$('v9-amount').value.trim(); if(raw) { if(!/^\d+(?:\.\d{1,18})?$/.test(raw))throw new Error('Use up to 18 decimal places'); input.amount=String(parseEther(raw)); }
+    if(['merge','mergeDeposited'].includes($('v9-action').value)){[input.survivor,input.donor]=input.tokenIds;if($('v9-action').value==='merge')return requestMerge(input);}
     return requestAction($('v9-action').value,input);
   });
   // ── art ───────────────────────────────────────────────────────────────────
@@ -1259,7 +1272,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!position) throw new Error("The survivor must be in the inspected wallet.");
     return requestMerge({ survivor: String(BigInt(survivor)), donor: String(BigInt(donor)), nextLevel: Number(position.level) + 1 });
   });
-  el.holder.plan.onclick = () => viewTask(refreshWallet);
+  el.holder.refresh.onclick = () => viewTask(()=>refreshWallet({force:true}));
+  el.holder.owner.onclick=async()=>{const address=el.holder.owner.title;if(!address)return;try{await win.navigator.clipboard.writeText(address);toast('Address copied','ok');}catch{toast('Clipboard unavailable','warn');}};
   $('btn-exit-watch').onclick = () => viewTask(async()=>{
     state.inspected=state.account;el.holder.watchInput.value='';renderHolder(null);
     await refreshWallet();
@@ -1319,8 +1333,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     await settingsReady; if (!destroyed) openSheet('settings-sheet');
   }
   const images=createImages({cache:displayCache,fetcher,win});
-  const holdings=createHoldings({doc,win,state,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();$('v9-review').focus();},loadImage:async token=>{const load=captureLoad();let item;try{item=await images.load({profile:getProfile(load.profileKey),token,api:displayApi(load),fallback:()=>readFor(load,'art',token.tokenId),signal:load.signal});}catch(error){if(isCurrent(load)&&error.name==='RpcTrustError')clearDisplayMismatch(error);throw error;}assertCurrent(load);state.art.set(String(token.tokenId),item);return item;}});
-  $('sqk-claim-host').append($('btn-claim'),$('claim-ids'));
+  const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();$('v9-review').focus();},loadImage:async token=>{const load=captureLoad();let item;try{item=await images.load({profile:getProfile(load.profileKey),token,api:displayApi(load),fallback:()=>readFor(load,'art',token.tokenId),signal:load.signal});}catch(error){if(isCurrent(load)&&error.name==='RpcTrustError')clearDisplayMismatch(error);throw error;}assertCurrent(load);state.art.set(String(token.tokenId),item);return item;}});
+  $('sqk-claim-host').append($('btn-claim'),$('claim-ids'),$('holder-rewards-notice'));
   // ── boot ──────────────────────────────────────────────────────────────────
   store.set("squeekchain:profile", state.profileKey);
   applyTheme(store.get(THEME_KEY) ?? "light");
