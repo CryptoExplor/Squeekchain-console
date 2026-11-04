@@ -2,14 +2,14 @@ import { test, expect } from '@playwright/test';
 import { PUBLIC_RPCS } from '../sdk/rpc.js';
 import { observeLiveRpc } from './live-network.mjs';
 
-test('real browser: public CORS Sepolia RPCs, same-block identity verification and supported network reads', async ({ page }, testInfo) => {
+for (const profile of ['sepolia-v6','sepolia-v9']) test(`real browser: public CORS Sepolia RPCs and ${profile} same-block verification/reads`, async ({ page }, testInfo) => {
   const network = observeLiveRpc(page, PUBLIC_RPCS);
   let toolResult;
   try {
     // NO mocked RPC responses, bypassed verification or signing in this qualification check.
-    await page.goto('/');
+    await page.goto(`/#${profile}/network`);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await expect(page.locator('#profile-select')).toHaveValue('sepolia-v6');
+    await expect(page.locator('#profile-select')).toHaveValue(profile);
     const evidence = await page.evaluate(async urls => {
       async function rpc(url, method, params = []) {
         const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: AbortSignal.timeout(20_000) });
@@ -45,7 +45,7 @@ test('real browser: public CORS Sepolia RPCs, same-block identity verification a
     for (const block of blocks) expect(BigInt(block.number)).toBe(BigInt(evidence.blockNumber));
 
     await page.waitForFunction(() => window.squeek);
-    const result = toolResult = await page.evaluate(() => window.squeek.callTool('squeek_network_status'));
+    const result = toolResult = await page.evaluate(profile => window.squeek.callTool('squeek_network_status',{profile}),profile);
     await testInfo.attach('verified-network-snapshot.json', { body: JSON.stringify(result, null, 2), contentType: 'application/json' });
     expect(result.error, JSON.stringify(result)).toBeUndefined();
     expect(result.chainId).toBe(11155111);

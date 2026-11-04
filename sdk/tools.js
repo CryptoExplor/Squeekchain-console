@@ -1,10 +1,11 @@
+import { PROFILES, DEFAULT_PROFILE } from "./deployments.js";
+import { STAKING_ACTIONS } from "./tool-runtime.js";
 /**
  * Single source of truth for tool metadata.
  *
  * The web dApp, the generated web/tools.json manifest and the MCP server all read this list,
- * so an agent sees the same names, descriptions and schemas on every surface. Only the
- * *transport* differs: web tools can open a wallet popup, MCP tools can only prepare unsigned
- * transactions (a stdio server cannot click MetaMask).
+ * so shared tools have identical names, descriptions and schemas on every surface.
+ * Browser-only request tools simulate then ask the human wallet; MCP never signs or submits.
  */
 
 const str = (description, extra = {}) => ({ type: "string", description, ...extra });
@@ -12,11 +13,11 @@ const arr = (description) => ({ type: "array", items: { type: "string" }, descri
 const obj = (properties = {}, required = []) => ({ type: "object", properties, required });
 
 /** @type {{name:string, description:string, inputSchema:object, surfaces:("web"|"mcp")[], sideEffects:string}[]} */
-export const TOOL_SPECS = [
+const BASE_SPECS = [
   {
     name: "squeek_network_status",
     description:
-      "Network-wide SqueekCore + SqueekMining state: settled round, Squeek block height, checkpoint lag, emission per day, total power, minted/supply cap, level table and whether a checkpoint can advance now.",
+      "Network-wide SqueekCore + SqueekMining state: settled round, Squeek block height, checkpoint lag, emission per day, total power, minted/supply cap, level table and whether a checkpoint can advance now. In sepolia-v9, emission is null (unavailable), not zero.",
     inputSchema: obj(),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
@@ -24,7 +25,7 @@ export const TOOL_SPECS = [
   {
     name: "squeek_verify",
     description:
-      "At one cross-checked Sepolia snapshot block, verify both proxies (chain ID, implementation address, runtime hash, layout digest, proxy admin/owner, implementation version, configuration) and the wiring between SqueekCore, SqueekMining, SqueekToken and SqueekNFT. Run this before trusting any other result.",
+      "At one cross-checked Sepolia snapshot block, verify the selected contract graph (chain ID, implementation address, runtime hash, layout digest, proxy admin/owner, implementation version, configuration) and the wiring between SqueekCore, SqueekMining, SqueekToken and SqueekNFT. Run this before trusting any other result.",
     inputSchema: obj(),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
@@ -32,7 +33,7 @@ export const TOOL_SPECS = [
   {
     name: "squeek_wallet_status",
     description:
-      "Per-address holdings: live Squeek positions (level, active/pending power, merge cooldown block), claimable SQK, total power, network share and estimated SQK/day. Defaults to the connected wallet in the browser.",
+      "Per-address holdings: live Squeek positions (level, active/pending power, merge cooldown block), claimable SQK, total power, network share and estimated SQK/day. Defaults to the connected wallet in the browser. In sepolia-v9, sharePercent and estimatedSqkPerDay are null (unavailable), not zero.",
     inputSchema: obj({ owner: str("0x address to inspect (optional in the browser: defaults to the connected wallet)") }),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
@@ -48,7 +49,7 @@ export const TOOL_SPECS = [
   {
     name: "squeek_claim_preview",
     description:
-      "Simulated claim for an owner: total claimable SQK, the 32-ID transaction batches with per-batch gas, and any decoded revert. Signs nothing.",
+      "Simulated owner claim: actual payout and unsigned transactions. NFT batches on v6; account rewards on v9. Signs nothing.",
     inputSchema: obj({
       owner: str("0x address (optional)"),
       tokenIds: arr("subset of token IDs to claim (optional; default all owned)"),
@@ -83,7 +84,7 @@ export const TOOL_SPECS = [
   {
     name: "squeek_prepare_checkpoint",
     description:
-      "Return an unsigned checkpoint() transaction (to/data/value/chainId) that the caller's wallet can sign. Use this from MCP; the web app can submit it directly.",
+      "Simulate checkpoint and return an unsigned transaction for the caller wallet. Never signs or submits.",
     inputSchema: obj({ from: str("0x caller address for same-block checkpoint simulation (optional only for connected browser wallet)") }),
     surfaces: ["mcp"],
     sideEffects: "prepare-only",
@@ -91,7 +92,7 @@ export const TOOL_SPECS = [
   {
     name: "squeek_prepare_claim",
     description:
-      "Return unsigned claim() transactions, one per 32-ID batch, for the owner's wallet to sign. Simulated first; ownership is re-read immediately before building.",
+      "Simulate and prepare unsigned claims for the owner wallet: NFT batches or account rewards, according to the selected deployment.",
     inputSchema: obj({ owner: str("0x address that owns the Squeeks"), tokenIds: arr("optional subset") }, ["owner"]),
     surfaces: ["mcp"],
     sideEffects: "prepare-only",
@@ -112,44 +113,27 @@ export const TOOL_SPECS = [
     surfaces: ["mcp"],
     sideEffects: "prepare-only",
   },
-  {
-    name: "squeek_request_checkpoint",
-    description:
-      "Open the user's wallet popup to submit checkpoint(). Works for any wallet, holder or not. The user still confirms in their wallet.",
-    inputSchema: obj(),
-    surfaces: ["web"],
-    sideEffects: "wallet-popup",
-  },
-  {
-    name: "squeek_request_claim",
-    description: "Open the user's wallet popup to claim SQK for the connected owner (simulated first).",
-    inputSchema: obj({ tokenIds: arr("optional subset of token IDs") }),
-    surfaces: ["web"],
-    sideEffects: "wallet-popup",
-  },
-  {
-    name: "squeek_request_merge",
-    description:
-      "Open the user's wallet popup to merge a pair. Requires confirm: 'BURN-<donor>' so an agent cannot burn an NFT by accident, and the UI still asks the human to type BURN-<donor> before call construction.",
-    inputSchema: obj(
-      {
-        survivor: str("token ID that survives"),
-        donor: str("token ID that is burned"),
-        confirm: str("must equal BURN-<donor>"),
-      },
-      ["survivor", "donor", "confirm"],
-    ),
-    surfaces: ["web"],
-    sideEffects: "wallet-popup",
-  },
+
 ];
 
-const DEPLOYMENT_FOR_MANIFEST = {
-  core: "0x74665dAecA35A2303e767E76a2FF1FB6F93e119f",
-  mining: "0x3beE588fC20dE788Bac17d33b41Da7346cb27EC4",
-  token: "0x6872bfa5ccc3e9e440c6c16e5ffdabb8dba4cc76",
-  nft: "0x0eAF3E0d40A0a8E5a6Ac030b2459E9FB0B7905c6",
-};
+const profileArg = str('Deployment for this call; defaults to the active browser profile or MCP session default', {enum:['sepolia-v6','sepolia-v9']});
+const stakingSpecs = Object.keys(STAKING_ACTIONS).flatMap(action => ['preview','prepare'].map(mode => ({
+  name:mode==='prepare'?`squeek_prepare_${action}`:`squeek_${action}_preview`,
+  description:`Simulate ${action}; return unsigned calldata only. Amounts, fees and IDs are decimal base-unit strings. Approvals are separate explicit actions. merge_deposited requires BURN-<donor> before construction. Re-preview in the owner wallet before signing.`,
+  inputSchema:obj({owner:str('Owner/depositor address'),tokenIds:arr('NFT IDs for deposit/withdraw'),tokenId:str('One NFT ID to approve'),survivor:str('Surviving ID'),donor:str('Burned ID'),confirm:str('Must equal BURN-<donor>'),amount:str('SQK amount in base units'),maxFee:str('Previous unstake quote cap in base units'),deadline:str('Previous unstake uint64 deadline')},['owner',...(['deposit','withdraw'].includes(action)?['tokenIds']:action==='approve_nft'?['tokenId']:['approve_sqk','stake','unstake'].includes(action)?['amount']:action==='merge_deposited'?['survivor','donor','confirm']:[])]),
+  surfaces:['web','mcp'],sideEffects:mode==='prepare'?'prepare-only':'read-only',
+})));
+const unsignedSpecs=[...BASE_SPECS,...stakingSpecs];
+const walletActions=['checkpoint','claim','merge','deposit','withdraw','merge_deposited','claim_and_stake','stake','unstake'];
+const requestSpecs=walletActions.map(action=>{
+  const source=unsignedSpecs.find(spec=>spec.name===`squeek_prepare_${action}`);
+  return {...source,name:`squeek_request_${action}`,
+    description:`Browser only: simulate ${action}, then open your wallet popup for human approval. Same-origin requests only; never exposes a private key.${action.includes('merge')?" Requires confirm: BURN-<donor> before any construction and the human must type it again.":''}`,
+    inputSchema:{...source.inputSchema,required:(source.inputSchema.required??[]).filter(key=>key!=='owner')},
+    surfaces:['web'],sideEffects:'wallet-popup'};
+});
+const v9ToolNames=new Set([...stakingSpecs.map(spec=>spec.name),...walletActions.filter(action=>!['checkpoint','claim','merge'].includes(action)).map(action=>`squeek_request_${action}`)]);
+export const TOOL_SPECS = [...unsignedSpecs,...requestSpecs].map(spec=>({...spec,surfaces:spec.sideEffects==='wallet-popup'?['web']:['web','mcp'],inputSchema:{...spec.inputSchema,properties:{...spec.inputSchema.properties,profile:v9ToolNames.has(spec.name)?{...profileArg,enum:['sepolia-v9']}:profileArg}}}));
 
 /** Tool manifest published as web/tools.json and advertised by the MCP server. */
 export function buildManifest({ surface } = {}) {
@@ -158,11 +142,12 @@ export function buildManifest({ surface } = {}) {
     name: "wheelhouse",
     version: "1.0.0",
     description:
-      "Squeekchain SqueekMining v6 on Sepolia: reads, checkpoints, claims and merges. Reads are permissionless; owner actions are prepared as unsigned transactions for the owner's wallet to sign. Testnet only.",
+      "Squeekchain Sepolia v6 and v9: equal-profile reads and unsigned preparations. Reads are permissionless; owner actions are prepared as unsigned transactions for the owner's wallet to sign. Testnet only.",
     chainId: 11155111,
-    addresses: DEPLOYMENT_FOR_MANIFEST,
+    defaultProfile: DEFAULT_PROFILE,
+    profiles: Object.values(PROFILES).map(({key,label,addresses})=>({key,label,addresses:addresses??null})),
     safety: [
-      "all v6 operations fail closed on same-block chain, identity, runtime hash or wiring mismatch; two RPC block hashes must agree",
+      "all deployed-profile operations fail closed on same-block chain, identity, runtime hash or wiring mismatch; two RPC block hashes must agree",
       "simulate before proposing a signature",
       "read ownership live, immediately before an owner action",
       "type BURN-<donor> before constructing merge calldata; donor is permanently destroyed",

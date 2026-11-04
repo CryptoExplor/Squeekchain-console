@@ -141,3 +141,23 @@ assert.equal(network.requests.find(record => record.outcome === 'http-error').ht
 assert.deepEqual(network.browserReportedCorsRejections, ['https://rpc.example']);
 assert.equal(JSON.stringify(network).includes(secret), false);
 console.log('PASS live network evidence: HTTP/JSON-RPC vs browser network failures, explicit CORS signals, no params/headers/URL credentials in attachments');
+
+// A fetch failure is shared backoff, not a fresh fetch/re-probe on every refresh.
+{
+ const original=globalThis.fetch,cooldowns=new Map();let clock=1000,fetches=0;
+ globalThis.fetch=async()=>{fetches++;throw new TypeError('Failed to fetch');};
+ try {
+  const make=()=>createRpcContext({rpcCooldowns:cooldowns,now:()=>clock}).client;
+  await assert.rejects(make().getBlockNumber());const firstCount=fetches;assert.ok(firstCount>0);
+  await assert.rejects(make().getBlockNumber());assert.equal(fetches,firstCount,'shared network cooldown prevents repeated fetches across contexts');
+  clock+=30000;await assert.rejects(make().getBlockNumber());assert.ok(fetches>firstCount,'network endpoints become eligible after bounded cooldown');
+ }finally{globalThis.fetch=original;}
+}
+console.log('PASS network fetch/CORS-like failures: shared 30s cooldown, no hot re-probes, bounded recovery (not CORS attribution)');
+
+const {readToolResult}=await import('../sdk/tool-runtime.js');
+const selectedAttempts=[{endpoint:'https://selected-profile.test',method:'eth_call',availability:true}];
+const toolFailure=await readToolResult({networkStatus:async()=>{throw new RpcAvailabilityError(new Error('RPC unavailable'),{endpoint:'https://selected-profile.test',method:'eth_call'});},rpcDiagnostics:()=>selectedAttempts},'squeek_network_status');
+assert.deepEqual(toolFailure.diagnostics.attempts,selectedAttempts);
+assert.equal(toolFailure.diagnostics.endpoint,'https://selected-profile.test');
+console.log('PASS shared browser/MCP tool errors retain the serving adapter diagnostics');

@@ -1,4 +1,5 @@
-import { getAddress, keccak256, parseAbi } from 'viem';
+import { ACTION_REASONS } from './capabilities.js';
+import { getAddress, keccak256, parseAbi, toHex } from 'viem';
 import { coreAbi, miningAbi, nftAbi, tokenAbi } from './abi.js';
 import { DEPLOYMENT, CORE_CONFIGURATION } from './record.js';
 import { RpcTrustError, requireSepolia } from './rpc.js';
@@ -7,7 +8,7 @@ export const ADMIN_SLOT = '0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a
 // owner() ABI is also published in the official Quickstart verification example.
 const ownerAbi = parseAbi(['function owner() view returns (address)']);
 const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
-const check = (condition, reason) => { if (!condition) throw new RpcTrustError(`Deployment mismatch: ${reason}`); };
+const check = (condition, reason) => { if (!condition) throw new RpcTrustError(`${ACTION_REASONS.mismatch} ${reason}`); };
 const slotAddress = word => {
   check(/^0x[0-9a-f]{64}$/i.test(word ?? ''), 'missing EIP-1967 slot');
   return getAddress(`0x${word.slice(-40)}`);
@@ -21,7 +22,7 @@ export async function readProxySlots(client, snapshot, record = DEPLOYMENT) {
   return Object.fromEntries(pairs);
 }
 const contract = (address, abi, functionName, args = []) => ({ address, abi, functionName, args });
-export async function verifyGraphAt(client, snapshot, record = DEPLOYMENT, slots) {
+export async function verifyGraphAt(client, snapshot, record = DEPLOYMENT, slots, identityCodes) {
   requireSepolia(await client.getChainId());
   const blockNumber = snapshot.blockNumber;
   slots ??= await readProxySlots(client, snapshot, record);
@@ -44,7 +45,7 @@ export async function verifyGraphAt(client, snapshot, record = DEPLOYMENT, slots
   const codeAddresses = [slots.core.implementation, slots.mining.implementation, record.token, record.nft, record.renderer, record.validator, record.art];
   const [values, codes] = await Promise.all([
     client.multicall({ contracts: calls, allowFailure: false, blockNumber }),
-    Promise.all(codeAddresses.map(address => client.getCode({ address, blockNumber }))),
+    identityCodes ?? Promise.all(codeAddresses.map(address => client.getCode({ address, blockNumber }))),
   ]);
   const detail = {};
   for (const [index, name] of ['core', 'mining'].entries()) {
@@ -82,11 +83,30 @@ export async function verifyGraphAt(client, snapshot, record = DEPLOYMENT, slots
 // the operation's final two-peer hash check succeeds, so reorg/error results cannot seed trust.
 export function createSessionVerifier(cache = new Map(), record = DEPLOYMENT) {
   return {
-    async prepare(client, snapshot) {
-      const slots = await readProxySlots(client, snapshot, record);
+    async prepare(client, snapshot, readIdentity) {
+      let slots,codes;
+      // Production uses the SAME two peers selected by the snapshot guard. A
+      // genuine block hash alone does not authenticate storage or runtime code.
+      if(readIdentity){
+        const block=toHex(snapshot.blockNumber),requests=['core','mining'].flatMap(name=>[IMPLEMENTATION_SLOT,ADMIN_SLOT].map(slot=>({method:'eth_getStorageAt',params:[record[name],slot,block]})));
+        const expectedSlots=['core','mining'].flatMap(name=>[record.implementations[name],record.proxyAdmins[name]]);
+        const key=[record.release,record.core,record.mining,...expectedSlots].join(':').toLowerCase();
+        const addresses=[record.implementations.core,record.implementations.mining,record.token,record.nft,record.renderer,record.validator,record.art];
+        if(!cache.has(key))requests.push(...addresses.map(address=>({method:'eth_getCode',params:[address,block]})));
+        const responses=await readIdentity(snapshot,requests);
+        check(responses.length>=2,'two identity peers required');
+        for(const values of responses){
+          check(values.length===requests.length,'identity response length');
+          expectedSlots.forEach((expected,i)=>check(same(slotAddress(values[i]),expected),'independent implementation/admin slot'));
+          if(requests.length>4)values.slice(4).forEach((code,i)=>{check(typeof code==='string'&&/^0x(?:[\da-f]{2})+$/i.test(code),'missing independent runtime code');if(i<2)check(same(keccak256(code),record.runtimeHashes[i===0?'core':'mining']),'independent implementation runtime hash');});
+        }
+        slots=Object.fromEntries(['core','mining'].map((name,i)=>[name,{implementation:slotAddress(responses[0][i*2]),admin:slotAddress(responses[0][i*2+1])}]));
+        if(requests.length>4)codes=responses[0].slice(4);
+      }else slots=await readProxySlots(client,snapshot,record); // explicit injected test contexts
+
       const key = [record.release, record.core, record.mining, ...['core', 'mining'].flatMap(name => [slots[name].implementation, slots[name].admin])].join(':').toLowerCase();
       const cached = cache.get(key);
-      const full = cached ?? await verifyGraphAt(client, snapshot, record, slots);
+      const full = cached ?? await verifyGraphAt(client, snapshot, record, slots, codes);
       const value = { ...full, blockNumber: String(snapshot.blockNumber), blockHash: snapshot.blockHash,
         cacheHit: Boolean(cached), fullVerificationBlockNumber: cached?.fullVerificationBlockNumber ?? full.blockNumber,
         fullVerificationBlockHash: cached?.fullVerificationBlockHash ?? full.blockHash,

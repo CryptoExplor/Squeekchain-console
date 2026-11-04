@@ -58,7 +58,9 @@ function fakeClient({ alter = (_request, value) => value } = {}) {
       if (fn === 'collectionPolicy') return structuredClone(policy);
       if (fn === 'configuration') return same(address, DEPLOYMENT.core) ? { ...CORE_CONFIGURATION } : { ...miningConfig };
       if (fn === 'ownerOf') return BigInt(args[0]) === 777n ? other : owner;
-      if (fn === 'balanceOf') return same(address, DEPLOYMENT.nft) ? 2n : 10n ** 18n;
+      if (fn === 'totalSupply') return 9972n;
+      if(fn==='getEthBalance')return 10n**18n;
+ if (fn === 'balanceOf') return same(address, DEPLOYMENT.nft) ? 2n : 10n ** 18n;
       if (fn === 'claimable') return 2n * 10n ** 18n;
       if (fn === 'checkpointStatus') return [false, 5n, true];
       if (fn === 'REWARD_PER_BLOCK') return 10n ** 18n;
@@ -89,12 +91,13 @@ function fakeClient({ alter = (_request, value) => value } = {}) {
   return client;
 }
 
-assert.equal(DEFAULT_PROFILE, 'sepolia-v6');
-assert.equal(PROFILES['sepolia-v6'].kind, 'supported');
-assert.equal(PROFILES.sepolia.kind, 'read-only (unverified)');
-for (const action of ['claim', 'merge', 'checkpoint', 'transfer', 'deposit']) assert.equal(PROFILES.sepolia.capabilities[action], false);
+assert.equal(DEFAULT_PROFILE, 'sepolia-v9');
+assert.equal(PROFILES['sepolia-v6'].label, 'Sepolia v6');
+assert.equal(PROFILES['sepolia-v9'].label, 'Sepolia v9');
+for (const action of ['claim','merge','checkpoint','deposit','withdraw','stake','unstake']) assert.equal(PROFILES['sepolia-v9'].capabilities[action],true);
 const v9 = createSqueek9();
-for (const name of ['buildTransfer', 'buildCheckpoint', 'buildMerge', 'claimPreview', 'mergePreview']) assert.equal(v9[name], undefined);
+for (const name of ['claimPreview','mergePreview','actionPreview']) assert.equal(typeof v9[name],'function');
+assert.throws(()=>v9.mergePreview(owner,'1','2'),/BURN-2/);
 assert.ok(PUBLIC_RPCS.length >= 3);
 assert.throws(() => requireSepolia(1), /Sepolia/);
 requireSepolia('0xaa36a7');
@@ -104,7 +107,7 @@ for (const confirm of [undefined, '', '2', 'burn-2', 'BURN-1']) assert.throws(()
 requireBurn('2', 'BURN-2');
 assert.throws(() => createSqueekchain().mergePreview(owner, '1', '2'), /BURN-2/);
 assert.ok(TOOL_SPECS.find(tool => tool.name === 'squeek_merge_preview').inputSchema.required.includes('confirm'));
-console.log('PASS gates: supported default v6; all v9 transaction paths absent; BURN guard before network/calldata; no verification bypass');
+console.log('PASS gates: equal deployed profiles; v9 guarded action surface present; BURN guard before network/calldata; no verification bypass');
 
 const peer = (blockHash = hash, chainId = 11155111) => ({ getChainId: async () => chainId, getBlock: async ({ blockNumber: at }) => ({ number: at, hash: blockHash }) });
 const primary = { ...peer(), getBlockNumber: async () => blockNumber + 12n };
@@ -239,6 +242,7 @@ async function callWire(address, data, at) {
 }
 globalThis.fetch = async (_url, init) => {
   const request = JSON.parse(init.body); wire.push(request);
+  const respond=async request=>{
   const { method, params = [] } = request;
   let result;
   if (method === 'eth_chainId') result = '0xaa36a7';
@@ -255,20 +259,24 @@ globalThis.fetch = async (_url, init) => {
       topics: encodeEventTopics({ abi: nftAbi, eventName: 'Transfer', args: { from: other, to: owner, tokenId: id } }),
     })) : [];
   } else throw new Error(`Unmocked wire RPC ${method}`);
-  return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }), { headers: { 'content-type': 'application/json' } });
+  return {jsonrpc:'2.0',id:request.id,result};};
+  return new Response(JSON.stringify(Array.isArray(request)?await Promise.all(request.map(respond)):await respond(request)), { headers: { 'content-type': 'application/json' } });
 };
 try {
   const context = createRpcContext();
   const wireSdk = createFixtureSdk({ rpcContext: context });
-  await wireSdk.networkStatus();
+  const network = await wireSdk.networkStatus();
+  assert.equal(network.nft.totalSupply,'9972','v6 supply comes from same-block NFT totalSupply');
+  assert.equal(network.snapshot.timestamp,'1');
+  assert.equal(network.core.roundDuration,String(CORE_CONFIGURATION.roundDuration));
   const cold = wire.length;
   wire.length = 0;
   const warm = await wireSdk.networkStatus();
   assert.equal(warm.verification.cacheHit, true);
   assert.ok(wire.length <= 25, `Warm v6 page load exceeded RPC budget: ${wire.length}`);
-  assert.equal(wire.filter(request => request.method === 'eth_getStorageAt').length, 4);
-  assert.equal(wire.filter(request => request.method === 'eth_getCode').length, 0);
-  assert.equal(wire.filter(request => request.method === 'eth_chainId').length, 0);
+  assert.equal(wire.flatMap(request=>Array.isArray(request)?request:[request]).filter(request => request.method === 'eth_getStorageAt').length, 8);
+  assert.equal(wire.flatMap(request=>Array.isArray(request)?request:[request]).filter(request => request.method === 'eth_getCode').length, 0);
+  assert.equal(wire.flatMap(request=>Array.isArray(request)?request:[request]).filter(request => request.method === 'eth_chainId').length, 0);
   const warmCount = wire.length;
   wire.length = 0;
   const batch = await wireSdk.artBatch(['1', '2', '3']);
@@ -277,6 +285,7 @@ try {
   wire.length = 0;
   await wireSdk.walletStatus(owner);
   assert.ok(wire.length <= 25, `Warm wallet page load exceeded RPC budget: ${wire.length}`);
+  fs.writeFileSync('docs/audit/v6-request-budget.json',JSON.stringify({profile:'sepolia-v6',coldNetwork:cold,warmNetwork:warmCount,wallet:wire.length,limit:25},null,2)+'\n');
   console.log(`PASS actual wire budget: cold network ${cold}; warm network ${warmCount}; wallet ${wire.length} requests; art batch one eth_call`);
   const wireFetch = globalThis.fetch, contacted = [];
   globalThis.fetch = async (url, init) => {

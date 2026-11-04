@@ -1,3 +1,4 @@
+import { ACTION_REASONS, blocked } from './capabilities.js';
 import { throwIfAborted } from "./cancellation.js";
 /**
  * squeekchain SDK — one isomorphic core for the CLI, the browser dApp and the MCP server.
@@ -12,7 +13,7 @@ import { throwIfAborted } from "./cancellation.js";
  * Every method returns JSON-serializable data (bigints become decimal strings),
  * so the same call works in a browser, over MCP, or in a Node script.
  */
-import { encodeFunctionData, getAddress, formatEther } from "viem";
+import { encodeFunctionData, getAddress, formatEther, multicall3Abi } from "viem";
 import { sepolia } from "viem/chains";
 import { coreAbi, miningAbi, nftAbi, tokenAbi } from "./abi.js";
 
@@ -92,7 +93,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
       throwIfAborted(signal);
       activeSnapshot = await context.snapshot();
       try {
-        const prepared = await verifier.prepare(client, activeSnapshot);
+        const prepared = await verifier.prepare(client, activeSnapshot, context.readIdentity);
         verification = prepared.value;
         throwIfAborted(signal);
         const result = await operation();
@@ -100,7 +101,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
         await context.check(activeSnapshot);
         throwIfAborted(signal);
         prepared.commit();
-        return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash } } : result;
+        return result && !Array.isArray(result) ? { ...result, verification, snapshot: { blockNumber: String(activeSnapshot.blockNumber), blockHash: activeSnapshot.blockHash, timestamp: activeSnapshot.timestamp == null ? null : String(activeSnapshot.timestamp), peers:activeSnapshot.peers?.map(peer=>({label:peer.name,state:'agreed'}))??[] } } : result;
       } catch (error) { throw wrap(error, "Snapshot unavailable"); }
       finally { activeSnapshot = null; verification = null; }
     });
@@ -112,7 +113,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
   // Every final set (cache/logs/API) is confirmed onchain at this snapshot.
   const discoverTokenIds = owner => discoverOwnedIds({ client, snapshot: activeSnapshot,
     nft: addr.nft, abi: nftAbi, owner, startBlock: DEPLOYMENT.nftStartBlock,
-    namespace: DEPLOYMENT.release, store: discoveryCache, signal });
+    namespace: DEPLOYMENT.release+':chain-only', store: discoveryCache, signal, accountSource:null });
 
   const sortIds = (ids) => [...new Set(ids.map(String))].map(BigInt).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
@@ -120,12 +121,12 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
   async function networkStatus() { return readNetworkStatus(); }
 
   async function readNetworkStatus() {
-    const [miningState, coreState, accounting, cpStatus, policy, rewardPerBlock, supplyCap, config] = await client.multicall({
+    const [miningState, coreState, accounting, cpStatus, policy, rewardPerBlock, supplyCap, config, nftSupply] = await client.multicall({
       allowFailure: false, blockNumber: activeSnapshot.blockNumber,
       contracts: [
         ['mining', miningAbi, 'state'], ['core', coreAbi, 'state'], ['mining', miningAbi, 'accounting'],
         ['mining', miningAbi, 'checkpointStatus'], ['mining', miningAbi, 'collectionPolicy', [COLLECTION]],
-        ['mining', miningAbi, 'REWARD_PER_BLOCK'], ['mining', miningAbi, 'SUPPLY_CAP'], ['core', coreAbi, 'configuration'],
+        ['mining', miningAbi, 'REWARD_PER_BLOCK'], ['mining', miningAbi, 'SUPPLY_CAP'], ['core', coreAbi, 'configuration'], ['nft', nftAbi, 'totalSupply'],
       ].map(([name, abi, functionName, args = []]) => ({ address: addr[name], abi, functionName, args })),
     });
     const [corePaused, nextRound, roundSettled] = cpStatus;
@@ -143,7 +144,9 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
         blockProgress: String(coreState.blockProgress),
         paused: coreState.paused,
         genesisTimestamp: String(config.genesisTimestamp),
+        roundDuration: String(config.roundDuration),
       },
+      nft: { totalSupply: String(nftSupply) },
       mining: {
         processedThroughRound: String(miningState.processedThroughRound),
         lagRounds: String(BigInt(coreState.settledThroughRound) - BigInt(miningState.processedThroughRound)),
@@ -162,7 +165,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
         nextRound: String(nextRound),
         roundSettled,
         canCheckpoint: !corePaused && roundSettled,
-        reason: corePaused ? "SqueekCore is paused" : roundSettled ? null : "no newly certified round yet",
+        reason: corePaused ? ACTION_REASONS.paused : roundSettled ? null : ACTION_REASONS.unsettled,
       },
       policy: {
         rewardPerBlock: sqkAmount(rewardPerBlock),
@@ -236,7 +239,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
   async function readWalletStatus(address, { force } = {}) {
     const [ids, ethBalance, sqkBalance, net] = await Promise.all([
       discoverTokenIds(address, { force }),
-      client.getBalance({ address, blockNumber: activeSnapshot.blockNumber }),
+      client.readContract({address:sepolia.contracts.multicall3.address,abi:multicall3Abi,functionName:'getEthBalance',args:[address],blockNumber:activeSnapshot.blockNumber}),
       read("token", tokenAbi, "balanceOf", [address]),
       networkStatus(),
     ]);
@@ -290,7 +293,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
   async function checkpointPreview(from) {
     const [corePaused, nextRound, roundSettled] = await read("mining", miningAbi, "checkpointStatus");
     const checkpoint = { corePaused, nextRound: String(nextRound), roundSettled };
-    if (corePaused || !roundSettled) return { ok: false, checkpoint, reason: corePaused ? "SqueekCore is paused" : `Round ${nextRound} is not settled` };
+    if (corePaused || !roundSettled) return blocked(corePaused?'paused':'unsettled',{checkpoint});
     if (!from) return { ok: false, checkpoint, reason: "Supply a caller address to simulate checkpoint" };
     await client.simulateContract({ address: addr.mining, abi: miningAbi, functionName: "checkpoint", account: getAddress(from), blockNumber: activeSnapshot.blockNumber });
     const tx = buildCheckpoint();

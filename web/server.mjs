@@ -6,6 +6,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
+// Match Cloudflare Pages in local/mock-browser tests too.
+const securityHeaders=Object.fromEntries(fs.readFileSync(path.join(DIR,'_headers'),'utf8').split('\n').filter(line=>/^\s+[^:]+:/.test(line)).map(line=>{
+  const colon=line.indexOf(':');return [line.slice(0,colon).trim(),line.slice(colon+1).trim()];
+}));
 const PORT = Number(process.env.PORT || 5173);
 const HOST = process.env.HOST || "0.0.0.0";
 
@@ -25,6 +29,7 @@ const MIME = {
 };
 
 const server = http.createServer((req, res) => {
+  for(const [name,value] of Object.entries(securityHeaders))res.setHeader(name,value);
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405, { allow: "GET, HEAD" }).end("method not allowed");

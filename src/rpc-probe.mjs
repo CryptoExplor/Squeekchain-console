@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Diagnostic only: no wallet, keys, signing or full deployment qualification.
+import {anySignal} from '../sdk/cancellation.js';
 import { pathToFileURL } from 'node:url';
 import { encodeEventTopics, toHex } from 'viem';
 import { PUBLIC_RPCS, requireSepolia } from '../sdk/rpc.js';
@@ -8,16 +9,19 @@ import { IMPLEMENTATION_SLOT } from '../sdk/verify.js';
 import { nftAbi } from '../sdk/abi.js';
 
 export async function rpcRequest(url, method, params = []) {
+  const deadline=anySignal([],15000);
+  try {
   const response = await fetch(url, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-    signal: AbortSignal.timeout(15_000),
+    signal:deadline.signal,
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const body = await response.json();
   if (body.error) throw new Error(`${body.error.code}: ${body.error.message}`);
   if (body.result == null) throw new Error('Missing result');
   return body.result;
+  } finally { deadline.dispose(); }
 }
 
 /** Probe one endpoint independently; a failed capability does not hide the others. */

@@ -1,0 +1,87 @@
+import {anySignal,throwIfAborted} from './cancellation.js';
+import { DAY,DISPLAY_TTL,displayKey,createDisplayCache } from './display-cache.js';
+import { retryAfterMs } from './retry-after.js';
+const BASE='https://api.squeekchain.com/v1';
+const same=(a,b)=>typeof a==='string'&&typeof b==='string'&&a.toLowerCase()===b.toLowerCase();
+const uint=v=>typeof v==='string'&&/^\d{1,78}$/.test(v)&&BigInt(v)<2n**256n;
+const hash=v=>/^0x[\da-f]{64}$/i.test(v??'');
+export class DisplayError extends Error{constructor(kind,message){super(message);this.kind=kind;if(kind==='mismatch')this.name='RpcTrustError';}}
+const requireData=(ok,message)=>{if(!ok)throw new DisplayError('schema',message);};
+const requirePin=(ok,message)=>{if(!ok)throw new DisplayError('mismatch',message);};
+// No implicit CDN expansion. URL policy is checked on fresh and cached metadata,
+// and again at the image fetch boundary (including callers with a stub API).
+export function artworkUrl(value){
+ requireData(typeof value==='string'&&value.length>0&&value.length<=2048,'Invalid artwork URL');
+ let url;try{url=new URL(value,'https://api.squeekchain.com');}catch{throw new DisplayError('schema','Invalid artwork URL');}
+ requireData(url.origin==='https://api.squeekchain.com'&&!url.username&&!url.password,'Untrusted artwork origin');return url.href;
+}
+function metadataImage(metadata){if(metadata?.status!=='available')return;
+ if(metadata.cardImageUrl!=null)artworkUrl(metadata.cardImageUrl);
+ requireData(typeof metadata.cardImageUrl==='string'||(typeof metadata.imageDataUri==='string'&&metadata.imageDataUri.length<=262144&&/^data:image\/svg\+xml;base64,/.test(metadata.imageDataUri)),'Invalid metadata image');
+}
+
+export function validateEconomyEnvelope(data,profile,version){
+ requireData(data?.schemaVersion===version,'Unsupported display schema');
+ if(data.status!=='available')throw new DisplayError('unavailable','API source unavailable');
+ requirePin(data.release?.id===profile.identities.release,'API release mismatch');
+ const i=data.identities,p=profile.identities.pins;
+ requirePin(i&&same(i.core,profile.addresses.core)&&same(i.token,profile.addresses.token)&&same(i.genesis,profile.addresses.nft),'API contract identity mismatch');
+ for(const [field,name] of [['mining','issuance'],['staking','staking']]){const value=i[field],pin=p[name];requirePin(value&&same(value.proxy,pin.address)&&same(value.implementation,pin.implSlot)&&String(value.implementationVersion)===pin.implementationCodeVersion&&same(value.storageLayoutDigest,pin.implementationStorageLayoutDigest),`API ${field} identity mismatch`);}
+ if(i.launch!=null)requirePin(same(i.launch,profile.addresses.launch),'API launch mismatch');
+ requireData(data.chain?.chainId==='11155111'&&data.chain.target==='sepolia'&&uint(data.chain.safeThroughBlock),'Invalid API chain context');
+ requireData(typeof data.installationId==='string'&&data.installationId.length>0,'Missing installation context');
+ return data;
+}
+// All budgets are below the published per-IP ceilings. Shared across profiles in a tab.
+const limits={publicFast:[30,60],publicHeavy:[5,20],metadata:[20,40],observations:[2,4]}, buckets=new Map();
+export function createDisplayApi({profile,fetcher=globalThis.fetch,cache=createDisplayCache(),now=Date.now,signal,rateBuckets=buckets}={}){
+ let context=null;const pending=new Map(),memory=new Map(),counts={api:0,rpc:0,cache:0};
+ const check=()=>throwIfAborted(signal);
+ const classFor=path=>path.startsWith('/measurement/')?'observations':path.startsWith('/squeeks/')?'metadata':/^\/(accounts|events|settlements)/.test(path)?'publicHeavy':'publicFast';
+ function budget(path){const kind=classFor(path),[rate,burst]=limits[kind],at=now(),b=rateBuckets.get(kind)??{at,tokens:burst,retryAt:0};b.tokens=Math.min(burst,b.tokens+Math.max(0,at-b.at)*rate/1000);b.at=at;rateBuckets.set(kind,b);if(at<b.retryAt||b.tokens<1)throw new DisplayError('transport','Display API cooldown');b.tokens--;return b;}
+ async function request(path,{validator,store=true}={}){
+  check();const key=displayKey(profile,path),noStore=/^\/accounts\//.test(path)||path.startsWith('/measurement/');
+  if(pending.has(key))return pending.get(key);
+  const operation=(async()=>{let saved=noStore?null:memory.get(key)??await cache.get(key);check();
+   if(saved&&now()-saved.at>DISPLAY_TTL)saved=null;
+   const deadline=anySignal([signal],10000);
+   let received=false;try{const b=budget(path);counts.api++;const response=await fetcher(BASE+path,{method:'GET',credentials:'omit',cache:noStore?'no-store':'no-cache',headers:{accept:'application/json',...(!noStore&&saved?.etag?{'If-None-Match':saved.etag}:{})},signal:deadline.signal});check();
+    if([429,503].includes(response.status))b.retryAt=now()+retryAfterMs(response.headers.get('Retry-After'),now());
+    if(!response.ok&&response.status!==304)throw new DisplayError('transport',`Display API HTTP ${response.status}`);
+    requireData(response.status!==304||Boolean(saved),'304 without a validated body');
+    let data;if(response.status===304)data=saved.data;else{try{data=await response.json();}catch{throw new DisplayError('schema','Malformed display JSON');}}check();received=true;validator?.(data);
+    const result={data,at:now(),etag:response.headers.get('ETag')??saved?.etag??null};
+    if(!noStore&&store){memory.set(key,result);await cache.set(key,result);check();}
+    return result;
+   }catch(error){check();if(error instanceof DisplayError&&error.kind!=='transport'){memory.delete(key);await cache.delete(key);throw error;}
+    if(received&&!(error instanceof DisplayError))throw error;
+    if(saved){try{validator?.(saved.data);counts.cache++;return {...saved,stale:true};}catch{memory.delete(key);await cache.delete(key);}}
+    if(error instanceof DisplayError)throw error;throw new DisplayError('transport','Display API transport unavailable');}finally{deadline.dispose();}
+  })().finally(()=>pending.delete(key));pending.set(key,operation);return operation;
+ }
+ function bind(data){validateEconomyEnvelope(data,profile,2);if(context)requirePin(context.installationId===data.installationId,'Economy installation changed');requireData(uint(data.supply?.liveSupplyBaseUnits)&&uint(data.supply?.capBaseUnits)&&uint(data.nft?.live)&&typeof data.nft.mergesOpen==='boolean'&&uint(data.mining?.processedThroughRound)&&uint(data.schedule?.issuedBaseUnits)&&Number.isInteger(data.nft?.maximumLevel)&&data.nft.maximumLevel>=1&&data.nft.maximumLevel<=100&&data.nft.basePower?.length===data.nft.maximumLevel&&data.nft.cooldownBlocks?.length===data.nft.maximumLevel&&data.nft.basePower.every(uint)&&data.nft.cooldownBlocks.every(uint),'Invalid economy display');context={installationId:data.installationId};}
+ function installation(data){requireData(context,'No validated economy context');requirePin(data.installationId===context.installationId,'API installation mismatch');if(data.release)requirePin(data.release.id===profile.identities.release,'API release mismatch');}
+ async function economy(){const result=await request('/economy/state',{validator:bind});const key=displayKey(profile,'static-configuration');let configuration=await cache.get(key);check();if(!configuration||now()-configuration.at>=DAY){configuration={at:now(),value:{release:profile.identities.release,addresses:profile.addresses,expectedIdentities:profile.identities.pins,maximumLevel:result.data.nft.maximumLevel,basePower:result.data.nft.basePower,cooldownBlocks:result.data.nft.cooldownBlocks}};await cache.set(key,configuration);}return {...result,configuration:configuration.value};}
+ async function ensureContext(){if(!context)await economy();}
+ async function core(){await ensureContext();return request('/core',{validator:data=>{requireData(data.schemaVersion===1,'Unsupported core schema');if(data.status!=='available')throw new DisplayError('unavailable','Core unavailable');installation(data);const pin=profile.identities.pins.core;requirePin(same(data.identities?.core,pin.address)&&same(data.identities?.proxyImplementation,pin.implSlot)&&same(data.identities?.proxyAdminSlot,pin.adminSlot)&&same(data.implementation?.codeAddress,pin.implSlot)&&same(data.implementation?.runtimeHash,pin.implCodeHash)&&same(data.implementation?.storageLayoutDigest,pin.implementationStorageLayoutDigest)&&String(data.implementation?.codeVersion)===pin.implementationCodeVersion,'API Core identity mismatch');requireData(['settledThroughRound','blockHeight','blockProgress','workPerThousandBlocks'].every(k=>uint(data.core?.[k]))&&uint(data.configuration?.genesisTimestamp)&&uint(data.configuration?.roundDuration)&&typeof data.core.paused==='boolean','Invalid core display');}});}
+ async function status(){await ensureContext();return request('/status',{validator:data=>{requireData(data.schemaVersion===1,'Unsupported status schema');installation(data);if(data.status!=null&&data.status!=='available')throw new DisplayError('unavailable','Status unavailable');const m=data.measurement;if(m===null)throw new DisplayError('unavailable','No device reading');requireData(m&&['online','stale'].includes(m.freshness)&&['ACTIVE','IDLE','COUNTER_FAULT'].includes(m.coreStatus)&&['rpmMilli','speedMmPerSecond','distanceMm'].every(k=>Number.isSafeInteger(m[k])&&m[k]>=0)&&Number.isFinite(Date.parse(m.receivedAt)),'Invalid measurement display');}});}
+ async function blocks(){await ensureContext();return request('/measurement/blocks',{validator:data=>{requireData(data.schemaVersion==='game-block-projection.v1','Unsupported projection schema');installation(data);if(data.status!=='available'||data.freshness!=='fresh')throw new DisplayError('unavailable','Projection unavailable');requirePin(data.roundSchedule?.genesisTimestamp===profile.identities.pins.issuance.wiring.bindings.genesisTimestamp&&data.roundSchedule?.roundDurationSeconds===600,'Projection round schedule mismatch');requirePin(data.chain?.chainId==='11155111'&&same(data.chain?.coreAddress,profile.addresses.core),'Projection Core mismatch');requireData(Array.isArray(data.blocks)&&data.blocks.length<=120&&data.blocks.every(b=>uint(b.height)&&uint(b.roundId)&&uint(b.workThreshold)),'Invalid projected blocks');}});}
+ async function feed(path='/events?category=all&limit=40'){await ensureContext();return request(path,{validator:data=>{validateEconomyEnvelope(data,profile,path.startsWith('/accounts/')?2:3);installation(data);requireData(Array.isArray(data.events??data.activity),'Invalid activity feed');}});}
+ async function settlements(){await ensureContext();return request('/settlements',{validator:data=>{requireData(data.schemaVersion===3,'Unsupported settlements schema');if(data.status!=='available')throw new DisplayError('unavailable','Settlements unavailable');installation(data);requirePin(data.chain?.chainId==='11155111'&&data.chain.target==='sepolia'&&data.mining?.economy?.releaseId===profile.identities.release&&same(data.mining?.economy?.mining,profile.addresses.issuance)&&same(data.mining?.economy?.token,profile.addresses.token),'Settlement economy mismatch');requireData(Array.isArray(data.recentSettlements),'Invalid settlements');}});}
+ async function account(owner){await ensureContext();let cursor=null,first,tokens=[],snapshot,seen=new Set();for(let page=0;page<100;page++){
+  const result=await request(`/accounts/${owner.toLowerCase()}?limit=100${cursor?'&cursor='+encodeURIComponent(cursor):''}`,{store:false,validator:data=>{validateEconomyEnvelope(data,profile,2);installation(data);requirePin(same(data.account,owner),'Account context mismatch');requireData(hash(data.chain.safeBlockHash)&&Array.isArray(data.tokens)&&data.tokens.length<=100&&(data.nextCursor===null||typeof data.nextCursor==='string'),'Invalid account page');}});check();const d=result.data,at=d.chain.safeThroughBlock+':'+d.chain.safeBlockHash;if(snapshot&&snapshot!==at)throw new DisplayError('unavailable','Account snapshot changed');snapshot=at;first??=result;
+  for(const token of d.tokens){requireData(uint(token.tokenId)&&BigInt(token.tokenId)>0n&&['wallet','staking'].includes(token.custody)&&Number.isInteger(token.level)&&token.level>0&&uint(token.nextMergeHeight),'Invalid account token');if(seen.has(token.tokenId))throw new DisplayError('schema','Duplicate account token');seen.add(token.tokenId);tokens.push(token);}
+  cursor=d.nextCursor;if(cursor===null){requireData(uint(d.tokenCounts?.wallet)&&uint(d.tokenCounts?.staking)&&BigInt(d.tokenCounts.wallet)+BigInt(d.tokenCounts.staking)===BigInt(tokens.length),'Incomplete display account');return {...first,data:{...first.data,tokens}};}
+ }throw new DisplayError('unavailable','Account pagination limit');}
+ async function squeek(id,level){await ensureContext();const artKey=displayKey(profile,`art:${id}:${level}`),saved=await cache.get(artKey);check();if(level!=null&&saved&&now()-saved.at<DAY){validateEconomyEnvelope(saved.data,profile,2);installation(saved.data);requirePin(saved.data.tokenId===String(id)&&saved.data.level===level,'Cached artwork identity mismatch');try{metadataImage(saved.data.metadata);}catch(error){await cache.delete(artKey);throw error;}counts.cache++;return saved;}
+  const result=await request(`/squeeks/${id}`,{validator:data=>{validateEconomyEnvelope(data,profile,2);installation(data);requirePin(data.tokenId===String(id),'Squeek ID mismatch');requireData(Number.isInteger(data.level)&&data.level>0&&data.level<=100,'Invalid Squeek level');metadataImage(data.metadata);}});
+  if(level!=null&&result.data.level!==level)throw new DisplayError('unavailable','Squeek changed level; refresh account');
+  const metadata=result.data.metadata;if(metadata?.status==='available'&&typeof metadata.imageDataUri==='string'&&/^data:image\/svg\+xml;base64,/.test(metadata.imageDataUri)&&metadata.imageDataUri.length<=262144)await cache.set(displayKey(profile,`art:${id}:${result.data.level}`),result);
+  return result;
+ }
+ async function invalidateArt(ids){for(const id of ids){const key=displayKey(profile,`/squeeks/${id}`);memory.delete(key);await cache.delete(key);for(let level=1;level<=100;level++)await cache.delete(displayKey(profile,`art:${id}:${level}`));}}
+ return {economy,core,status,blocks,feed,settlements,account,squeek,invalidateArt,counts,get context(){return context;}};
+}
+export function apiNetwork(coreResult,economyResult){const c=coreResult.data,e=economyResult.data,settled=BigInt(c.core.settledThroughRound),processed=BigInt(e.mining.processedThroughRound),usable=!coreResult.stale&&!economyResult.stale&&c.chain?.safeThroughBlock===e.chain?.safeThroughBlock&&hash(c.chain?.safeBlockHash)&&same(c.chain.safeBlockHash,e.chain?.safeBlockHash),amount=v=>({base:v,sqk:decimalEther(v)});return {core:{...c.core,genesisTimestamp:c.configuration.genesisTimestamp,roundDuration:c.configuration.roundDuration},mining:{processedThroughRound:String(processed),lagRounds:usable?String(settled>processed?settled-processed:0n):null,issued:amount(e.schedule.issuedBaseUnits),minted:amount(e.supply.liveSupplyBaseUnits),supplyCap:amount(e.supply.capBaseUnits)},policy:{maximumLevel:e.nft.maximumLevel,mergesOpen:e.nft.mergesOpen,levels:e.nft.basePower.map((basePower,i)=>({level:i+1,basePower,cooldownBlocks:e.nft.cooldownBlocks[i]}))},nft:{totalSupply:e.nft.live},checkpoint:{canCheckpoint:usable&&!c.core.paused&&settled>processed,nextRound:String(processed+1n),roundSettled:settled>processed,corePaused:c.core.paused},source:{kind:'api',at:Math.min(coreResult.at,economyResult.at),stale:!usable},snapshot:{blockNumber:c.chain?.safeThroughBlock,timestamp:Number.isFinite(Date.parse(e.chain.safeBlockTimestamp))?String(Math.floor(Date.parse(e.chain.safeBlockTimestamp)/1000)):null}};}
+function decimalEther(value){if(!uint(value))return null;const n=BigInt(value);return `${n/10n**18n}.${String(n%10n**18n).padStart(18,'0').replace(/0+$/,'')||'0'}`;}
+export function apiWallet(result,net,owner){const d=result.data;for(const field of [d.power?.nftPower,d.power?.sqkPower,d.stake?.principalBaseUnits,d.rewards?.claimableBaseUnits])requireData(uint(field),'Invalid account totals');for(const field of [d.stake?.freshBaseUnits,d.stake?.matureBaseUnits,...d.tokens.map(t=>t.basePower)])if(field!=null)requireData(uint(field),'Invalid optional account amount');const amount=v=>({base:v,sqk:decimalEther(v)});return {owner,net,nftPower:d.power.nftPower,source:{kind:'api',at:result.at},squeeks:d.tokens.map(t=>({tokenId:t.tokenId,level:t.level,custody:t.custody==='staking'?'Staked':'Wallet',deposited:t.custody==='staking',nextMergeHeight:t.nextMergeHeight,basePower:t.basePower})),totals:{count:d.tokens.length,deposited:d.tokens.filter(t=>t.custody==='staking').length,power:String(BigInt(d.power.nftPower)+BigInt(d.power.sqkPower)),claimable:amount(d.rewards.claimableBaseUnits)},staking:{principal:amount(d.stake.principalBaseUnits),fresh:d.stake.freshBaseUnits!=null?amount(d.stake.freshBaseUnits):null,mature:d.stake.matureBaseUnits!=null?amount(d.stake.matureBaseUnits):null},mergePlan:{pairs:[],note:'Choose IDs to preview; eligibility is checked on-chain.'}};}

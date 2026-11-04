@@ -61,3 +61,24 @@ badOwner = false;
 await store.set(key, { version: 1, lastScannedBlock: '14', lastScannedHash: hash(14n), ids: ['1', '3'] });
 await assert.rejects(run(14n), /balance mismatch/);
 console.log('PASS discovery: IndexedDB persistence, incoming/outgoing topic filters, incremental blocks, reorg replay, self-transfer dedup, balance and owner confirmations');
+
+for (const db of [indexedDB, undefined]) {
+  const cache = createDiscoveryStore(db);
+  await cache.set('phase3-clear', { ids: ['1'] });
+  assert.deepEqual(await cache.get('phase3-clear'), { ids: ['1'] });
+  await cache.clear();
+  assert.equal(await cache.get('phase3-clear'), undefined);
+}
+console.log('PASS Settings cache clear: IndexedDB and in-memory discovery records removed');
+
+// Clearing during the db() await must not restore the old session checkpoint.
+const raced=createDiscoveryStore(null);
+const pendingWrite=raced.set('race',{ids:['1']});
+await raced.clear();await pendingWrite;
+assert.equal(await raced.get('race'),undefined);
+const blocked={open(){const request={};queueMicrotask(()=>request.onerror());return request;}};
+const unopened=createDiscoveryStore(blocked);
+await unopened.set('blocked',{ids:['1']});
+await assert.rejects(unopened.clear(),/Could not open IndexedDB/);
+assert.equal(await unopened.get('blocked'),undefined);
+console.log('PASS overlapping discovery clear invalidates queued writes; unopened durable storage reports failure');

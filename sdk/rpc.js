@@ -1,3 +1,4 @@
+import { readIdentityBatch } from './identity-batch.js';
 import { createPublicClient, custom, fallback, http, shouldThrow as shouldStop } from 'viem';
 import { abortable, throwIfAborted } from './cancellation.js';
 import { sepolia } from 'viem/chains';
@@ -9,11 +10,11 @@ const sessionCooldowns = new Map();
 // Roles are observed availability preferences, never deployment/trust pins.
 export const PUBLIC_RPC_ENDPOINTS = [
   { url: 'https://sepolia.gateway.tenderly.co', roles: ['snapshot', 'state', 'logs'], logOrder: 1 },
-  { url: 'https://ethereum-sepolia-rpc.publicnode.com', roles: ['snapshot', 'state'] },
-  { url: 'https://ethereum-sepolia-public.nodies.app', roles: ['snapshot', 'state'] },
-  { url: 'https://eth-sepolia.api.onfinality.io/public', roles: ['snapshot', 'state', 'logs'], logOrder: 3 },
-  { url: 'https://0xrpc.io/sep', roles: ['snapshot', 'state', 'logs'], logOrder: 2 },
+  { url: 'https://ethereum-sepolia-rpc.publicnode.com', roles: ['snapshot', 'state', 'logs'], logOrder: 2 },
+  { url: 'https://0xrpc.io/sep', roles: ['snapshot', 'state', 'logs'], logOrder: 3 },
 ];
+// The browser transport is HTTP JSON-RPC. WSS aliases are not fed to http(),
+// nor counted as independent peers alongside HTTPS from the same operator.
 export const PUBLIC_RPCS = PUBLIC_RPC_ENDPOINTS.map(endpoint => endpoint.url);
 export const SEPOLIA_ID = 11155111;
 export const SEPOLIA_HEX = '0xaa36a7';
@@ -55,7 +56,7 @@ export function createSnapshotGuard(client, peers, { signal } = {}) {
       }
     }
     if (selected.length < 2) throw new Error('Unavailable: two independent Sepolia RPCs are required');
-    const result = { blockNumber: at, blockHash: selected[0].block.hash, peers: selected.map(item => item.peer) };
+    const result = { blockNumber: at, blockHash: selected[0].block.hash, timestamp: selected[0].block.timestamp, peers: selected.map(item => item.peer) };
     // Reuse the peer blocks just fetched instead of downloading them a second time.
     agree(result, [...selected.map(item => item.block), await client.getBlock({ blockNumber: at })]);
     return result;
@@ -126,11 +127,17 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
         }
       },
     }) });
-    const request = chainCheckedRequest(contextualRequest(args => {
+    const request = chainCheckedRequest(contextualRequest(async args => {
       // Skip a rate-limited endpoint, including identity re-probes. Do not sleep or
       // block healthy fallbacks. Shared across contexts/profile refreshes in this tab.
-      if (now() < (rpcCooldowns.get(url) ?? 0)) throw new RpcAvailabilityError(new Error('RPC rate limited; waiting for Retry-After backoff'), { endpoint: url, method: args.method, kind: 'cooldown' });
-      return raw.request(args);
+      if (now() < (rpcCooldowns.get(url) ?? 0)) throw new RpcAvailabilityError(new Error('RPC unavailable; waiting for endpoint cooldown'), { endpoint: url, method: args.method, kind: 'cooldown' });
+      try {return await raw.request(args);}
+      catch(error) {
+        // Network/CORS fetch failures and timeouts need backoff too. Do NOT cool
+        // down JSON-RPC range errors: discovery must still try smaller ranges.
+        if(!isTrustError(error)&&!isRpcProgrammingError(error)&&rpcCauses(error).some(({error:e})=>e.name==='TimeoutError'||e.name==='TypeError'))rpcCooldowns.set(url,Math.max(rpcCooldowns.get(url)??0,now()+30_000));
+        throw error;
+      }
     }, url), { key: url, chainCache, signal, endpoint: url });
     return [url, custom({ request: contextualRequest(request, url) }, { retryCount: 0 })];
   }));
@@ -148,13 +155,13 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     if (peerOrigins.has(origin)) return false;
     peerOrigins.add(origin);
     return true;
-  }).map(url => createPublicClient({ chain: sepolia, transport: checked.get(url) }));
+  }).map(url => Object.assign(createPublicClient({ name: url===rpcUrl?"Custom RPC":new URL(url).hostname, chain: sepolia, transport: checked.get(url) }), {identityUrl:url}));
   // Identity/hash failures always stop, even if a wrapped message mentions limits.
   const shouldThrow = error => signal?.aborted || isTrustError(error) || isRpcProgrammingError(error) || (!isRpcAvailabilityError(error) && rpcCauses(error).some(item => shouldStop(item.error)));
   const stateClient = createPublicClient({ chain: sepolia, transport: fallback(roleUrls('state').map(url => checked.get(url)), {
     rank: false, retryCount: 0, shouldThrow,
   }) });
-  const logPeers = roleUrls('logs').map(url => createPublicClient({ chain: sepolia, transport: checked.get(url) }));
+  const logPeers = roleUrls('logs').map(url => createPublicClient({ name: url===rpcUrl?"Custom RPC":new URL(url).hostname, chain: sepolia, transport: checked.get(url) }));
   const logsClient = createPublicClient({ chain: sepolia, transport: custom({ request: async args => {
     let lastError, rangeFailure;
     for (const peer of logPeers) {
@@ -206,5 +213,22 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     }
     return abortable(() => (args.method === 'eth_getLogs' ? logsClient : stateClient).request(args), signal);
   } }, { retryCount: 0 }) });
-  return { client, invalidateChain, rpcDiagnostics: () => failures.slice(), ...createSnapshotGuard(client, peers, { signal }) };
+  const readIdentity = async (snapshot, requests) => Promise.all(snapshot.peers.map(async peer => {
+    const endpoint=peer.identityUrl,method=requests[0]?.method;
+    requireSepolia(await peer.getChainId());
+    if(now()<(rpcCooldowns.get(endpoint)??0))throw new RpcAvailabilityError(new Error('RPC unavailable; waiting for endpoint cooldown'),{endpoint,method,kind:'cooldown'});
+    try {return await readIdentityBatch(peer,requests,{signal,onResponse:(response,url)=>{
+      if(response.status===429||response.status===503){const timestamp=now();rpcCooldowns.set(url,timestamp+retryAfterMs(response.headers.get('Retry-After'),timestamp));}
+    }});} catch(error) {
+      throwIfAborted(signal);
+      if(isTrustError(error))throw recordFailure(error);
+      // Direct batch failures have the same fresh chain-identity check as singles.
+      chainCache.delete(endpoint);
+      try {requireSepolia(await peer.getChainId());}
+      catch(recheckError){throw recordFailure(withRpcContext(error,{endpoint,method,recheckError}));}
+      if(!isRpcProgrammingError(error)&&rpcCauses(error).some(({error:e})=>e.name==='TimeoutError'||e.name==='TypeError'))rpcCooldowns.set(endpoint,Math.max(rpcCooldowns.get(endpoint)??0,now()+30_000));
+      throw recordFailure(withRpcContext(error,{endpoint,method}));
+    }
+  }));
+  return { client, readIdentity, invalidateChain, rpcDiagnostics: () => failures.slice(), ...createSnapshotGuard(client, peers, { signal }) };
 }

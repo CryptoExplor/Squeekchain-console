@@ -3,18 +3,18 @@
   "scripts": [
     {
       "file": "activity.js",
-      "rawBytes": 4479,
-      "gzipBytes": 1745
+      "rawBytes": 4517,
+      "gzipBytes": 1756
     },
     {
       "file": "app.js",
-      "rawBytes": 53469,
-      "gzipBytes": 14712
+      "rawBytes": 65210,
+      "gzipBytes": 18056
     },
     {
       "file": "bundle.js",
-      "rawBytes": 464126,
-      "gzipBytes": 126582
+      "rawBytes": 464516,
+      "gzipBytes": 126742
     },
     {
       "file": "components.js",
@@ -27,6 +27,6 @@
       "gzipBytes": 1314
     }
   ],
-  "totalGzipBytes": 146982,
+  "totalGzipBytes": 150497,
   "budgetBytes": 200000
 }

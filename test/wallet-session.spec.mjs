@@ -1,0 +1,51 @@
+import {test,expect} from '@playwright/test';
+const owner='0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54',other='0x1111111111111111111111111111111111111111';
+async function boot({multiple=false,hold=false,disconnected=false}={}){
+ const {mount}=await import('/app.js');
+ if(disconnected)localStorage.setItem('wheelhouse:disconnected','true');
+ localStorage.setItem('squeekchain:profile','sepolia-v6');history.replaceState(null,'','#sepolia-v6/squeeks');
+ const owner='0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54',verification={ok:true,trusted:true,blockNumber:'100'};
+ const net={core:{settledThroughRound:'10',blockHeight:'100',paused:false},mining:{lagRounds:'0',minted:{sqk:'1'}},nft:{totalSupply:'3'},checkpoint:{canCheckpoint:true},verification};
+ const h=window.sessions={calls:[],loads:[],reads:[],hold,verification};
+ function provider(name){const handlers=new Map();return {info:{rdns:'test.'+name,name},
+ request:async({method})=>{h.calls.push({name,method});if(method==='eth_accounts'||method==='eth_requestAccounts')return (localStorage.getItem('mock-wallet-account')??owner)?[localStorage.getItem('mock-wallet-account')??owner]:[];if(method==='eth_chainId')return '0xaa36a7';if(method==='eth_getBalance')return '0x1bc16d674ec8000';throw new Error('No signing');},
+ on(type,fn){if(!handlers.has(type))handlers.set(type,new Set());handlers.get(type).add(fn);},removeListener(type,fn){handlers.get(type)?.delete(fn);},
+ emit(type,value){for(const fn of [...handlers.get(type)??[]])fn(value);},handlers};}
+ h.providers=[provider('Alpha'),...(multiple?[provider('Beta')]:[])];window.ethereum=h.providers[0];
+ h.announce=()=>{for(const p of h.providers)dispatchEvent(new CustomEvent('eip6963:announceProvider',{detail:{provider:p,info:p.info}}));};
+ if(multiple)addEventListener('eip6963:requestProvider',h.announce);
+ h.change=account=>{localStorage.setItem('mock-wallet-account',account);squeek.wallet.provider().emit('accountsChanged',account?[account]:[]);};
+ const native=document.getElementById.bind(document);document.getElementById=id=>{const element=native(id);if(!element)throw new Error('Missing runtime app element #'+id);return element;};
+ window.squeek=mount({profileBalanceReader:async()=>({'sepolia-v6':{wallet:'0',staked:'0',nftPower:'0'},'sepolia-v9':{wallet:'0',staked:'0',nftPower:'0'}}),
+ adapterFactory:(key,load)=>{h.loads.push({key,...load});return {
+ networkStatus:async()=>({...net,verification:h.verification}),verify:async()=>h.verification,
+ walletStatus:async account=>{const value={owner:account,net,verification,totals:{count:2,claimable:{sqk:'0'}},mergePlan:{pairs:[]},squeeks:[{tokenId:'41',level:1},{tokenId:'42',level:1}]};if(h.hold&&account===owner)return new Promise(resolve=>h.reads.push({account,...load,resolve:()=>resolve(value)}));return value;},art:async()=>({image:'data:image/svg+xml;base64,PHN2Zy8+'})};},
+ fetcher:async()=>{throw new Error('No external reads');},activityReader:async()=>{throw new Error('No receipt reads');}});
+}
+async function install(page,options){await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());await page.addInitScript(()=>window.__squeekMounted=true);await page.goto('/');await page.evaluate(boot,options);}
+
+test('authorised reload silently restores all wallet surfaces; explicit disconnect survives reload',async({page})=>{
+ await install(page);await expect(page.getByTestId('holder-count')).toHaveText('2');expect(await page.evaluate(()=>sessions.calls.filter(c=>c.method==='eth_requestAccounts').length)).toBe(0);
+ await page.reload();await page.evaluate(boot);await expect(page.getByTestId('holder-count')).toHaveText('2');await expect(page.getByTestId('wallet-button')).toContainText('0x5989');await expect(page.getByTestId('btn-checkpoint')).toBeEnabled();expect(await page.evaluate(()=>sessions.calls.filter(c=>c.method==='eth_requestAccounts').length)).toBe(0);
+ await page.evaluate(()=>document.getElementById('btn-disconnect').click());await page.reload();await page.evaluate(boot);await page.evaluate(()=>squeek.wallet.init());expect(await page.evaluate(()=>squeek.state.account)).toBeNull();expect(await page.evaluate(()=>sessions.calls.filter(c=>['eth_accounts','eth_requestAccounts'].includes(c.method)).length)).toBe(0);await page.evaluate(()=>squeek.destroy());
+});
+test('account event mid-load aborts old generation, renders new account; lock clears holder',async({page})=>{
+ await install(page,{hold:true});await page.waitForFunction(()=>sessions.reads.length===1);await page.evaluate(account=>sessions.change(account),other);await expect(page.getByTestId('holder-owner')).toHaveAttribute('title',other);expect(await page.evaluate(()=>sessions.reads[0].signal.aborted)).toBe(true);await page.evaluate(()=>sessions.reads[0].resolve());await expect(page.getByTestId('holder-owner')).toHaveAttribute('title',other);
+ await page.evaluate(()=>sessions.change(''));await expect(page.getByTestId('holder-empty')).toBeVisible();await expect(page.getByTestId('holder-count')).toHaveText('Unknown');expect(await page.evaluate(()=>squeek.state.status)).toBeNull();await page.evaluate(()=>squeek.destroy());
+});
+test('chain events stop action gates and reload same account on Sepolia; watch remains independent',async({page})=>{
+ await install(page);await expect(page.getByTestId('holder-count')).toHaveText('2');await page.evaluate(()=>squeek.wallet.provider().emit('chainChanged','0x1'));expect(await page.evaluate(()=>squeek.wallet.get().status)).toBe('wrong-chain');await expect(page.getByTestId('btn-checkpoint')).toBeDisabled();
+ await page.evaluate(()=>squeek.wallet.provider().emit('chainChanged','0xaa36a7'));await expect(page.getByTestId('holder-count')).toHaveText('2');await page.getByTestId('watch-input').fill(other);await page.getByTestId('btn-watch').click();await expect(page.getByTestId('holder-owner')).toHaveAttribute('title',other);await page.evaluate(()=>sessions.change('0x2222222222222222222222222222222222222222'));await expect(page.getByTestId('holder-owner')).toHaveAttribute('title',other);expect(await page.evaluate(()=>squeek.state.account)).not.toBe(other);await page.evaluate(()=>squeek.destroy());
+});
+test('two EIP-6963 wallets show picker and remember rdns on reload, no repeated listeners',async({page})=>{
+ await install(page,{multiple:true});await page.evaluate(()=>squeek.wallet.init());expect(await page.evaluate(()=>squeek.state.account)).toBeNull();await page.getByTestId('wallet-button').click();await expect(page.getByRole('dialog',{name:'Choose a wallet'})).toBeVisible();await page.getByRole('button',{name:'Beta',exact:true}).click();await expect(page.getByTestId('holder-count')).toHaveText('2');expect(await page.evaluate(()=>localStorage.getItem('wheelhouse:wallet-rdns'))).toBe('test.Beta');
+ await page.reload();await page.evaluate(boot,{multiple:true});await expect(page.getByTestId('holder-count')).toHaveText('2');expect(await page.evaluate(()=>squeek.wallet.get().providerInfo.rdns)).toBe('test.Beta');expect(await page.evaluate(()=>sessions.providers[1].handlers.get('accountsChanged').size)).toBe(1);expect(await page.evaluate(()=>sessions.calls.filter(c=>c.method==='eth_requestAccounts').length)).toBe(0);await page.evaluate(()=>squeek.destroy());
+});
+test('two tabs synchronise connect, account switch, disconnect without remote popup',async({page,context})=>{
+ await install(page,{disconnected:true});const second=await context.newPage();await install(second,{disconnected:true});await page.evaluate(()=>squeek.connect());await expect(second.getByTestId('holder-count')).toHaveText('2');await page.evaluate(account=>sessions.change(account),other);await expect(second.getByTestId('holder-owner')).toHaveAttribute('title',other);expect(await second.evaluate(()=>sessions.calls.filter(c=>c.method==='eth_requestAccounts').length)).toBe(0);await page.evaluate(()=>squeek.wallet.disconnect());await expect(second.getByTestId('holder-empty')).toBeVisible();await page.evaluate(()=>squeek.destroy());await second.evaluate(()=>squeek.destroy());
+});
+test('profile switch keeps wallet, aborts old reads, clears profile data and reloads same signer; pending activity persists',async({page})=>{
+ await install(page);await expect(page.getByTestId('holder-count')).toHaveText('2');await page.evaluate(()=>{sessions.hold=true;squeek.state.plan={pairs:[{survivor:'old'}]};void squeek.refresh();squeek.activity.record('0x'+'ab'.repeat(32),'Pending fixture',11155111,'sepolia-v6');});await page.waitForFunction(()=>sessions.reads.length===1);
+ await page.evaluate(()=>{window.switching=squeek.switchProfile('sepolia-v9');});expect(await page.evaluate(()=>({account:squeek.state.account,status:squeek.state.status,net:squeek.state.net,plan:squeek.state.plan,aborted:sessions.reads[0].signal.aborted,generation:sessions.loads.at(-1).generation>sessions.reads[0].generation}))).toEqual({account:owner,status:null,net:null,plan:null,aborted:true,generation:true});
+ await page.evaluate(()=>{sessions.hold=false;sessions.reads[0].resolve();sessions.reads[1].resolve();});await page.evaluate(()=>switching);await expect(page.getByTestId('holder-owner')).toHaveAttribute('title',owner);expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);await page.evaluate(()=>squeek.destroy());
+});

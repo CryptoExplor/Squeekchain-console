@@ -25,7 +25,7 @@ assert.equal(record.implementationVersions.mining, 6);
 assert.notEqual(lower(evidence.apiCore.core), lower(record.addresses.core));
 assert.notEqual(evidence.apiEconomy.release, record.release);
 for (const key of ['core', 'mining', 'staking', 'nft', 'token', 'launch']) {
-  assert.equal(lower(PROFILES.sepolia.addresses[key]), lower(evidence.apiEconomy.addresses[key]), `experimental ${key} matches historical API observation only`);
+  assert.equal(lower(PROFILES['sepolia-v9'].addresses[key]), lower(evidence.apiEconomy.addresses[key]), `experimental ${key} matches historical API observation only`);
 }
 assert.equal(evidence.apiGenesis.status, 'unavailable');
 assert.equal(evidence.apiGenesis.reason, 'launch_unconfigured');
@@ -66,18 +66,15 @@ function listTools(profile) {
   return replies.find(reply => reply.id === 2).result.tools;
 }
 
-for (const profile of ['sepolia', 'sepolia-v6']) {
+for (const profile of ['sepolia-v9', 'sepolia-v6']) {
   const tools = listTools(profile);
   assert.ok(tools.some(tool => tool.name === 'squeek_network_status'));
   assert.ok(tools.every(tool => !tool.name.includes('submit') && !tool.name.includes('request')), 'default stdio has no submit or wallet-popup tool');
   assert.ok(tools.every(tool => ['read-only', 'prepare-only'].includes(tool.sideEffects)));
   const known = new Set(buildManifest({ surface: 'mcp' }).tools.map(tool => tool.name));
   assert.ok(tools.every(tool => known.has(tool.name)));
-  if (profile === 'sepolia') {
-    assert.ok(tools.every(tool => !tool.name.includes('prepare') && !tool.name.includes('merge') && !tool.name.includes('claim')));
-  } else {
-    for (const name of ['squeek_prepare_claim', 'squeek_prepare_merge', 'squeek_prepare_checkpoint']) assert.ok(tools.some(tool => tool.name === name));
-  }
+  for (const name of ['squeek_prepare_claim','squeek_prepare_merge','squeek_prepare_checkpoint','squeek_prepare_deposit','squeek_unstake_preview']) assert.ok(tools.some(tool=>tool.name===name));
+  assert.ok(tools.every(tool=>tool.inputSchema.properties.profile));
 }
 assert.ok(TOOL_SPECS.every(tool => !/^squeek_submit_(claim|merge)$/.test(tool.name)));
 assert.equal(PROFILES.mainnet.addresses, null);

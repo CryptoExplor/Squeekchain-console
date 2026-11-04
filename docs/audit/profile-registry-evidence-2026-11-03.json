@@ -1,0 +1,78 @@
+{
+  "observedOn": "2026-11-03",
+  "purpose": "Candidate audit evidence only; never import this as verified runtime identity pins.",
+  "decision": "v6 and v9 are equal profiles; version-based restrictions superseded; identical fail-closed protections required.",
+  "onChainSnapshotExport": {
+    "status": "not acquired",
+    "blockNumber": null,
+    "blockHash": null,
+    "independentPeerAgreement": null,
+    "reason": "RPC POST unavailable through page tool and command network allowlist excludes RPC hosts; Blockscout GET proxy returned Unknown module."
+  },
+  "sources": {
+    "core": {
+      "url": "https://api.squeekchain.com/v1/core",
+      "safeThroughBlock": "12056220",
+      "proxy": "0x980b4424c007caf7a1f3670b48c8eaef7ebc3d44",
+      "reportedImplementation": "0x284747c4664af2203e7a90a2ee76f22b6b5e6889",
+      "reportedVersion": 3,
+      "reportedRuntimeHash": "0xd8f2fb3c7dcf63e6dc0378ce5f85ceea52a876ae1f0cd66ac8631c3103371f8a",
+      "status": "API report, not independently verified onchain"
+    },
+    "economy": {
+      "url": "https://api.squeekchain.com/v1/economy/state",
+      "generatedAt": "2026-11-03T15:39:46.306Z",
+      "safeThroughBlock": "12056222",
+      "reportedSafeBlockHash": "0x30fc63ef6b25cdbb9258757c3d0a827dd6b3ee51049893bd8edc4d7f9a6354a9",
+      "release": "stream-game-sepolia-test-20261026-01",
+      "issuance": {
+        "proxy": "0xcd46990f8349057335289ef282c276204b6cdc62",
+        "reportedImplementation": "0x62d25dc1a24033a80edcc4b2d2ffe9348290cc4c",
+        "reportedVersion": 9,
+        "reportedLayoutDigest": "0x136850fc0e19543752b7382cde164f10588dc3b4648e7d704f2f06394ead8b90"
+      },
+      "staking": {
+        "proxy": "0x4b67b739dfd832f4eac67a7aa3bc244fb74cea4f",
+        "reportedImplementation": "0xbbb816616d8840bd98094bf5a20f208df089230b",
+        "reportedVersion": 2,
+        "reportedLayoutDigest": "0x39f298bf725abe5173d3a3b8ded2d4776d4c53fc9923f0027170dd458210a6f8"
+      },
+      "status": "API report; neither atomic with core response nor independently verified"
+    },
+    "dapp": {
+      "url": "https://sepolia.squeekchain.com/",
+      "status": "Page accessible; fresh bundle extraction/parity not completed"
+    },
+    "blockscoutStaking": {
+      "proxyUrl": "https://eth-sepolia.blockscout.com/address/0x4b67b739dFd832f4EAC67a7Aa3bc244fB74cea4F?tab=contract",
+      "implementationMetadataUrl": "https://eth-sepolia.blockscout.com/api/v2/smart-contracts/0xBBb816616d8840bD98094bF5a20F208Df089230B",
+      "status": "Proxy verified-page and implementation metadata retrieved; full source/ABI parity not completed; constructor arguments are not current slot reads"
+    },
+    "rpcProxyAttempt": {
+      "url": "https://eth-sepolia.blockscout.com/api?module=proxy&action=eth_blockNumber",
+      "result": {
+        "message": "Unknown module",
+        "result": null,
+        "status": "0"
+      }
+    }
+  },
+  "localAbi": {
+    "path": "sdk/abi-v9.js",
+    "sha256": "c202c992b724f7e807188edc682fd08c8d7d49e582631d4d69df602509d6359b",
+    "modified": false,
+    "requestedSignaturesPresent": true,
+    "freshRemoteParityEstablished": false
+  },
+  "missing": [
+    "Same-block chain ID and independent block hashes",
+    "Current EIP-1967 implementation/admin slots for core, issuance and staking",
+    "On-chain versions and layout digests",
+    "Runtime bytecode/hashes for the required contract graph",
+    "Same-block bindings/core/token/mining and NFT/staking wiring",
+    "Complete source/bundle ABI provenance comparison"
+  ],
+  "runtimeChanges": false,
+  "testLiveRun": false,
+  "transactionsSubmitted": false
+}

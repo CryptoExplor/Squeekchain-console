@@ -19,6 +19,9 @@ jobs:
       - run: npm ci
       - name: Install Chromium and OS libraries
         run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Reject drift in committed generated browser assets
+        run: git diff --exit-code -- web/bundle.js web/tools.json
       - run: npm test
       - run: npm run test:browser
       - uses: actions/upload-artifact@v4

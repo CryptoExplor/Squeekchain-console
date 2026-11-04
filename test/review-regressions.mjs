@@ -20,9 +20,7 @@ const { window: win } = dom;
 const doc = win.document;
 const $ = id => doc.getElementById(id);
 const style = doc.createElement('style'); style.textContent = css; doc.head.append(style);
-const intervals = new Map();
-win.setInterval = (callback, ms) => { intervals.set(ms, callback); return ms; };
-win.clearInterval = ms => intervals.delete(ms);
+Object.defineProperty(doc,'hidden',{value:false,configurable:true});
 let fetchHook = async () => response(measurement(12500));
 let requests = 0, verifyFails = false, sends = 0;
 const net = {
@@ -32,7 +30,7 @@ const net = {
 };
 const adapter = {
   networkStatus: async () => net,
-  verify: async () => ({ ok: !verifyFails, problems: verifyFails ? ['Identity mismatch'] : [] }),
+  verify: async () => ({ ok: !verifyFails, trusted: !verifyFails, problems: verifyFails ? ['Identity mismatch'] : [] }),
   walletStatus: async () => ({ owner, ethBalance: { eth: '0.1' },
     totals: { count: 1, deposited: 0, claimable: { sqk: '1' } },
     squeeks: [{ tokenId: '1', level: 1, nextMergeHeight: '2', deposited: false }] }),
@@ -50,8 +48,8 @@ win.ethereum = {
   },
   on() {},
 };
-win.localStorage.setItem("squeekchain:profile", "sepolia");
-const api = mount({ doc, win, adapterFactory: () => adapter, fetcher: (...args) => { requests++; return fetchHook(...args); } });
+win.localStorage.setItem("squeekchain:profile", "sepolia-v9");
+const api = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), doc, win, adapterFactory: () => adapter, fetcher: (...args) => { requests++; return fetchHook(...args); } });
 try {
   await api.refresh(); await tick();
   const fields = ['wheel-state', 'wheel-rpm', 'wheel-speed', 'wheel-distance', 'wheel-note'];
@@ -67,36 +65,49 @@ try {
   assert.equal($('wheel-rpm').textContent, '20.0');
 
   const beforePoll = reading();
-  intervals.get(15_000)(); await tick();
+  void api.pollDisplay(); await tick();
   assert.deepEqual(reading(), beforePoll, 'polling keeps the complete reading while fetching');
   release(response(null, 403)); await tick();
-  assert.equal($('wheel-state').textContent, 'Unknown');
-  for (const id of ['wheel-rpm', 'wheel-speed', 'wheel-distance']) assert.equal($(id).textContent, 'Unknown');
+  assert.equal($('wheel-state').textContent, 'Running');
+  assert.deepEqual(reading().slice(0,4),beforePoll.slice(0,4),'transient poll retains last-good numbers');
+  assert.match($('wheel-note').textContent,/as of/);
+  void api.pollDisplay();await tick();release(response(null,403));await tick();
+  assert.deepEqual(reading().slice(0,4),beforePoll.slice(0,4),'two failed polls retain last-good numbers');
   assert.equal($('net-round').textContent, '1000', 'API failure leaves chain panels alone');
+  fetchHook=async()=>{throw Object.assign(new Error('Identity mismatch'),{name:'RpcTrustError',kind:'mismatch'});};
+  await api.pollDisplay();
+  for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])assert.equal($(id).textContent,'Unknown','mismatch clears retained values');
+  assert.equal($('net-round').textContent,'Unknown','mismatch stops and clears chain display');
+  fetchHook=async()=>response(measurement(20000));await api.pollDisplay();await api.refresh();
+  const realNow=Date.now;Date.now=()=>realNow()+900001;
+  try{fetchHook=async()=>{throw new Error('Offline');};await api.pollDisplay();assert.equal($('wheel-rpm').textContent,'Unknown','expired 15-minute tier is Unknown');}finally{Date.now=realNow;}
+  fetchHook=()=>new Promise(resolve=>{release=resolve;});
+
 
   // An in-flight reading may not repaint a different profile.
-  intervals.get(15_000)(); await tick();
+  void api.pollDisplay(); await tick();
   await api.switchProfile('mainnet');
   const unavailable = reading(), previousRequests = requests;
   release(response(measurement(30000))); await tick();
-  await $('btn-refresh').onclick(); intervals.get(15_000)(); await tick(); await tick();
+  await $('btn-refresh').onclick(); void api.pollDisplay(); await tick(); await tick();
   assert.deepEqual(reading(), unavailable);
   assert.equal($('wheel-state').textContent, 'Unavailable');
   assert.equal(requests, previousRequests, 'non-Sepolia refreshes never fetch device telemetry');
 
-  const switchingBack = api.switchProfile('sepolia');
+  const switchingBack = api.switchProfile('sepolia-v9');
   assert.equal($('wheel-state').textContent, 'Loading', 'profile change resets rather than reusing old readings');
   assert.equal($('wheel-rpm').textContent, 'Unknown');
   await switchingBack; release(response(measurement(5000))); await tick();
   assert.equal($('wheel-rpm').textContent, '5.0');
   fetchHook = async () => response(measurement(5000));
-  console.log('PASS review: retain telemetry during manual/poll fetches, clear failures, isolate profiles');
+  console.log('PASS review: retain telemetry through two failed polls, age last-good readings, isolate profiles');
 
   await api.connect();
-  assert.match($('wallet-chip').textContent, /0x5989/);
-  assert.match($('wallet-chip').textContent, /0\.100 ETH/);
+  assert.equal($('wallet-chip'),null);assert.match($('btn-connect').textContent,/0x5989/);
+  assert.match($('wallet-eth').textContent, /0\.100 ETH/);
+  assert.equal($('profile-status').classList.contains('bad'),false,'successful baseline must be trusted before testing failure');
   verifyFails = true; await api.refresh();
-  assert.equal($('verified-chip').classList.contains('bad'), true);
+  assert.equal($('profile-status').classList.contains('bad'), true);
   // jsdom does not lay out responsive viewports. Check the applicable CSS declarations
   // explicitly at each breakpoint; this is not a real-browser visual/layout assertion.
   for (const width of [320, 760, 1050, 1200]) {
@@ -106,7 +117,7 @@ try {
           const max = /max-width:\s*(\d+)px/.exec(rule.conditionText);
           if (max && width <= Number(max[1])) visit(rule.cssRules);
         } else if (rule.selectorText && rule.style.display === 'none') {
-          for (const id of ['wallet-chip', 'verified-chip']) {
+          for (const id of ['btn-connect', 'profile-status']) {
             for (let node = $(id); node; node = node.parentElement) {
               assert.equal(node.matches(rule.selectorText), false, `${id} hidden at ${width}px by ${rule.selectorText}`);
             }
@@ -116,7 +127,7 @@ try {
     };
     visit(style.sheet.cssRules);
   }
-  assert.notEqual(win.getComputedStyle($('wallet-chip')).display, 'none');
+  assert.notEqual(win.getComputedStyle($('btn-connect')).display, 'none');
   console.log('PASS review: wallet text and verification failure remain visible in base and breakpoint CSS');
 
   verifyFails = false;
@@ -154,6 +165,7 @@ try {
   assert.equal(doc.activeElement, $('btn-claim'));
   assert.equal(modalVisible(), false);
 
+  const readPair=adapter.walletStatus;adapter.walletStatus=async()=>{const value=await readPair();return {...value,totals:{...value.totals,count:2},squeeks:[...value.squeeks,{tokenId:'2',level:1}]};};await api.refresh();$('merge-survivor').value='1';$('merge-donor').value='2';$('merge-donor').dispatchEvent(new win.Event('input'));
   $('btn-custom-merge').focus();
   const merge = api.requestMerge({ survivor: '1', donor: '2', nextLevel: 2 }); await tick();
   assert.equal(doc.activeElement, $('modal-input'), 'typed confirmation starts in the input');
@@ -165,7 +177,7 @@ try {
 
   // Address casing alone cannot invalidate the owner's explicit burn acknowledgement.
   const caseOnly = api.requestMerge({ survivor: '1', donor: '2' }); await tick();
-  api.state.account = owner.toLowerCase();
+  const request=win.ethereum.request;win.ethereum.request=args=>args.method==='eth_accounts'?Promise.resolve([owner.toLowerCase()]):request(args);await api.wallet.refresh();
   $('modal-input').value = 'BURN-2'; $('modal-input').dispatchEvent(new win.Event('input'));
   $('btn-modal-confirm').click(); await tick();
   assert.equal($('modal-title').textContent, 'Review simulated merge');
@@ -220,3 +232,11 @@ for (const status of [429, 503]) {
   }
 }
 console.log('PASS review: Retry-After seconds/HTTP-date, 300s ceiling, and 30s fallback for invalid/past/over-ceiling waits');
+
+{
+ const {telemetryView}=await import('../web/telemetry.js');const now=Date.now();
+ for(const offset of [5001,600000,NaN]){const data=measurement(12500);data.measurement.receivedAt=Number.isNaN(offset)?'invalid':new Date(now+offset).toISOString();assert.equal(telemetryView(data,now).state,'Unknown');}
+ const tolerated=measurement(12500);tolerated.measurement.receivedAt=new Date(now+5000).toISOString();assert.equal(telemetryView(tolerated,now).state,'Running');
+ const expired=measurement(12500);expired.measurement.receivedAt=new Date(now-900000).toISOString();assert.equal(telemetryView(expired,now).state,'Unknown');
+ console.log('PASS PR review: future/invalid telemetry rejected; 5s clock tolerance and 15min TTL preserved');
+}

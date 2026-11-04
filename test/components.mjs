@@ -8,13 +8,19 @@ const html = fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf
 const dom = new JSDOM(html, { url: 'https://console.test/' });
 const { window: win } = dom, doc = win.document, $ = id => doc.getElementById(id);
 try {
+  const referral = doc.querySelector('#info-about a');
+  assert.equal(referral.href, 'https://squeekchain.com/genesis/i/kbxh52st');
+  assert.equal(referral.textContent, 'Discover Genesis ↗');
+  assert.equal(referral.target, '_blank');
+  assert.ok(referral.relList.contains('noopener'));
+  assert.ok(referral.relList.contains('noreferrer'));
   for (const value of [null, undefined, '', ' ', NaN, Infinity, 'unavailable', '—']) {
     assert.equal(valueText(value), UNKNOWN); assert.equal(formatNumber(value), UNKNOWN);
   }
   for (const value of [0, '0', 0n]) assert.equal(formatNumber(value), '0');
   assert.equal(formatNumber(false), UNKNOWN);
   assert.equal(formatNumber('9007199254740993'), '9,007,199,254,740,993');
-  assert.equal(formatAmount({}), UNKNOWN); assert.equal(formatAmount({ sqk: '0' }), '0 SQK');
+  assert.equal(formatAmount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}),}), UNKNOWN); assert.equal(formatAmount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), sqk: '0' }), '0 SQK');
 
   const panel = Panel($('profile-panel')), stat = Stat($('net-round').parentElement);
   stat.set(null); panel.setBusy(true);
@@ -35,7 +41,7 @@ try {
   assert.equal(card.querySelector('img').getAttribute('src'), 'data:image/svg+xml;base64,PHN2Zy8+');
   card.click(); assert.equal(opened, 1);
   const toast = Toast({ doc, host: $('toasts'), message: '<img>literal error', kind: 'err', timeout: 1 });
-  assert.equal(toast.getAttribute('role'), 'alert'); assert.equal(toast.children.length, 0);
+  assert.equal(toast.getAttribute('role'), 'alert'); assert.equal(toast.querySelector('img'), null);assert.equal(toast.querySelector('.toast-message').textContent,'<img>literal error');assert.ok(toast.querySelector('[aria-label="Dismiss notification"]'));
 
   const dialog = ConfirmDialog({ doc, win, elements: Object.fromEntries(Object.entries({ root: 'modal', title: 'modal-title', body: 'modal-body', input: 'modal-input', cancel: 'btn-modal-cancel', confirm: 'btn-modal-confirm' }).map(([key, id]) => [key, $(id)])) });
   let confirmed = false;
@@ -51,13 +57,14 @@ try {
   let wallet = { owner, totals: { count: null }, squeeks: [{ tokenId: '41', level: null }] }, failed = false;
   const adapter = { networkStatus: async () => net, verify: async () => ({ ok: true, trusted: true }), walletStatus: async () => { if (failed) throw new Error('RPC offline'); return wallet; } };
   win.ethereum = { request: async ({ method }) => method === 'eth_chainId' ? '0xaa36a7' : [owner], on() {} };
-  const app = mount({ doc, win, adapterFactory: () => adapter, fetcher: async () => { throw new Error('No external requests'); } });
+  win.localStorage.setItem('squeekchain:profile','sepolia-v6');
+  const app = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), doc, win, adapterFactory: () => adapter, fetcher: async () => { throw new Error('No external requests'); } });
   try {
     await app.refresh(); await app.connect();
     for (const id of ['net-round', 'net-blocks', 'net-lag', 'net-issued', 'net-squeeks', 'net-paused', 'holder-count', 'holder-power', 'holder-share', 'holder-claimable']) assert.equal($(id).textContent, UNKNOWN, id);
     assert.equal($('btn-checkpoint').disabled, true); assert.equal($('btn-claim').disabled, true);
-    assert.equal($('profile-status').textContent, 'Supported');
-    assert.match(doc.querySelector('footer').textContent, /independent community console.*not affiliated with Squeekchain/i);
+    assert.equal($('verified-chip').textContent, 'Verified');
+    assert.match(doc.querySelector('footer').textContent, /Independent.*not affiliated with Squeekchain/i);
     net = { core: { settledThroughRound: '0', blockHeight: '0', paused: false }, mining: { lagRounds: '0', minted: { sqk: '0' } }, nft: { totalSupply: '0' }, checkpoint: {} };
     wallet = { owner, totals: { count: 0, power: 0, sharePercent: 0, claimable: { sqk: '0' } }, squeeks: [] };
     await app.refresh();
@@ -66,7 +73,10 @@ try {
     failed = true; await app.refresh();
     assert.equal($('holder-count').textContent, UNKNOWN); assert.equal(app.state.status, null);
     assert.equal($('btn-custom-merge').disabled, true);
-    await app.switchProfile('sepolia'); assert.equal($('profile-status').textContent, 'Read-only · unverified');
+    await app.switchProfile('sepolia-v9'); assert.equal($('verified-chip').textContent, 'Unavailable','connected wallet failure remains unavailable across profile switch');
+    failed=false;wallet={owner,totals:{count:null},squeeks:[]};await app.connect();
+    assert.equal($('btn-checkpoint').disabled,true);assert.equal($('btn-claim').disabled,true,'v9 Unknown is not the SQK-only known-zero exception');
+    wallet={owner,totals:{count:0},squeeks:[]};await app.refresh();assert.equal($('btn-claim').disabled,false,'v9 known zero still allows SQK-only claims');
     await app.switchProfile('mainnet'); assert.equal($('profile-status').textContent, 'Not deployed');
     assert.equal($('deployment-content').classList.contains('hidden'), true);
   } finally { app.destroy(); }

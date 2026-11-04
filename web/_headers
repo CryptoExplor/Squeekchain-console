@@ -1,0 +1,5 @@
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'self' https://api.squeekchain.com https://ethereum-sepolia-rpc.publicnode.com https://sepolia.gateway.tenderly.co https://0xrpc.io https:; img-src 'self' data: blob:; style-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

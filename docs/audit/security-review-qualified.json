@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-04",
+  "sourceCommit": "58012a4fa01195d12514840d7b101e78221d435d",
+  "scope": "Offline and intercepted/mock browser only; not exhaustive security or live qualification",
+  "offline": {
+    "command": "npm test",
+    "scripts": 20,
+    "passAssertionGroups": 69,
+    "exitCode": 0
+  },
+  "browser": {
+    "command": "npm run test:browser",
+    "tests": 246,
+    "passed": 246,
+    "failed": 0,
+    "retries": 0,
+    "exitCode": 0
+  },
+  "production": {
+    "scripts": 12,
+    "totalGzipBytes": 176015,
+    "budgetBytes": 250000,
+    "bundleSha256": "12d967b60f8c83f747cd0eb485fd46f4580bf854fc35b31395697fa11be7c01e"
+  },
+  "rpcBudgets": {
+    "v6": {
+      "profile": "sepolia-v6",
+      "coldNetwork": 13,
+      "warmNetwork": 10,
+      "wallet": 13,
+      "limit": 25
+    },
+    "v9": {
+      "profile": "sepolia-v9",
+      "fixture": "2 wallet + 2 staked NFTs",
+      "coldNetwork": 15,
+      "warmNetwork": 13,
+      "coldWallet": 20,
+      "warmWallet": 14,
+      "limit": 25
+    }
+  },
+  "captures": [
+    "security-review-approveAll-1280.png",
+    "security-review-approveAll-390.png",
+    "security-review-approveNft-1280.png",
+    "security-review-approveNft-390.png",
+    "security-review-approveSqk-1280.png",
+    "security-review-approveSqk-390.png"
+  ],
+  "unrun": [
+    "Live gate",
+    "Live RPC probe",
+    "Real signing",
+    "Keeper",
+    "Merge",
+    "Manual deployment"
+  ],
+  "remainingTrustBoundary": "General post-identity state and simulations use the serving RPC; block-hash agreement is not a storage proof. CSP permits arbitrary HTTPS for custom RPCs."
+}

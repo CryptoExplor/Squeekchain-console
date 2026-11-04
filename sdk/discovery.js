@@ -7,7 +7,7 @@ import { accountTokenIds } from './account-discovery.js';
 // to a session map; every hit is still checked onchain at the requested snapshot.
 export function createDiscoveryStore(indexedDB = globalThis.indexedDB) {
   const memory = new Map();
-  let opening;
+  let opening,generation=0;
   async function db() {
     if (!indexedDB) return null;
     opening ??= new Promise((resolve, reject) => {
@@ -19,9 +19,10 @@ export function createDiscoveryStore(indexedDB = globalThis.indexedDB) {
     }).catch(() => null);
     return opening;
   }
-  async function access(mode, key, value) {
+  async function access(mode, key, value, version=generation) {
     const database = await db();
-    if (!database) return mode === 'readonly' ? memory.get(key) : memory.set(key, value);
+    if(version!==generation)return undefined;
+    if (!database) return mode === 'readonly' ? memory.get(key) : undefined;
     try {
       return await new Promise((resolve, reject) => {
         const tx = database.transaction('discovery', mode);
@@ -31,9 +32,17 @@ export function createDiscoveryStore(indexedDB = globalThis.indexedDB) {
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error);
       });
-    } catch { return mode === 'readonly' ? memory.get(key) : memory.set(key, value); }
+    } catch { return version===generation&&mode==='readonly'?memory.get(key):undefined; }
   }
-  return { get: key => access('readonly', key), set: (key, value) => { memory.set(key, value); return access('readwrite', key, value); } };
+  return { clear: async () => {
+    generation++;memory.clear();
+    const database = await db();
+    if(indexedDB&&!database)throw new Error('Could not open IndexedDB to clear persistent discovery');
+    if (database) await new Promise((resolve, reject) => {
+      const tx = database.transaction('discovery', 'readwrite'); tx.objectStore('discovery').clear();
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+    });
+  }, get: key => access('readonly', key), set: (key, value) => { memory.set(key, value); return access('readwrite', key, value); } };
 }
 const defaultStore = createDiscoveryStore();
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
@@ -97,8 +106,9 @@ export async function discoverOwnedIds({ client, snapshot, nft, abi, owner, star
             // Unavailable/stale/incomplete API hints never replace verified logs.
           }
         }
-        if (chunk <= 1_000n || !isLogRangeError(error)) throw error;
-        chunk /= 2n;
+        const attempted=end-cursor+1n;
+        if (attempted <= 1n || !isLogRangeError(error)) throw error;
+        chunk=attempted/2n;
         continue;
       }
       const unique = new Map();

@@ -38,7 +38,7 @@ export function isRpcProgrammingError(error) {
 }
 export function isLogRangeError(error) {
   return !isTrustError(error) && !isRpcProgrammingError(error) && !isExecutionError(error) && causes(error, item => Number(item.code) === 4444
-    || /pruned history|block range|range.*(?:limit|too large)|too many (?:results|logs)|response.*(?:large|size)/i.test(`${item.message ?? ''} ${item.details ?? ''}`));
+    || /getlogs.*(?:exceed|max.*range)|(?:exceeded|max(?:imum)? allowed).*range|pruned history|block range|range.*(?:limit|too large)|too many (?:results|logs)|response.*(?:large|size)/i.test(`${item.message ?? ''} ${item.details ?? ''}`));
 }
 function isExecutionError(error) {
   return causes(error, item => /execution reverted/i.test(`${item.shortMessage ?? ''} ${item.message ?? ''}`)
@@ -89,7 +89,7 @@ function safeCauseMessage(error) {
   if (/Retry-After|rate limited/i.test(message)) return 'Rate limited / Retry-After cooldown';
   if (/pruned history/i.test(message)) return 'Pruned history unavailable';
   if (/historical state|missing trie node/i.test(message)) return 'Historical state unavailable';
-  if (/range.*(?:limit|too large)|block range/i.test(message)) return 'Log range limit';
+  if (isLogRangeError(error)) return 'Log range limit';
   if (/free plan/i.test(message)) return 'Endpoint plan restriction';
   if (/forbidden/i.test(message)) return 'Forbidden';
   if (/failed to fetch|fetch failed|load failed|network error/i.test(message)) return 'Network request failed';
