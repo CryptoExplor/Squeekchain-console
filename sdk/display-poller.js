@@ -2,20 +2,20 @@
 export function createWheelPoller({
   readStatus, readEvents, readBlocks, onStatus = () => {}, onBlocks = () => {},
   onFrontier = () => {}, onError = () => {}, frontier = () => ({}), contextKey = () => '',
-  doc = globalThis.document, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout,
+  enabled = () => true, doc = globalThis.document, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout,
 } = {}) {
   let timer, stopped = false, flight, lastContext, lastRound, lastProcessed, lastHeight, delay = 60000;
   function schedule() {
-    if (!stopped && !doc?.hidden) {
-      clearTimer(timer);
+    clearTimer(timer);
+    if (!stopped && enabled() && !doc?.hidden) {
       timer = setTimer(() => { void tick(); }, delay);
     }
   }
   async function tick() {
-    if (stopped || doc?.hidden) return;
+    if (stopped || !enabled() || doc?.hidden) return;
     if (flight) return flight;
     clearTimer(timer);
-    const key = contextKey(), current = () => !stopped && key === contextKey();
+    const key = contextKey(), current = () => !stopped && enabled() && key === contextKey();
     if (lastContext !== key) {
       lastContext = key;
       lastRound = lastProcessed = lastHeight = undefined;
@@ -26,7 +26,7 @@ export function createWheelPoller({
         if (!current()) return;
         const data = result.data ?? result, measurement = data.measurement;
         delay = !result.stale && measurement?.freshness === 'online' && measurement.coreStatus === 'ACTIVE'
-          && now() - Date.parse(measurement.receivedAt) < 120000 ? 5000 : 60000;
+          && now() - Date.parse(measurement.receivedAt) >= -5000 && now() - Date.parse(measurement.receivedAt) < 120000 ? 5000 : 60000;
         await onStatus(data, result);
         if (!current()) return;
         const baseline = frontier();
@@ -49,17 +49,24 @@ export function createWheelPoller({
           }
         }
         if (round != null && (round !== lastRound || processed !== lastProcessed)) {
-          await onFrontier({ settled: round, processed });
+          const refreshed = await onFrontier({ settled: round, processed });
           if (!current()) return;
-          lastRound = round;
-          lastProcessed = processed;
+          if (refreshed !== false && refreshed !== null) {
+            lastRound = round;
+            lastProcessed = processed;
+          }
         }
         const height = data.builder?.projected?.blockHeight;
         if (readBlocks && height != null && height !== lastHeight) {
-          const blocks = await readBlocks();
-          if (!current()) return;
-          await onBlocks(blocks);
-          lastHeight = height;
+          try {
+            const blocks = await readBlocks();
+            if (!current()) return;
+            await onBlocks(blocks);
+            lastHeight = height;
+          } catch (error) {
+            if (!current()) return;
+            onError(error, 'blocks');
+          }
         }
       } catch (error) {
         if (!current()) return;

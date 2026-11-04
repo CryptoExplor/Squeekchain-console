@@ -344,6 +344,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     closeSheet();
     closeWalletMenu();
     state.profileKey = getProfile(profileKey).key;
+    poller.start();
     state.adapter = null;
     state.account = state.inspected = account; state.chainId = chainId;
     state.net = state.status = state.plan = null;
@@ -562,7 +563,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       hideBanner();
       const connectedDisplay=displayApi(load)?await displayRead(load,'wallet',state.account):null;
       try {
-        const counts = await viewAwait(load, () => profileBalanceReader ? profileBalanceReader(state.account) : profileBalances(state.account, {v9Display:connectedDisplay?.source?.kind==='api'?{wallet:String(connectedDisplay.totals.count-connectedDisplay.totals.deposited),staked:String(connectedDisplay.totals.deposited),nftPower:connectedDisplay.nftPower}:undefined, rpcUrl: store.get('wheelhouse:rpc') || undefined, provider: () => provider(), chainCache, discoveryCache, signal: load.signal }));
+        const counts = await viewAwait(load, () => profileBalanceReader ? profileBalanceReader(state.account) : profileBalances(state.account, {rpcUrl: store.get('wheelhouse:rpc') || undefined, provider: () => provider(), chainCache, discoveryCache, signal: load.signal }));
         state.profileCounts = counts;
       } catch (err) { if (!isCurrent(load)) return null; state.profileCounts = {}; }
       renderProfileOptions();
@@ -589,7 +590,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('btn-disconnect').classList.toggle('hidden', !state.account);
     el.connect.setAttribute('aria-expanded', String(!$('wallet-menu').classList.contains('hidden')));
     if(!state.account)state.walletEth=null;
-    el.walletEth.classList.toggle('hidden',!state.account);
+    el.walletEth.classList.toggle('hidden',!state.account||state.walletEth==null);
     el.walletEth.textContent=state.account?`ETH balance: ${state.walletEth??UNKNOWN}${state.walletEth==null?'':' ETH'}`:'';
   }
 
@@ -671,6 +672,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderWalletChipStats(status) {
     if (!status || !state.account || status.owner?.toLowerCase() !== state.account.toLowerCase()) return;
     state.walletEth=num(status.ethBalance?.eth)===UNKNOWN?null:Number(status.ethBalance.eth).toFixed(3);
+    el.walletEth.classList.toggle('hidden',!state.account||state.walletEth==null);
     el.walletEth.textContent=`ETH balance: ${state.walletEth??UNKNOWN}${state.walletEth==null?'':' ETH'}`;
   }
 
@@ -1330,14 +1332,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   void activity.refresh();
   let provisionalResult;
   function renderProvisional(result){provisionalResult=result;feedRows('provisional-blocks',result.data.blocks,b=>`Block ${BigInt(b.height).toLocaleString('en-US')} · ${BigInt(b.roundId)<=BigInt(state.net?.core?.settledThroughRound??0)&&BigInt(b.height)<=BigInt(state.net?.core?.blockHeight??0)?'confirmed':'provisional'}`);}
-  const poller=createWheelPoller({doc,setTimer:win.setTimeout.bind(win),clearTimer:win.clearTimeout.bind(win),
+  const poller=createWheelPoller({enabled:()=>state.profileKey==='sepolia-v9',doc,setTimer:win.setTimeout.bind(win),clearTimer:win.clearTimeout.bind(win),
     contextKey:()=>`${generation}:${state.profileKey}`,
     readStatus:async()=>{const load=captureLoad();if(load.profileKey!=='sepolia-v9')throw new Error('No v6 wheel poll');const api=displayApi(load);const result=api?await api.status():{data:await telemetry.read({signal:load.signal})};assertCurrent(load);return result;},
     readEvents:adapterFactory?null:async()=>displayApi(captureLoad()).feed(),
     readBlocks:adapterFactory?null:async()=>displayApi(captureLoad()).blocks(),
     frontier:()=>({settled:state.net?.core?.settledThroughRound,processed:state.net?.mining?.processedThroughRound}),
     onStatus:async(data,result)=>{const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
-    onFrontier:async()=>{await refreshNetwork();await refreshAll();if(provisionalResult)renderProvisional(provisionalResult);await displayFeeds(captureLoad());if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();},
+    onFrontier:async()=>{const net=await refreshNetwork();if(!net||net.source?.stale)return false;await refreshAll();if(state.inspected&&!state.status)return false;if(provisionalResult)renderProvisional(provisionalResult);await displayFeeds(captureLoad());if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();return true;},
     onBlocks:renderProvisional,
     onError:(error,scope)=>{if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);}else if(scope==='status'&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL&&errorIsTransient(error))$('wheel-note').textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;else if(scope==='status'){for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}}
   });

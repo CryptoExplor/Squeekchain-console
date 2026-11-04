@@ -44,3 +44,5 @@ for(const action of ['deposit','withdraw','merge_deposited','approve_nft','appro
  const spec=TOOL_SPECS.find(tool=>tool.name===name);if(spec)assert.deepEqual(spec.inputSchema.properties.profile.enum,['sepolia-v9']);
 }
 console.log('PASS staking-only tools advertise v9, not an unsupported v6 adapter');
+
+for(const tool of TOOL_SPECS)assert.equal(tool.inputSchema.properties.profile.default,undefined,'Context-dependent profiles must not advertise a static JSON-schema default');

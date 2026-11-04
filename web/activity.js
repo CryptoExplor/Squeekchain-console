@@ -21,7 +21,7 @@ export function createActivity({ storage, receiptReader, onChange = () => {}, no
   }
   sync();
   const list = () => {sync();return items.map(item => ({ ...item }));};
-  const onStorage=event=>{if(event.key===KEY||event.key===null){sync();if(!controller.signal.aborted)onChange(list());}};
+  const onStorage=event=>{if(event.key===KEY||event.key===null){sync();if(!controller.signal.aborted){onChange(list());void refresh();}}};
   eventTarget?.addEventListener('storage',onStorage);
   function save(newRecord) {
     sync();

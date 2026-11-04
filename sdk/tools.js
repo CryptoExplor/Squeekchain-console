@@ -17,7 +17,7 @@ const BASE_SPECS = [
   {
     name: "squeek_network_status",
     description:
-      "Network-wide SqueekCore + SqueekMining state: settled round, Squeek block height, checkpoint lag, emission per day, total power, minted/supply cap, level table and whether a checkpoint can advance now.",
+      "Network-wide SqueekCore + SqueekMining state: settled round, Squeek block height, checkpoint lag, emission per day, total power, minted/supply cap, level table and whether a checkpoint can advance now. In sepolia-v9, emission is null (unavailable), not zero.",
     inputSchema: obj(),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
@@ -33,7 +33,7 @@ const BASE_SPECS = [
   {
     name: "squeek_wallet_status",
     description:
-      "Per-address holdings: live Squeek positions (level, active/pending power, merge cooldown block), claimable SQK, total power, network share and estimated SQK/day. Defaults to the connected wallet in the browser.",
+      "Per-address holdings: live Squeek positions (level, active/pending power, merge cooldown block), claimable SQK, total power, network share and estimated SQK/day. Defaults to the connected wallet in the browser. In sepolia-v9, sharePercent and estimatedSqkPerDay are null (unavailable), not zero.",
     inputSchema: obj({ owner: str("0x address to inspect (optional in the browser: defaults to the connected wallet)") }),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
@@ -116,7 +116,7 @@ const BASE_SPECS = [
 
 ];
 
-const profileArg = str('Deployment for this call; defaults to the active browser profile or MCP session default', {enum:['sepolia-v6','sepolia-v9'], default:DEFAULT_PROFILE});
+const profileArg = str('Deployment for this call; defaults to the active browser profile or MCP session default', {enum:['sepolia-v6','sepolia-v9']});
 const stakingSpecs = Object.keys(STAKING_ACTIONS).flatMap(action => ['preview','prepare'].map(mode => ({
   name:mode==='prepare'?`squeek_prepare_${action}`:`squeek_${action}_preview`,
   description:`Simulate ${action}; return unsigned calldata only. Amounts, fees and IDs are decimal base-unit strings. Approvals are separate explicit actions. merge_deposited requires BURN-<donor> before construction. Re-preview in the owner wallet before signing.`,

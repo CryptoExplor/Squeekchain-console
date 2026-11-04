@@ -7,6 +7,7 @@ import { profileBalances, chooseProfile, profileHeld, profileCountLabel, profile
 import { createDiscoveryStore } from '../sdk/discovery.js';
 import { readIdentityBatch } from '../sdk/identity-batch.js';
 import { RpcAvailabilityError, RpcTrustError, isTrustError, isRpcAvailabilityError } from '../sdk/rpc-errors.js';
+import { createRpcContext } from '../sdk/rpc.js';
 import { feeLimitExceeded } from '../sdk/fee-error.js';
 import { createAccountTokenSource } from '../sdk/account-discovery.js';
 const profile=PROFILES['sepolia-v9'],owner='0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54';
@@ -18,7 +19,7 @@ function log(eventName,args,index=0) {
   return {address:profile.addresses.staking,blockNumber:toHex(snapshot.blockNumber),logIndex:toHex(index),removed:false,
     topics:encodeEventTopics({abi:staking9Abi,eventName,args}),data:encodeAbiParameters(fields,fields.map(input=>args[input.name]??0n))};
 }
-async function inventory({v6=0n,wallet=0n,power=987654n,historyFail=false,accountSource=null,logs,maxRange,wrongDepositor=false,badFinal=false}={}) {
+async function inventory({v6=0n,wallet=0n,power=987654n,historyFail=false,accountSource=null,logs,maxRange,wrongDepositor=false,badFinal=false,v9Display}={}) {
   let guarded=false;const calls=[];
   const client={
     multicall:async request=>{
@@ -42,7 +43,7 @@ async function inventory({v6=0n,wallet=0n,power=987654n,historyFail=false,accoun
       return logs??[log('Deposited',{tokenId:1n},0),log('Deposited',{tokenId:2n},1),log('Deposited',{tokenId:3n},2),log('Withdrawn',{tokenId:2n},3)];
     },
   };
-  const counts=await profileBalances(owner,{rpcContext:{client,snapshot:async()=>snapshot,check:async s=>{assert.equal(s,snapshot);if(badFinal)throw new RpcTrustError('Final hash mismatch');guarded=true;}},discoveryCache:createDiscoveryStore(null),accountSource});
+  const counts=await profileBalances(owner,{rpcContext:{client,snapshot:async()=>snapshot,check:async s=>{assert.equal(s,snapshot);if(badFinal)throw new RpcTrustError('Final hash mismatch');guarded=true;}},discoveryCache:createDiscoveryStore(null),accountSource,v9Display});
   assert.equal(guarded,true);return {counts,calls};
 }
 assert.equal(profileFromHash(''),null);assert.equal(profileFromHash('#not-a-profile'),null);
@@ -128,3 +129,13 @@ for(const peerPins of Object.values(evidence.peers))for(const [name,pin] of Obje
   if(name==='core'||name==='issuance')assert.equal(normalize(peerPins[name].proxyAdmin),normalize(pin.adminSlot));
 }
 console.log('PASS FeeLimitExceeded decoded through simulation/wallet envelopes; deployment pins match both peers of committed identity export');
+
+const hiddenByApi=await inventory({v6:1n,wallet:1n,power:0n,v9Display:{wallet:'0',staked:'0',nftPower:'0'}});assert.equal(hiddenByApi.counts['sepolia-v9'].wallet,'1');assert.equal(chooseProfile('sepolia-v9',hiddenByApi.counts),'sepolia-v9');
+console.log('PASS PR review: API display counts cannot replace canonical held-profile balance/power');
+
+for(const kind of ['TypeError','TimeoutError']){
+ const original=globalThis.fetch;let batches=0,clock=1000;const cooldowns=new Map();
+ globalThis.fetch=async(_url,init)=>{const req=JSON.parse(init.body);if(Array.isArray(req)){batches++;throw Object.assign(new Error(kind==='TypeError'?'Failed to fetch':'Request timed out'),{name:kind});}const result=req.method==='eth_chainId'?'0xaa36a7':req.method==='eth_blockNumber'?'0xb7f2dc':{number:req.params[0],hash:'0x'+'ab'.repeat(32),timestamp:'0x1',transactions:[]};return response({jsonrpc:'2.0',id:req.id,result});};
+ try{const context=createRpcContext({rpcCooldowns:cooldowns,now:()=>clock});const snapshot=await context.snapshot();snapshot.peers=snapshot.peers.slice(0,1);const requests=[{method:'eth_getStorageAt',params:[profile.addresses.core,'0x'+'00'.repeat(32),'0xb7f2d0']}];await assert.rejects(context.readIdentity(snapshot,requests));assert.equal(cooldowns.get(snapshot.peers[0].identityUrl),clock+30000);await assert.rejects(context.readIdentity(snapshot,requests));assert.equal(batches,1);clock+=30001;await assert.rejects(context.readIdentity(snapshot,requests));assert.equal(batches,2);}finally{globalThis.fetch=original;}
+}
+console.log('PASS PR review: identity batch TypeError/timeout share 30s endpoint cooldown and retry after expiry');

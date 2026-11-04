@@ -231,3 +231,11 @@ for (const status of [429, 503]) {
   }
 }
 console.log('PASS review: Retry-After seconds/HTTP-date, 300s ceiling, and 30s fallback for invalid/past/over-ceiling waits');
+
+{
+ const {telemetryView}=await import('../web/telemetry.js');const now=Date.now();
+ for(const offset of [5001,600000,NaN]){const data=measurement(12500);data.measurement.receivedAt=Number.isNaN(offset)?'invalid':new Date(now+offset).toISOString();assert.equal(telemetryView(data,now).state,'Unknown');}
+ const tolerated=measurement(12500);tolerated.measurement.receivedAt=new Date(now+5000).toISOString();assert.equal(telemetryView(tolerated,now).state,'Running');
+ const expired=measurement(12500);expired.measurement.receivedAt=new Date(now-900000).toISOString();assert.equal(telemetryView(expired,now).state,'Unknown');
+ console.log('PASS PR review: future/invalid telemetry rejected; 5s clock tolerance and 15min TTL preserved');
+}

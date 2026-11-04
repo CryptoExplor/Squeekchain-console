@@ -50,8 +50,9 @@ export function createTelemetry({ fetcher = globalThis.fetch, now = Date.now } =
 export function telemetryView(data, now = Date.now()) {
   const m = data.measurement;
   if (!m) return { state: 'Unknown', note: 'No device reading available.', rpm: 'Unknown', speed: 'Unknown', distance: 'Unknown' };
-  const age = Math.max(0, Math.floor((now - Date.parse(m.receivedAt)) / 1000));
-  if(age*1000>=DISPLAY_TTL)return {state:'Unknown',note:'Device reading expired.',rpm:'Unknown',speed:'Unknown',distance:'Unknown'};
+  const rawAge = now - Date.parse(m.receivedAt);
+  const age = Math.max(0, Math.floor(rawAge / 1000));
+  if(!Number.isFinite(rawAge)||rawAge < -5000||rawAge>=DISPLAY_TTL)return {state:'Unknown',note:'Device reading expired.',rpm:'Unknown',speed:'Unknown',distance:'Unknown'};
   const stale = m.freshness !== 'online' || age > 120;
   return {
     state: stale ? 'Stale' : m.coreStatus === 'COUNTER_FAULT' ? 'Device fault' : m.rpmMilli > 0 ? 'Running' : 'Resting',

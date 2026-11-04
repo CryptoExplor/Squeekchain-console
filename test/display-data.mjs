@@ -54,3 +54,31 @@ assert.doesNotMatch(fs.readFileSync('web/holdings.js','utf8'),/innerHTML|insertA
 console.log('PASS automatic art cache: isolated blob images, omit credentials, durable second-visit zero calls, level changes and 24h expiry');
 
 const optionalAccount=structuredClone(account);assert.equal(apiWallet(optionalAccount,{},owner).staking.fresh,null);optionalAccount.data.stake.freshBaseUnits='7';optionalAccount.data.stake.matureBaseUnits='3';assert.equal(apiWallet(optionalAccount,{},owner).staking.fresh.base,'7');assert.equal(apiWallet(optionalAccount,{},owner).staking.mature.base,'3');optionalAccount.data.stake.freshBaseUnits='invalid';assert.throws(()=>apiWallet(optionalAccount,{},owner),/Invalid optional account amount/);
+
+// PR review: failed validation cannot pin an installation, and stale/mixed
+// endpoint snapshots cannot suggest an actionable checkpoint or a known lag.
+{
+ let fx=displayFixtures();fx.economy.installationId='rejected-installation';fx.economy.supply.liveSupplyBaseUnits='bad';
+ const client=createDisplayApi({profile,cache:createDisplayCache(null),rateBuckets:new Map(),fetcher:async()=>response(fx.economy)});
+ await assert.rejects(client.economy(),/Invalid economy display/);assert.equal(client.context,null);
+ fx=displayFixtures();await client.economy();assert.equal(client.context.installationId,fx.economy.installationId);
+ const core={data:fx.core,at:Date.now()},economy={data:fx.economy,at:Date.now()};
+ assert.equal(apiNetwork(core,economy).checkpoint.canCheckpoint,true);
+ for(const [c,e] of [[{...core,stale:true},economy],[core,{...economy,stale:true}],[{...core,data:{...fx.core,chain:{...fx.core.chain,safeThroughBlock:'11999999'}}},economy]]){
+  const net=apiNetwork(c,e);assert.equal(net.checkpoint.canCheckpoint,false);assert.equal(net.mining.lagRounds,null);assert.equal(net.source.stale,true);
+ }
+}
+// Failed projected blocks do not invalidate successful status telemetry. A failed
+// frontier callback must retry even when the next status reports the same round.
+{
+ const fx=displayFixtures();let frontierAttempts=0,statusPaints=0,blockReads=0;const errors=[];
+ const poller=createWheelPoller({readStatus:async()=>({data:fx.status}),readBlocks:async()=>{blockReads++;throw new Error('bad projection');},frontier:()=>({settled:'1197',processed:'1197'}),onStatus:()=>statusPaints++,onFrontier:()=>++frontierAttempts===1?null:true,onError:(_e,scope)=>errors.push(scope),setTimer:()=>0,clearTimer:()=>{}});
+ await poller.tick();await poller.tick();await poller.tick();poller.stop();assert.equal(frontierAttempts,2);assert.equal(statusPaints,3);assert.equal(blockReads,3);assert.deepEqual(errors,['blocks','blocks','blocks']);
+}
+console.log('PASS PR review: validation before installation bind; stale/mixed checkpoint gates; isolated projection errors; failed-frontier retry');
+
+{
+ let enabled=false,reads=0,scheduled=new Set();const poller=createWheelPoller({enabled:()=>enabled,readStatus:async()=>{reads++;return{data:displayFixtures().status};},setTimer:fn=>{scheduled.add(fn);return fn;},clearTimer:fn=>scheduled.delete(fn)});
+ poller.start();await poller.tick();assert.equal(reads,0);assert.equal(scheduled.size,0);enabled=true;poller.start();assert.equal(scheduled.size,1);await poller.tick();assert.equal(reads,1);enabled=false;poller.start();assert.equal(scheduled.size,0);await poller.tick();assert.equal(reads,1);poller.stop();
+}
+console.log('PASS PR review nit: disabled-profile poller has no timer/reads and resumes when enabled');

@@ -63,7 +63,7 @@
   "tools": [
     {
       "name": "squeek_network_status",
-      "description": "Network-wide SqueekCore + SqueekMining state: settled round, Squeek block height, checkpoint lag, emission per day, total power, minted/supply cap, level table and whether a checkpoint can advance now.",
+      "description": "Network-wide SqueekCore + SqueekMining state: settled round, Squeek block height, checkpoint lag, emission per day, total power, minted/supply cap, level table and whether a checkpoint can advance now. In sepolia-v9, emission is null (unavailable), not zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -73,8 +73,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": []
@@ -97,8 +96,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": []
@@ -111,7 +109,7 @@
     },
     {
       "name": "squeek_wallet_status",
-      "description": "Per-address holdings: live Squeek positions (level, active/pending power, merge cooldown block), claimable SQK, total power, network share and estimated SQK/day. Defaults to the connected wallet in the browser.",
+      "description": "Per-address holdings: live Squeek positions (level, active/pending power, merge cooldown block), claimable SQK, total power, network share and estimated SQK/day. Defaults to the connected wallet in the browser. In sepolia-v9, sharePercent and estimatedSqkPerDay are null (unavailable), not zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -125,8 +123,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": []
@@ -153,8 +150,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": []
@@ -188,8 +184,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": []
@@ -216,8 +211,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": []
@@ -256,8 +250,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -288,8 +281,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -318,8 +310,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": []
@@ -353,8 +344,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -395,8 +385,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -462,8 +451,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -527,8 +515,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -592,8 +579,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -657,8 +643,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -722,8 +707,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -789,8 +773,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -856,8 +839,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -921,8 +903,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -986,8 +967,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1050,8 +1030,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1114,8 +1093,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1179,8 +1157,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1244,8 +1221,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1308,8 +1284,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1372,8 +1347,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1437,8 +1411,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1502,8 +1475,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1567,8 +1539,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1598,8 +1569,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": []
@@ -1632,8 +1602,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": []
@@ -1671,8 +1640,7 @@
             "enum": [
               "sepolia-v6",
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1736,8 +1704,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1799,8 +1766,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1862,8 +1828,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -1927,8 +1892,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": []
@@ -1988,8 +1952,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [
@@ -2051,8 +2014,7 @@
             "description": "Deployment for this call; defaults to the active browser profile or MCP session default",
             "enum": [
               "sepolia-v9"
-            ],
-            "default": "sepolia-v9"
+            ]
           }
         },
         "required": [

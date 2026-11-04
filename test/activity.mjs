@@ -58,3 +58,12 @@ clearing.record(hash,'New broadcast');const event=new Event('storage');event.key
 assert.equal(notified.length,1);clearing.clear();events.dispatchEvent(event);assert.deepEqual(notified,[]);
 for(const tracker of [stale,clearing,observed])tracker.destroy();
 console.log('PASS legacy Activity v6 migration, explicit alias migration, cross-tab clear during an awaited receipt and storage-event synchronization');
+
+// Cross-tab records are rechecked, never trusted as confirmed from storage.
+{
+ const events=new EventTarget(),saved=new Map(),storage={get:k=>saved.get(k),set:(k,v)=>saved.set(k,v)};let reads=0,changed;
+ const target=createActivity({storage,eventTarget:events,onChange:items=>changed=items,receiptReader:async item=>{reads++;return{receipt:{transactionHash:item.hash,blockHash,blockNumber:50n,status:item.hash===hash?'success':'reverted'},confirmations:12n};}});
+ const otherHash='0x'+'ef'.repeat(32);storage.set(KEY,JSON.stringify([hash,otherHash].map(hash=>({...entry,hash,status:'confirmed'}))));
+ const event=new Event('storage');event.key=KEY;events.dispatchEvent(event);await target.refresh();assert.equal(reads,2);assert.deepEqual(changed.map(i=>i.status),['confirmed','reverted']);target.destroy();
+}
+console.log('PASS PR review: storage-driven Activity reload refreshes confirmed/reverted receipts');

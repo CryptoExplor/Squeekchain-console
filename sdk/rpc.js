@@ -226,6 +226,7 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
       chainCache.delete(endpoint);
       try {requireSepolia(await peer.getChainId());}
       catch(recheckError){throw recordFailure(withRpcContext(error,{endpoint,method,recheckError}));}
+      if(!isRpcProgrammingError(error)&&rpcCauses(error).some(({error:e})=>e.name==='TimeoutError'||e.name==='TypeError'))rpcCooldowns.set(endpoint,Math.max(rpcCooldowns.get(endpoint)??0,now()+30_000));
       throw recordFailure(withRpcContext(error,{endpoint,method}));
     }
   }));
