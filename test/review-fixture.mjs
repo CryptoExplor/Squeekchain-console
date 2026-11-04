@@ -10,6 +10,7 @@ export async function installReviewFixture(page,{built=false}={}) {
   await page.addInitScript(() => { window.__squeekMounted = true; });
   await page.goto('/');
   await page.evaluate(async () => {
+    localStorage.setItem('wheelhouse:disconnected','true');
     const { mount } = await import('/app.js');
     localStorage.setItem('squeekchain:profile','sepolia-v6'); history.replaceState(null,'','#sepolia-v6/network');
     const owner = '0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54';

@@ -111,7 +111,7 @@ test('switch during pending RPC: abort the load and discard old-profile data', a
   await expect(page.getByTestId('net-round')).toHaveText('Unknown');
   await expect(page.getByTestId('claim-result')).toBeEmpty();
   await expect(page.getByTestId('squeeks-tbody')).toBeEmpty();
-  expect(await page.evaluate(() => [window.squeek.state.account, window.squeek.state.inspected, window.squeek.state.status, window.squeek.state.plan, window.squeek.state.receipts.length])).toEqual([null, null, null, null, 0]);
+  expect(await page.evaluate(() => [window.squeek.state.account, window.squeek.state.inspected, window.squeek.state.status, window.squeek.state.plan, window.squeek.state.receipts.length])).toEqual(['0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54', '0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54', null, null, 0]);
   await page.evaluate(() => window.squeek.destroy());
 });
 

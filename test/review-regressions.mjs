@@ -176,7 +176,7 @@ try {
 
   // Address casing alone cannot invalidate the owner's explicit burn acknowledgement.
   const caseOnly = api.requestMerge({ survivor: '1', donor: '2' }); await tick();
-  api.state.account = owner.toLowerCase();
+  const request=win.ethereum.request;win.ethereum.request=args=>args.method==='eth_accounts'?Promise.resolve([owner.toLowerCase()]):request(args);await api.wallet.refresh();
   $('modal-input').value = 'BURN-2'; $('modal-input').dispatchEvent(new win.Event('input'));
   $('btn-modal-confirm').click(); await tick();
   assert.equal($('modal-title').textContent, 'Review simulated merge');

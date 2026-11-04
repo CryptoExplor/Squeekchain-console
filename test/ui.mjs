@@ -59,7 +59,7 @@ await api.refresh();
 assert.equal($('net-round').textContent,'1001');
 assert.doesNotMatch($('settlement-notice').textContent, /Next round is not settled/);
 net.checkpoint.roundSettled = false; net.checkpoint.canCheckpoint = false;
-assert.equal(api.state.account, null, 'switch clears the connected-wallet view');
+assert.equal(api.state.account, owner, 'profile changes keep the central wallet session');
 await api.connect();
 assert.ok(Object.keys(api.tools()).includes('squeek_prepare_merge'));
 $('claim-ids').value = '1, 2';

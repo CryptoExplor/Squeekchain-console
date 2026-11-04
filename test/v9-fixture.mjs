@@ -3,6 +3,7 @@ export async function installV9Fixture(page) {
  await installReviewFixture(page);
  await page.evaluate(async()=>{
   window.squeek.destroy();
+  localStorage.setItem('wheelhouse:disconnected','true');
   const {mount}=await import('/app.js');
   history.replaceState(null,'','#sepolia-v9/network');localStorage.setItem('squeekchain:profile','sepolia-v9');
   const owner='0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54';

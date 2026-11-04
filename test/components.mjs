@@ -73,7 +73,7 @@ try {
     failed = true; await app.refresh();
     assert.equal($('holder-count').textContent, UNKNOWN); assert.equal(app.state.status, null);
     assert.equal($('btn-custom-merge').disabled, true);
-    await app.switchProfile('sepolia-v9'); assert.equal($('verified-chip').textContent, 'Verified');
+    await app.switchProfile('sepolia-v9'); assert.equal($('verified-chip').textContent, 'Unavailable','connected wallet failure remains unavailable across profile switch');
     failed=false;wallet={owner,totals:{count:null},squeeks:[]};await app.connect();
     assert.equal($('btn-checkpoint').disabled,true);assert.equal($('btn-claim').disabled,true,'v9 Unknown is not the SQK-only known-zero exception');
     wallet={owner,totals:{count:0},squeeks:[]};await app.refresh();assert.equal($('btn-claim').disabled,false,'v9 known zero still allows SQK-only claims');
