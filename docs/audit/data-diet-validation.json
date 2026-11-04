@@ -1,0 +1,89 @@
+{
+  "implementationSha": "aa91c34c999f42c329d9da348bef6733e33b1343",
+  "date": "2026-11-04",
+  "offline": {
+    "command": "npm test",
+    "scripts": 18,
+    "result": "PASS"
+  },
+  "browser": {
+    "command": "UPDATE_SCREENSHOTS=1 LD_LIBRARY_PATH=/tmp/al2023/lib PLAYWRIGHT_CHROMIUM_EXECUTABLE=/tmp/chromium PLAYWRIGHT_NO_SANDBOX=true npm run test:browser -- --max-failures=1",
+    "passed": 199,
+    "failed": 0,
+    "result": "PASS"
+  },
+  "build": {
+    "algorithm": "gzip (Node default level)",
+    "scripts": [
+      {
+        "file": "activity.js",
+        "rawBytes": 3074,
+        "gzipBytes": 1492
+      },
+      {
+        "file": "app.js",
+        "rawBytes": 58549,
+        "gzipBytes": 19538
+      },
+      {
+        "file": "bundle.js",
+        "rawBytes": 504188,
+        "gzipBytes": 140811
+      },
+      {
+        "file": "components.js",
+        "rawBytes": 5157,
+        "gzipBytes": 2244
+      },
+      {
+        "file": "developers.js",
+        "rawBytes": 524,
+        "gzipBytes": 342
+      },
+      {
+        "file": "holdings.js",
+        "rawBytes": 3711,
+        "gzipBytes": 1590
+      },
+      {
+        "file": "images.js",
+        "rawBytes": 1696,
+        "gzipBytes": 926
+      },
+      {
+        "file": "settings.js",
+        "rawBytes": 3021,
+        "gzipBytes": 1509
+      },
+      {
+        "file": "telemetry.js",
+        "rawBytes": 2171,
+        "gzipBytes": 1092
+      },
+      {
+        "file": "theme.js",
+        "rawBytes": 287,
+        "gzipBytes": 224
+      }
+    ],
+    "totalGzipBytes": 169768,
+    "budgetBytes": 250000
+  },
+  "protectedFilesUnchanged": [
+    "test/components.mjs",
+    "sdk/abi.js",
+    "sdk/abi-v9.js",
+    "sdk/deployments.js",
+    "sdk/record.js"
+  ],
+  "screenshots": {
+    "before": 16,
+    "after": 32,
+    "matrix": "v6/v9 \u00d7 390/1280 \u00d7 holder/empty/watch/disconnected; AFTER also light/dark"
+  },
+  "qualification": "Mocked/offline only; complete comparable v6 performance table and fork execution outstanding; no live/signing/merge/manual deployment",
+  "logSha256": {
+    "redesign-offline-final.log": "f9a06e2cd74a837164331690ee03323bec5a621eac3f00a577b774b64c40f47f",
+    "redesign-browser-final-2.log": "2d1865bc3be57001d9fdb779680a6b5f037f94e04528e65ec432865b992c6cd7"
+  }
+}

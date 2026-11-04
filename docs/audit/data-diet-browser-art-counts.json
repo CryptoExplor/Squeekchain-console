@@ -1,0 +1,25 @@
+{
+  "scope": "Production app, synthetic intercepted API/RPC, default dual-profile chooser; HTTP envelopes plus EIP-1193 chain reads; no actions/signing; reload keeps IndexedDB",
+  "cold": {
+    "api": 6,
+    "rpc": 0,
+    "walletReads": 0
+  },
+  "warmReload": {
+    "api": 6,
+    "rpc": 0,
+    "walletReads": 0
+  },
+  "firstWallet": {
+    "api": 3,
+    "rpc": 6,
+    "walletReads": 7
+  },
+  "warmWallet": {
+    "api": 1,
+    "rpc": 6,
+    "walletReads": 7
+  },
+  "firstVisitArtRequests": 2,
+  "secondVisitArtRequests": 0
+}

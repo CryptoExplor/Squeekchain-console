@@ -1,3 +1,5 @@
+> Historical failure evidence, superseded 2026-11-04: the mock EIP-1193 emitter dropped one of multiple listeners. The corrected fixture passes the unchanged production wrong-chain, disconnect and reload lifecycle assertions. See [current report](data-diet-report.md). This file preserves the prior stopped run, not a current failure.
+
 # Instructions
 
 - Following Playwright test failed.

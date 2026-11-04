@@ -1,23 +1,31 @@
 {
-  "fixture": "Production v9 app/default dual-profile chooser; synthetic API/RPC responses; extracted passively from second-run trace before failed chainChanged assertion. HTTP only: EIP-1193 reads excluded. Refresh is explicit, NOT a cache-only reload.",
-  "v9": {
+  "qualification": "Partial mocked evidence only; v6 whole-page/provider-inclusive parity remains outstanding; not live qualification",
+  "v9ProductionBrowserWithAutomaticArt": {
+    "scope": "Production app, synthetic intercepted API/RPC, default dual-profile chooser; HTTP envelopes plus EIP-1193 chain reads; no actions/signing; reload keeps IndexedDB",
     "cold": {
-      "apiHttp": 6,
-      "rpcHttp": 0,
-      "apiHttpSharePercent": 100.0
+      "api": 6,
+      "rpc": 0,
+      "walletReads": 0
     },
-    "explicitRefresh": {
-      "apiHttp": 2,
-      "rpcHttp": 0,
-      "apiHttpSharePercent": 100.0
+    "warmReload": {
+      "api": 6,
+      "rpc": 0,
+      "walletReads": 0
     },
-    "walletConnect": {
-      "apiHttp": 1,
-      "rpcHttp": 6,
-      "apiHttpSharePercent": 14.29
-    }
+    "firstWallet": {
+      "api": 3,
+      "rpc": 6,
+      "walletReads": 7
+    },
+    "warmWallet": {
+      "api": 1,
+      "rpc": 6,
+      "walletReads": 7
+    },
+    "firstVisitArtRequests": 2,
+    "secondVisitArtRequests": 0
   },
-  "polling": {
+  "v9VirtualPoller": {
     "ACTIVE": {
       "bootstrapApi": 4,
       "statusPolls": 120,
@@ -33,5 +41,46 @@
       "rpcReads": 0
     }
   },
-  "v6After": "Not measured end-to-end; blocked by second browser regression failure. Existing SDK baselines are not relabeled as new display-path measurements."
+  "historicalPartialEvidence": {
+    "fixture": "Production v9 app/default dual-profile chooser; synthetic API/RPC responses; extracted passively from second-run trace before failed chainChanged assertion. HTTP only: EIP-1193 reads excluded. Refresh is explicit, NOT a cache-only reload.",
+    "v9": {
+      "cold": {
+        "apiHttp": 6,
+        "rpcHttp": 0,
+        "apiHttpSharePercent": 100.0
+      },
+      "explicitRefresh": {
+        "apiHttp": 2,
+        "rpcHttp": 0,
+        "apiHttpSharePercent": 100.0
+      },
+      "walletConnect": {
+        "apiHttp": 1,
+        "rpcHttp": 6,
+        "apiHttpSharePercent": 14.29
+      }
+    },
+    "polling": {
+      "ACTIVE": {
+        "bootstrapApi": 4,
+        "statusPolls": 120,
+        "eventPolls": 120,
+        "tenMinuteApiReads": 240,
+        "rpcReads": 0
+      },
+      "IDLE": {
+        "bootstrapApi": 4,
+        "statusPolls": 10,
+        "eventPolls": 10,
+        "tenMinuteApiReads": 20,
+        "rpcReads": 0
+      }
+    },
+    "v6After": "Not measured end-to-end; blocked by second browser regression failure. Existing SDK baselines are not relabeled as new display-path measurements."
+  },
+  "outstanding": [
+    "v6 whole-page cold/warm cached reload/wallet/10-minute ACTIVE/IDLE, including provider reads",
+    "Comparable pre-DATA-DIET whole-page baseline and v6/v9 parity under identical fixtures",
+    "Wall-clock/public-endpoint behavior not qualified; user triggers live run"
+  ]
 }
