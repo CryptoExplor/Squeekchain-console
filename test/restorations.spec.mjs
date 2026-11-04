@@ -62,13 +62,14 @@ test('watch mode keeps wallet identity, disables owner requests and exits to con
 async function seedPending(page) {
   await page.addInitScript(()=>localStorage.setItem('wheelhouse:pending-transactions:v1',JSON.stringify([{hash:'0x'+'ab'.repeat(32),label:'checkpoint()',profile:'sepolia-v6',chainId:11155111,time:'2026-11-03T15:00:00.000Z',status:'pending'}])));
 }
-test('pending switch notice is conditional, persists across profiles and disappears after clearing',async({page})=>{
+test('pending activity persists across switches; warning is a conditional View toast, never permanent header text',async({page})=>{
   await seedPending(page);await installReviewFixture(page);
-  await expect(page.getByTestId('profile-pending-notice')).toHaveText("Pending transactions continue; switching can't cancel them.");
-  await page.getByTestId('profile-select').selectOption('sepolia-v9');await expect(page.getByTestId('profile-pending-notice')).toBeVisible();
-  await page.getByTestId('profile-select').selectOption('mainnet');await expect(page.getByTestId('profile-pending-notice')).toBeVisible();
-  await page.getByTestId('settings-open').click();await page.getByTestId('btn-clear-activity').click();await page.getByTestId('btn-modal-confirm').click();
-  await expect(page.getByTestId('profile-pending-notice')).toBeHidden();await expect(page.getByTestId('profile-pending-notice')).toHaveText('');await page.evaluate(()=>squeek.destroy());
+  await expect(page.locator('#profile-pending-notice')).toHaveCount(0);await expect(page.locator('.toast')).toHaveCount(0);
+  await page.getByTestId('profile-select').selectOption('sepolia-v9');await expect(page.locator('.toast').last()).toContainText("1 transaction still pending. Switching won't cancel it.");expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);
+  await page.getByTestId('profile-select').selectOption('mainnet');expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);
+  await page.locator('.toast').last().getByRole('button',{name:'View',exact:true}).click();await expect(page.getByTestId('activity-drawer')).toBeVisible();await page.getByTestId('activity-drawer').locator('[data-close-sheet]').click();
+  await page.getByTestId('settings-open').click();await page.getByTestId('btn-clear-activity').click();await page.getByTestId('btn-modal-confirm').click();await page.getByTestId('settings-sheet').locator('[data-close-sheet]').click();
+  for(const button of await page.locator('.toast-close').all())await button.click();await page.getByTestId('profile-select').selectOption('sepolia-v6');await expect(page.locator('.toast')).toHaveCount(0);await page.evaluate(()=>squeek.destroy());
 });
 
 test('Trust checklist tracks verified, stopped and unknown; Developers wallet permissions are accurate',async({page})=>{
@@ -91,7 +92,7 @@ for(const theme of ['light','dark'])for(const width of [1280,390])for(const view
   if(view==='watch'){await page.getByTestId('watch-input').fill(other);await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeVisible();}
   if(view==='stall-squeeks')await expect(page.getByTestId('holder-rewards-notice')).toBeVisible();
   if(view==='stall-network')await expect(page.getByTestId('settlement-notice')).toBeVisible();
-  if(view==='pending')await expect(page.getByTestId('profile-pending-notice')).toBeVisible();
+  if(view==='pending'){await page.getByTestId('profile-select').selectOption('sepolia-v9');await expect(page.locator('.toast').last()).toContainText('1 transaction still pending');}
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({fullPage:true,animations:'disabled'});const name=`${view}-${theme}-${width}.png`;await info.attach(name,{body:image,contentType:'image/png'});if(process.env.UPDATE_SCREENSHOTS==='1')fs.writeFileSync('docs/screenshots/'+name,image);
   await page.evaluate(()=>squeek.destroy());

@@ -32,7 +32,7 @@ Light default; saved light/dark/system override. Local Barlow Condensed, Quicksa
 
 ## Evidence
 
-See [STATUS](STATUS.md) for exact current results and limits, [Mocked captures](screenshots/README.md), [gzip report](audit/data-diet-js-size.json), and both request-budget reports. Total external JavaScript is **169,908 bytes / 250,000 cap**, independently gzipped across ten scripts including the tiny pre-paint external theme bootstrap and lazy modules. Offline tests are not live qualification. No live suite, signing, live workflow dispatch, keeper, merge or manual deployment was run. The requested preview is built by the existing Pages integration after the branch push. Owned Squeek cards, automatic lazy art and separate SQK actions are implemented; see the DATA DIET screenshot audit.
+See [STATUS](STATUS.md) for exact current results and limits, [Mocked captures](screenshots/README.md), [gzip report](audit/data-diet-js-size.json), and both request-budget reports. Total external JavaScript is **174,543 bytes / 250,000 cap**, independently gzipped across twelve scripts including the tiny pre-paint external theme bootstrap and lazy modules. Offline tests are not live qualification. No live suite, signing, live workflow dispatch, keeper, merge or manual deployment was run. The requested preview is built by the existing Pages integration after the branch push. Owned Squeek cards, automatic lazy art and separate SQK actions are implemented; see the DATA DIET screenshot audit.
 
 ## Context-only signals
 

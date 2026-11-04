@@ -41,7 +41,7 @@ try {
   assert.equal(card.querySelector('img').getAttribute('src'), 'data:image/svg+xml;base64,PHN2Zy8+');
   card.click(); assert.equal(opened, 1);
   const toast = Toast({ doc, host: $('toasts'), message: '<img>literal error', kind: 'err', timeout: 1 });
-  assert.equal(toast.getAttribute('role'), 'alert'); assert.equal(toast.children.length, 0);
+  assert.equal(toast.getAttribute('role'), 'alert'); assert.equal(toast.querySelector('img'), null);assert.equal(toast.querySelector('.toast-message').textContent,'<img>literal error');assert.ok(toast.querySelector('[aria-label="Dismiss notification"]'));
 
   const dialog = ConfirmDialog({ doc, win, elements: Object.fromEntries(Object.entries({ root: 'modal', title: 'modal-title', body: 'modal-body', input: 'modal-input', cancel: 'btn-modal-cancel', confirm: 'btn-modal-confirm' }).map(([key, id]) => [key, $(id)])) });
   let confirmed = false;

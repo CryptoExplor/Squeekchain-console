@@ -13,12 +13,12 @@
       "walletReads": 0
     },
     "firstWallet": {
-      "api": 3,
+      "api": 4,
       "rpc": 6,
       "walletReads": 7
     },
     "warmWallet": {
-      "api": 1,
+      "api": 2,
       "rpc": 6,
       "walletReads": 7
     },

@@ -22,11 +22,12 @@ function normalize(node) {
   return node.outerHTML;
 }
 // DATA DIET explicitly replaces the old fixed-loop label; all other baseline DOM remains exact.
-for(const [selector,expected] of Object.entries(evidence.nodes).filter(([selector])=>selector!=='#holder-empty'))assert.equal(normalize(doc.querySelector(selector)),normalize(new JSDOM(expected.replace('ONCHAIN READS · AUTO-REFRESH 45s','DISPLAY READS · FOLLOWS THE WHEEL').replace('rendered by the DotGrid renderer · shown as an isolated image','Your Squeek collection')).window.document.body.firstElementChild),`${selector}: preserve deployed b705683 layout/copy`);
+for(const [selector,expected] of Object.entries(evidence.nodes).filter(([selector])=>!['#holder-empty','#btn-plan'].includes(selector)))assert.equal(normalize(doc.querySelector(selector)),normalize(new JSDOM(expected.replace('ONCHAIN READS · AUTO-REFRESH 45s','DISPLAY READS · FOLLOWS THE WHEEL').replace('rendered by the DotGrid renderer · shown as an isolated image','Your Squeek collection')).window.document.body.firstElementChild),`${selector}: preserve deployed b705683 layout/copy`);
+assert.equal(doc.querySelector('#btn-plan'),null,'text plan refresh removed');assert.equal(doc.querySelector('#btn-holder-refresh').getAttribute('aria-label'),'Refresh Squeeks');
 assert.match(doc.querySelector('#holder-empty').textContent,/Connect your wallet/);assert.ok(doc.querySelector('#holder-connect'));
 const styles=fs.readFileSync('web/styles.css','utf8');
 assert.equal(sha(styles.slice(0,evidence.stylesPrefixCharacters)),evidence.stylesSha256,'all original styles remain unchanged; new rules are additive');
-const components=fs.readFileSync('web/components.js','utf8').replace(', details = []','').replace(/\n      if\(details.length\) \{.*?\n      \}/s,'');
+const components=fs.readFileSync('web/components.js','utf8').replace(/export function Toast[\s\S]*?(?=export function ConfirmDialog)/,fs.readFileSync('test/fixtures/frontend-toast-b705683.txt','utf8')).replace(', details = []','').replace(/\n      if\(details.length\) \{.*?\n      \}/s,'');
 assert.equal(sha(components),evidence.componentsSha256,'original components plus structured unstake details only');
 const app=fs.readFileSync('web/app.js','utf8');
 const columns=app.slice(app.indexOf('  function columnsForProfile() {'),app.indexOf('\n  function renderWatchMode()',app.indexOf('  function columnsForProfile() {')));

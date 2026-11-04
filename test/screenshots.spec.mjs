@@ -38,7 +38,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
     }
     if (view === 'settings') await page.getByTestId('settings-open').click();
     if (view === 'merge') {
-      await page.getByTestId('merge-list').getByRole('button').click();
+      await page.getByRole('checkbox',{name:'Select Squeek #41',exact:true}).check();await page.getByRole('checkbox',{name:'Select Squeek #42',exact:true}).check();await page.getByTestId('btn-custom-merge').click();
       await expect(page.getByTestId('modal')).toBeVisible();
       await page.getByTestId('modal-input').fill('BURN-41');
       await expect(page.getByTestId('btn-modal-confirm')).toBeDisabled();

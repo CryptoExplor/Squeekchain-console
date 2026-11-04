@@ -165,6 +165,7 @@ try {
   assert.equal(doc.activeElement, $('btn-claim'));
   assert.equal(modalVisible(), false);
 
+  const readPair=adapter.walletStatus;adapter.walletStatus=async()=>{const value=await readPair();return {...value,totals:{...value.totals,count:2},squeeks:[...value.squeeks,{tokenId:'2',level:1}]};};await api.refresh();$('merge-survivor').value='1';$('merge-donor').value='2';$('merge-donor').dispatchEvent(new win.Event('input'));
   $('btn-custom-merge').focus();
   const merge = api.requestMerge({ survivor: '1', donor: '2', nextLevel: 2 }); await tick();
   assert.equal(doc.activeElement, $('modal-input'), 'typed confirmation starts in the input');

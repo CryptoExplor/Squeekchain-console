@@ -49,7 +49,7 @@ export async function installReviewFixture(page,{built=false}={}) {
         art: async tokenId => ({ tokenId, name: `Mock Squeek #${tokenId}`, attributes: [], image: 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="#fff6dd"/><path d="M2 2h4v4H2z" fill="#8a6a10"/><path d="M3 3h1v1H3zM5 3h1v1H5z" fill="#292b26"/></svg>') }),
       }),
       fetcher: async (url, options) => { if (window.reviewRpcTest && url === 'https://custom-rpc.test/') return fetch(url, options); throw new Error('No API in offline review'); },
-      activityReader: async () => { throw new Error('No receipt reads in offline review'); },
+      activityReader: async item => {const status=window.reviewReceipts?.[item.hash];if(status)return {receipt:{transactionHash:item.hash,status,blockNumber:123n,blockHash:'0x'+'ab'.repeat(32)},confirmations:12n};throw new Error('No receipt reads in offline review'); },
     });
     await window.squeek.refresh();
     const notice = document.createElement('p'); notice.className = 'notice'; notice.id = 'mock-review-notice';

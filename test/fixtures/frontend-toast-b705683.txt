@@ -1,0 +1,8 @@
+export function Toast({ doc, host, message, kind = '', timeout = 7000 }) {
+  const node = doc.createElement('div'); node.dataset.component = 'Toast';
+  node.className = `toast ${kind}`; node.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+  node.textContent = message; host.append(node);
+  doc.defaultView.setTimeout(() => node.remove(), timeout);
+  return node;
+}
+

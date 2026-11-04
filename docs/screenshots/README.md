@@ -58,3 +58,19 @@ Ordinary browser tests save captures in ignored `test-results/` without changing
 - v9 ETH menu: [desktop](wallet-menu-sepolia-v9-1280.png), [390px](wallet-menu-sepolia-v9-390.png).
 
 All header captures have one visible verification chip and only the wallet button's address. Network captures label the actual issuance source and use natural round plurals. The v6 production SDK now reads NFT totalSupply on-chain; screenshot adapters still inject synthetic supply counts, not live chain data.
+
+
+## Latest wallet, wheel, Squeeks and notification audits (2026-11-04)
+
+These supersede the older general-gallery Squeeks and permanent pending-warning layouts above. All use actual authored UI and synthetic intercepted/injected data, never live signing.
+
+- Paired wallet/wheel audit: `wallet-wheel-{before,after}-{v6,v9}-{header,network,squeeks}-{390,1280}.png` (12 before + 12 after). Before is 6151127; current after images include both approved follow-ups.
+- New Squeeks layout: `squeeks-layout-{v6,v9}-{empty,selected,pending}-{390,1280}.png` (12). Pending names identify the starting profile, and capture the toast after switching to the other profile.
+- The separate 32-case `squeeks-after-{light,dark}-{v6,v9}-{holder,empty,watch,disconnected}-{390,1280}.png` matrix is also current.
+- [Complete evidence, validation, failures/corrections and removed strings](../audit/squeeks-layout-notifications.md).
+
+| Latest view | v6 · 1280 | v6 · 390 | v9 · 1280 | v9 · 390 |
+|---|---|---|---|---|
+| No Squeeks | [PNG](squeeks-layout-v6-empty-1280.png) | [PNG](squeeks-layout-v6-empty-390.png) | [PNG](squeeks-layout-v9-empty-1280.png) | [PNG](squeeks-layout-v9-empty-390.png) |
+| Two selected | [PNG](squeeks-layout-v6-selected-1280.png) | [PNG](squeeks-layout-v6-selected-390.png) | [PNG](squeeks-layout-v9-selected-1280.png) | [PNG](squeeks-layout-v9-selected-390.png) |
+| Pending switch toast | [PNG](squeeks-layout-v6-pending-1280.png) | [PNG](squeeks-layout-v6-pending-390.png) | [PNG](squeeks-layout-v9-pending-1280.png) | [PNG](squeeks-layout-v9-pending-390.png) |

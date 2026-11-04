@@ -21,26 +21,26 @@ Re-probe attempts for Nodies and OnFinality with eth_chainId and an Origin heade
 
 ## Validation
 
-Qualified implementation commit: `24f747ca63871739f6ff532221332a6451cb7e77`. The evidence-only commit following it does not change production code.
+Qualified implementation commit: `bad97fa4ce774c23d154236cae596ad81ab9c0e4`. The evidence-only commit following it does not change production code.
 
-- Build: **169,908 bytes gzip / 250,000**, all **10** independently compressed JavaScript responses, including lazy modules. [Per-script sizes](data-diet-js-size.json).
-- Offline suite: **18/18 scripts PASS** after final production edits, including both SDK budgets, ABI/export safety, protected components, display guards, cache/expiry/art, canonical action authority and production fork-code exclusion.
-- **200/200 mocked browser tests PASS** in the final full run after all production edits. Includes all existing roles/test-ID/safety suites, the 32-case Squeeks matrix, wallet waits and a real full-reload art cache regression.
-- Before/after: 16 pre-redesign light images and 32 post-redesign light/dark images, both profiles × 390/1280 × holder/empty/watch/disconnected. [Audit + comparison links](squeeks-ui-audit.md). Broader light/dark screenshot suites are also regenerated.
+- Build: **174,543 bytes gzip / 250,000**, all **12** independently compressed JavaScript responses, including lazy modules. [Per-script sizes](data-diet-js-size.json).
+- Offline suite: **19/19 scripts PASS** after final production edits, including both SDK budgets, ABI/export safety, protected components, display guards, cache/expiry/art, canonical action authority and production fork-code exclusion.
+- **227/227 mocked browser tests PASS** in the final full run after all production edits. Includes all existing roles/test-ID/safety suites, the 32-case Squeeks matrix, wallet waits and a real full-reload art cache regression.
+- Before/after: 16 pre-redesign light images and 32 post-redesign light/dark images, both profiles × 390/1280 × holder/empty/watch/disconnected. [Audit + comparison links](squeeks-ui-audit.md). The twelve paired wallet/wheel after captures, twelve new layout/notification captures and 32-case Squeeks matrix are current; older general-gallery images are historical.
 - Original wrong-chain Checkpoint blocker was a fixture bug: its one-listener Map dropped one of the app's chain listeners. Fixture now mirrors EIP-1193 multiple listeners/removal. The original production lifecycle test passes its chain-change, account-empty, disconnect and persisted-disconnect reload assertions. No production chain guard was weakened.
 - Iteration history: initial redesign run 192/198 passed; stale copy/RPC expectations were migrated, then 198/198 passed. An additional reload regression initially hit duplicate Playwright exposeFunction registration, fixed with per-install binding names; its second focused run passed. Final copy hardening required updated diagnostic expectations; a timing-only lazy-module assertion now waits for the module request instead of racing it. These were test harness/copy migrations, not live retries.
-- `test/components.mjs` (including line 65), protected component source, deployment pins and official ABI files are unchanged.
+- `test/components.mjs:65`, unaffected component source, deployment pins and official ABI files are unchanged. The explicitly requested Toast/refresh-button assertion changes are scoped in the frontend baseline regression.
 
 ## Request counts — partial, comparable v9 scenarios
 
-These use the production app, intercepted synthetic API/RPC responses and the default dual-profile chooser, **not** an adapter factory. HTTP numbers count envelopes (a JSON-RPC batch is one HTTP request). Provider counts are EIP-1193 chain reads, reported separately; account authorization methods are not chain reads. Counts exclude static assets. Art metadata calls are included in wallet rows. Full reload retains IndexedDB and remounts without an account; connecting is measured separately.
+These use the production app, intercepted synthetic API/RPC responses and the default dual-profile chooser, **not** an adapter factory. HTTP numbers count envelopes (a JSON-RPC batch is one HTTP request). Provider counts are EIP-1193 chain reads, reported separately; account authorization methods are not chain reads. Counts exclude static assets. Art metadata calls are included in wallet rows. This request-count fixture explicitly begins disconnected: full reload retains IndexedDB and connecting is measured separately. Separate lifecycle tests cover the normal silent authorised restore.
 
 | v9 scenario | API HTTP | Public RPC HTTP | Provider chain reads | API share incl. provider reads |
 |---|---:|---:|---:|---:|
 | Cold network + wheel/feed bootstrap | 6 | 0 | 0 | 100% |
 | Warm cached full reload, not Refresh | 6 | 0 | 0 | 100% |
-| First wallet connect + chooser + 2 art metadata reads | 3 | 6 | 7 | 18.75% |
-| Warm wallet connect + chooser, cached art | 1 | 6 | 7 | 7.14% |
+| First wallet connect + chooser + 2 art metadata reads | 4 | 6 | 7 | 23.53% |
+| Warm wallet connect + chooser, cached art | 2 | 6 | 7 | 13.33% |
 | Virtual 10min ACTIVE, unchanged frontiers, after bootstrap | 240 | 0 | Not modeled | Not a whole-page/provider-inclusive measurement |
 | Virtual 10min IDLE, unchanged frontiers, after bootstrap | 20 | 0 | Not modeled | Not a whole-page/provider-inclusive measurement |
 | v6 whole-page cold/warm/wallet/10min | — | — | — | **Still outstanding** |
@@ -53,10 +53,14 @@ Existing SDK-only budgets remain 22/12/15 v6 cold network/warm network/wallet, a
 
 ## PR review follow-up
 
-The 16 inline findings and review-body notes have been checked against current code. Fresh/matching endpoint snapshots now gate checkpoint/lag hints; invalid economy data cannot pin an installation. Canonical balance/power always drives profile detection, projected-block failures do not erase telemetry, failed frontier refreshes retry, non-v9 polling suspends/restarts, batch network errors share cooldown, cross-tab Activity rechecks receipts, and future telemetry dates are rejected. Missing API-path ETH is hidden, never fabricated. Tool metadata now describes v9 null fields and omits a misleading static per-call profile default. See [the complete comment disposition](pr3-data-diet-review.md).
+The 16 inline findings and review-body notes have been checked against current code. Fresh/matching endpoint snapshots now gate checkpoint/lag hints; invalid economy data cannot pin an installation. Canonical balance/power always drives profile detection, projected-block failures do not erase telemetry, failed frontier refreshes retry, non-v9 polling suspends/restarts, batch network errors share cooldown, cross-tab Activity rechecks receipts, and future telemetry dates are rejected. ETH is owned by the central wallet store; it is hidden when unavailable, never fabricated from the API. Tool metadata now describes v9 null fields and omits a misleading static per-call profile default. See [the complete comment disposition](pr3-data-diet-review.md).
 
 ## Remaining qualification / no live authorization
 
 - Complete the comparable v6/v9 whole-page cold/warm/wallet/10-minute ACTIVE/IDLE table, including provider calls and matching before scope; current evidence is not full DATA DIET performance acceptance.
 - Foundry installation previously failed twice; no further retry. Hardhat development fallback is installed and eight fork cases were discovered, but **zero executed**. No fork PASS is claimed; synthetic/local peers are not public independent-peer availability evidence.
 - User-triggered run-live remains separate. No live workflow dispatch, signing/key handling, keeper, merge or manual deployment was performed here. Automatic Cloudflare preview may follow the same-branch push; it is not a manual deployment or a live qualification claim.
+
+## Wallet and Squeeks follow-ups
+
+The wallet/wheel prerequisite was pushed first at `a0ca135` (19 offline scripts / 211 mocked tests / 173,350 gzip bytes). Current follow-up: central immutable wallet sessions, EIP-6963 + remembered rdns, silent restore, persistent disconnect and tab sync; one real-value wheel feed; truthful Checking chip; conditional lifecycle toasts and selection-gated 50/50 Squeeks workspace. See [wallet/wheel audit](wallet-wheel.md) and [layout/notification evidence and removed strings](squeeks-layout-notifications.md). API art first/warm wallet counts are regenerated in the linked JSON; they remain partial synthetic measurements, not whole-page live acceptance.

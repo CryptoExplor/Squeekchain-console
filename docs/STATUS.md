@@ -6,7 +6,7 @@
 
 The user-supplied identity export resolves the earlier identity-evidence blocker. **Sepolia v6 and Sepolia v9 are equal, selectable profiles**, with live verification or stopped states, not version-based transaction restrictions. Mainnet is **Not deployed**.
 
-The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`budgetBytes: 250_000` in `build.mjs`). This supersedes both the previous 146,800-byte acceptance limit and the older 200,000-byte build limit. Developers and Settings remain dynamically imported. All ten external JS files, including lazy modules, count toward the cap, independently gzipped—not one combined compression stream. Current total: **169,908 bytes** ([breakdown](audit/data-diet-js-size.json)).
+The user raised the **total external JavaScript gzip cap to 250,000 bytes** (`budgetBytes: 250_000` in `build.mjs`). This supersedes both the previous 146,800-byte acceptance limit and the older 200,000-byte build limit. Developers and Settings remain dynamically imported. All twelve external JS files, including lazy modules, count toward the cap, independently gzipped—not one combined compression stream. Current total: **174,543 bytes** ([breakdown](audit/data-diet-js-size.json)).
 
 ## Current RPC / Multicall / PR review follow-up
 
@@ -118,7 +118,7 @@ Final validation below was repeated after the last code and fixture changes. `te
 
 ## Validation and request budgets
 
-Current offline/mocked qualification is recorded in [the DATA DIET report](audit/data-diet-report.md) and [validation evidence](audit/data-diet-validation.json). The latest completed baseline is **18 offline scripts PASS / 200 mocked Chromium tests PASS**; the original chain-change failure was resolved by correcting the fixture's multi-listener EIP-1193 emitter, without weakening production guards. The older 156/17 and stopped 161/1 results are historical, not current acceptance evidence. Review follow-up validation is recorded in [the review disposition](audit/pr3-data-diet-review.md).
+Current offline/mocked qualification is recorded in [the DATA DIET report](audit/data-diet-report.md) and [validation evidence](audit/data-diet-validation.json). The latest completed baseline is **19 offline scripts PASS / 227 mocked Chromium tests PASS**; the original chain-change failure was resolved by correcting the fixture's multi-listener EIP-1193 emitter, without weakening production guards. The older 156/17 and stopped 161/1 results are historical, not current acceptance evidence. Review follow-up validation is recorded in [the review disposition](audit/pr3-data-diet-review.md).
 
 **Broader DATA DIET qualification remains blocked/incomplete:** the complete comparable v6 whole-page/provider-inclusive performance matrix is outstanding, and the Hardhat fork fallback has eight discovered cases but zero executed. No live run/signing/keeper/merge/manual deployment is claimed. All ten scripts, including lazy modules, count toward the 250,000-byte cap; the current build size and per-script totals are in [the current size artifact](audit/data-diet-js-size.json).
 
@@ -136,3 +136,7 @@ Earlier attempts exposed obsolete alias/copy assertions, a mock Multicall3 balan
 ## Boundaries and deferred work
 
 No `test:live`, live RPC probe/retry, qualification workflow trigger, real wallet signing, keeper, merge or manual deploy. The requested Cloudflare branch preview uses the existing GitHub integration. Runtime guards remain mandatory; offline tests are not live qualification. Historical Phase 0/Phase 3 evidence does not qualify this source head. Cloudflare Pages is now the only hosting target: headers are added and paused Vercel config removed; existing Pages project/wrangler/workflow names are unchanged. The owned Squeek card/automatic-art and separate SQK workspace follow-up is implemented; remaining roadmap work stays deferred; alerts stay in-tab, with cron/push/OG backend work deferred. CLI remains the unsigned v6 helper; equal-profile agent actions are exposed by SDK/browser tools/local MCP.
+
+## Central wallet, wheel, Squeeks and notifications (2026-11-04)
+
+Wallet/wheel was completed and pushed before the layout work (`a0ca135`: 19 offline scripts / 211 mocked tests / 173,350 gzip bytes). Latest qualified production: `bad97fa4ce774c23d154236cae596ad81ab9c0e4`; 19 offline scripts and 227 mocked tests pass, 174,543 gzip bytes across 12 scripts. No live suite or signing was run. Profile switches preserve the signer, abort/reload profile data and retain pending Activity. EIP-6963, reload/disconnect/tab sync, unknown-safe balances, real compact wheel feed, Checking/Trust, conditional toasts and responsive selection-gated Squeeks layout are implemented. Twelve before/after wallet/wheel pairs and twelve additional layout captures are linked in [the audit](audit/squeeks-layout-notifications.md). Broader DATA DIET/fork/live qualification remains unclaimed.
