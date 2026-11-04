@@ -1,5 +1,7 @@
 # Central wallet + live wheel review
 
+> Historical qualification for the commits named in this document. Current security follow-up and changed request/size budgets: [security-review-followup.md](security-review-followup.md).
+
 Scope: static browser app, offline and synthetic intercepted API/RPC only. No live tests, signing, merge, or deployment. Existing ABI exports, deployment pins, RPC trust/simulation gates, and `test/components.mjs:65` are unchanged.
 
 ## Implementation

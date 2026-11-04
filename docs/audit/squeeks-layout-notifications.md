@@ -1,5 +1,7 @@
 # Squeeks layout and lifecycle notifications
 
+> Historical qualification for the commits named in this document. Current security follow-up and changed request/size budgets: [security-review-followup.md](security-review-followup.md).
+
 Production implementation: `bad97fa4ce774c23d154236cae596ad81ab9c0e4`.
 Wallet / Live Wheel prerequisite was completed, qualified and pushed first at `a0ca1352b91c12877c8bb0fa6deed77c8caf3d6a` (19 offline scripts, 211 mocked Chromium tests, 173,350 gzip bytes). See [wallet and wheel evidence](wallet-wheel.md).
 

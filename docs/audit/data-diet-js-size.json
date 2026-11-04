@@ -8,13 +8,13 @@
     },
     {
       "file": "app.js",
-      "rawBytes": 61233,
-      "gzipBytes": 20277
+      "rawBytes": 62863,
+      "gzipBytes": 20819
     },
     {
       "file": "bundle.js",
-      "rawBytes": 504662,
-      "gzipBytes": 140920
+      "rawBytes": 506833,
+      "gzipBytes": 141668
     },
     {
       "file": "components.js",
@@ -28,23 +28,23 @@
     },
     {
       "file": "holdings.js",
-      "rawBytes": 5608,
-      "gzipBytes": 2180
+      "rawBytes": 5656,
+      "gzipBytes": 2194
     },
     {
       "file": "images.js",
-      "rawBytes": 1696,
-      "gzipBytes": 926
+      "rawBytes": 1981,
+      "gzipBytes": 1052
     },
     {
       "file": "settings.js",
-      "rawBytes": 3021,
-      "gzipBytes": 1509
+      "rawBytes": 3064,
+      "gzipBytes": 1535
     },
     {
       "file": "telemetry.js",
-      "rawBytes": 2198,
-      "gzipBytes": 1104
+      "rawBytes": 2168,
+      "gzipBytes": 1120
     },
     {
       "file": "theme.js",
@@ -62,6 +62,6 @@
       "gzipBytes": 1267
     }
   ],
-  "totalGzipBytes": 174543,
+  "totalGzipBytes": 176015,
   "budgetBytes": 250000
 }
