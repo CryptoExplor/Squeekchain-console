@@ -76,6 +76,10 @@ Scope: user-facing copy changed since `a8eb471`. This lists every removed/replac
 - ` · Staked` in merge-pair descriptions → ` · Deposited`, matching card custody labels.
 - `Merging burns the donor NFT permanently and raises the survivor one level.` → `Merge permanently burns one Squeek and raises the one you keep by one level.`
 
+## PR review display correction
+
+- `ETH balance: Unknown` is no longer displayed for API wallet data that supplies no ETH reading. The menu line is hidden in that case; an actual guarded balance still displays normally. No zero is invented.
+
 ## Not removed
 
 - BURN acknowledgement, per-token approval preference, explicit broad approval choice, human confirmation, fresh simulation, canonical inventory, same-block checks and independent-peer guard.

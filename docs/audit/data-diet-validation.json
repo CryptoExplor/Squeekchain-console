@@ -1,5 +1,5 @@
 {
-  "implementationSha": "aa91c34c999f42c329d9da348bef6733e33b1343",
+  "implementationSha": "24f747ca63871739f6ff532221332a6451cb7e77",
   "date": "2026-11-04",
   "offline": {
     "command": "npm test",
@@ -8,7 +8,7 @@
   },
   "browser": {
     "command": "UPDATE_SCREENSHOTS=1 LD_LIBRARY_PATH=/tmp/al2023/lib PLAYWRIGHT_CHROMIUM_EXECUTABLE=/tmp/chromium PLAYWRIGHT_NO_SANDBOX=true npm run test:browser -- --max-failures=1",
-    "passed": 199,
+    "passed": 200,
     "failed": 0,
     "result": "PASS"
   },
@@ -17,18 +17,18 @@
     "scripts": [
       {
         "file": "activity.js",
-        "rawBytes": 3074,
-        "gzipBytes": 1492
+        "rawBytes": 3080,
+        "gzipBytes": 1498
       },
       {
         "file": "app.js",
-        "rawBytes": 58549,
-        "gzipBytes": 19538
+        "rawBytes": 58610,
+        "gzipBytes": 19551
       },
       {
         "file": "bundle.js",
-        "rawBytes": 504188,
-        "gzipBytes": 140811
+        "rawBytes": 504662,
+        "gzipBytes": 140920
       },
       {
         "file": "components.js",
@@ -57,8 +57,8 @@
       },
       {
         "file": "telemetry.js",
-        "rawBytes": 2171,
-        "gzipBytes": 1092
+        "rawBytes": 2198,
+        "gzipBytes": 1104
       },
       {
         "file": "theme.js",
@@ -66,7 +66,7 @@
         "gzipBytes": 224
       }
     ],
-    "totalGzipBytes": 169768,
+    "totalGzipBytes": 169908,
     "budgetBytes": 250000
   },
   "protectedFilesUnchanged": [
@@ -83,7 +83,8 @@
   },
   "qualification": "Mocked/offline only; complete comparable v6 performance table and fork execution outstanding; no live/signing/merge/manual deployment",
   "logSha256": {
-    "redesign-offline-final.log": "f9a06e2cd74a837164331690ee03323bec5a621eac3f00a577b774b64c40f47f",
-    "redesign-browser-final-2.log": "2d1865bc3be57001d9fdb779680a6b5f037f94e04528e65ec432865b992c6cd7"
-  }
+    "pr-review-offline-final.log": "c4cbea27804b69ced39095c2b342a82b817d2db13784e826d4c05dbabbfd6026",
+    "pr-review-browser-final.log": "183b8fffbc55beed97e4a1ac163c4621ab2adfa227522da36d448b9baaf0a7ff"
+  },
+  "reviewDisposition": "pr3-data-diet-review.md"
 }

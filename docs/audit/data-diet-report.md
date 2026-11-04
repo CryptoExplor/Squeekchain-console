@@ -21,11 +21,11 @@ Re-probe attempts for Nodies and OnFinality with eth_chainId and an Origin heade
 
 ## Validation
 
-Qualified implementation commit: `aa91c34c999f42c329d9da348bef6733e33b1343`. The evidence-only commit following it does not change production code.
+Qualified implementation commit: `24f747ca63871739f6ff532221332a6451cb7e77`. The evidence-only commit following it does not change production code.
 
-- Build: **169,768 bytes gzip / 250,000**, all **10** independently compressed JavaScript responses, including lazy modules. [Per-script sizes](data-diet-js-size.json).
+- Build: **169,908 bytes gzip / 250,000**, all **10** independently compressed JavaScript responses, including lazy modules. [Per-script sizes](data-diet-js-size.json).
 - Offline suite: **18/18 scripts PASS** after final production edits, including both SDK budgets, ABI/export safety, protected components, display guards, cache/expiry/art, canonical action authority and production fork-code exclusion.
-- **199/199 mocked browser tests PASS** in the final full run after all production edits. Includes all existing roles/test-ID/safety suites, the 32-case Squeeks matrix, wallet waits and a real full-reload art cache regression.
+- **200/200 mocked browser tests PASS** in the final full run after all production edits. Includes all existing roles/test-ID/safety suites, the 32-case Squeeks matrix, wallet waits and a real full-reload art cache regression.
 - Before/after: 16 pre-redesign light images and 32 post-redesign light/dark images, both profiles × 390/1280 × holder/empty/watch/disconnected. [Audit + comparison links](squeeks-ui-audit.md). Broader light/dark screenshot suites are also regenerated.
 - Original wrong-chain Checkpoint blocker was a fixture bug: its one-listener Map dropped one of the app's chain listeners. Fixture now mirrors EIP-1193 multiple listeners/removal. The original production lifecycle test passes its chain-change, account-empty, disconnect and persisted-disconnect reload assertions. No production chain guard was weakened.
 - Iteration history: initial redesign run 192/198 passed; stale copy/RPC expectations were migrated, then 198/198 passed. An additional reload regression initially hit duplicate Playwright exposeFunction registration, fixed with per-install binding names; its second focused run passed. Final copy hardening required updated diagnostic expectations; a timing-only lazy-module assertion now waits for the module request instead of racing it. These were test harness/copy migrations, not live retries.
@@ -50,6 +50,10 @@ Warm reload still revalidates dynamic endpoint bodies (fixture returns 200 with 
 Virtual polling uses the actual API client/poller with a controlled clock, not ten minutes of public wall-clock observation. It excludes four bootstrap API reads. No frontier change triggers account/economy fetches; hidden pause is covered separately. Provider/receipt behavior and a matching v6 whole-page matrix remain unmeasured.
 
 Existing SDK-only budgets remain 22/12/15 v6 cold network/warm network/wallet, and 15/13/20/14 v9 cold network/warm network/cold wallet/warm wallet. They exclude whole-page bootstrap and are **not** equivalent to the table above. Do not claim a before/after percentage from these unlike scopes. Both warm SDK budgets remain ≤25 and the existing v9≤v6+8 assertions pass.
+
+## PR review follow-up
+
+The 16 inline findings and review-body notes have been checked against current code. Fresh/matching endpoint snapshots now gate checkpoint/lag hints; invalid economy data cannot pin an installation. Canonical balance/power always drives profile detection, projected-block failures do not erase telemetry, failed frontier refreshes retry, non-v9 polling suspends/restarts, batch network errors share cooldown, cross-tab Activity rechecks receipts, and future telemetry dates are rejected. Missing API-path ETH is hidden, never fabricated. Tool metadata now describes v9 null fields and omits a misleading static per-call profile default. See [the complete comment disposition](pr3-data-diet-review.md).
 
 ## Remaining qualification / no live authorization
 

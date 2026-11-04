@@ -32,7 +32,7 @@ Light default; saved light/dark/system override. Local Barlow Condensed, Quicksa
 
 ## Evidence
 
-See [STATUS](STATUS.md) for exact current results and limits, [78 mocked captures](screenshots/README.md), [gzip report](audit/phase2-js-size.json), and both request-budget reports. Total external JavaScript is **158,278 bytes / 250,000 cap**, independently gzipped across eight scripts including the tiny pre-paint external theme bootstrap and lazy modules. Offline tests are not live qualification. No live suite, signing, live workflow dispatch, keeper, merge or manual deployment was run. The requested preview is built by the existing Pages integration after the branch push. Phase 4 planner/per-token redesign remains deferred.
+See [STATUS](STATUS.md) for exact current results and limits, [Mocked captures](screenshots/README.md), [gzip report](audit/data-diet-js-size.json), and both request-budget reports. Total external JavaScript is **169,908 bytes / 250,000 cap**, independently gzipped across ten scripts including the tiny pre-paint external theme bootstrap and lazy modules. Offline tests are not live qualification. No live suite, signing, live workflow dispatch, keeper, merge or manual deployment was run. The requested preview is built by the existing Pages integration after the branch push. Owned Squeek cards, automatic lazy art and separate SQK actions are implemented; see the DATA DIET screenshot audit.
 
 ## Context-only signals
 
@@ -55,7 +55,7 @@ One visible verification badge opens Trust; one header wallet button identifies 
 
 v6 network reads include NFT `totalSupply()` in the existing same-block multicall. Issuance labels are explicit: v6 mining `state().minted`, v9 issuance `state().minted` with processed round; token totalSupply is not labelled issued. Core settlement is not issuance checkpointing. Round grammar is singular only for 1.
 
-The user now explicitly orders PublicNode, dRPC, 0xRPC, ZAN, EthPandaOps; this supersedes the earlier no-dRPC/Tenderly-first preference. These five HTTPS candidates serve snapshots/state/log fallbacks in that order; custom RPC and Sepolia wallet preferences remain. WSS aliases are not passed to the HTTP transport or counted as additional independent providers. Network fetch failures/timeouts now share bounded cooldown, without treating RPC range errors, programming TypeErrors or trust failures as network failover. No live availability assertion is made.
+The current default order is Tenderly, PublicNode, 0xRPC, plus custom Settings. This supersedes the historical five-host pool. Nodies/OnFinality remain omitted after TLS-only probe failures; no CORS/429 conclusion is claimed. WSS aliases are not counted as additional independent providers. Network fetch failures/timeouts share bounded cooldown for singles and identity batches, without treating range errors, programming TypeErrors or trust failures as network failover. No live availability assertion is made.
 
 
 ### RPC and review follow-up
