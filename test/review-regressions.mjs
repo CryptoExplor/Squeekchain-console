@@ -36,7 +36,7 @@ const adapter = {
     squeeks: [{ tokenId: '1', level: 1, nextMergeHeight: '2', deposited: false }] }),
   // Dialog-only fixtures. No real transaction or contract simulation occurs in this test.
   claimPreview: async () => ({ ok: true, total: { sqk: '1' }, batches: [] }),
-  mergePreview: async () => ({ ok: true, gas: '100', tx: {} }),
+  mergePreview: async () => ({ ok: true, tx: {} }),
   art: async tokenId => ({ tokenId, name: 'Test Squeek', attributes: [], image: 'data:image/svg+xml;base64,PHN2Zy8+' }),
 };
 win.ethereum = {

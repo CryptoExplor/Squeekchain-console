@@ -143,8 +143,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
   async function simulate(owner, contract, abi, functionName, args, details={}) {
     const simulation = await client.simulateContract({address:addr[contract],abi,functionName,args,account:owner,blockNumber:activeSnapshot.blockNumber});
     const tx={to:addr[contract],data:encodeFunctionData({abi,functionName,args}),value:'0',chainId:11155111};
-    const gas=await client.estimateGas({...tx,value:0n,account:owner,blockNumber:activeSnapshot.blockNumber});
-    return {ok:true,action:functionName,tx,gas:String(gas),...details,simulatedResult:simulation.result == null ? null : String(simulation.result)};
+    return {ok:true,action:functionName,tx,...details,simulatedResult:simulation.result == null ? null : String(simulation.result)};
   }
   async function actionPreview(owner, action, input={}) {
     owner=getAddress(owner.toLowerCase());
@@ -214,7 +213,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
     const result=await actionPreview(owner,'claim');
     if(!result.ok) return result;
     const amount=sqkAmount(BigInt(result.simulatedResult));
-    return {...result,total:amount,batches:[{tx:result.tx,gas:result.gas,tokenIds:[],amount}]};
+    return {...result,total:amount,batches:[{tx:result.tx,tokenIds:[],amount}]};
   }
   async function art(tokenId) { return {tokenId:String(tokenId),...parseSqueekMetadata(await read('nft',nft9Abi,'tokenURI',[positive(tokenId)]))}; }
   return { profile,addresses:addr,client,invalidateChain:context.invalidateChain,rpcDiagnostics:()=>context.rpcDiagnostics?.()??[],
@@ -222,6 +221,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
     actionPreview:(owner,action,input={})=>{ if(['merge','mergeDeposited'].includes(action))requireBurn(input.donor,input.confirm);return run(()=>actionPreview(owner,action,input)); },
     mergePreview:(owner,survivor,donor,options={})=>{requireBurn(donor,options.confirm);return run(()=>actionPreview(owner,'merge',{survivor,donor,...options}));},
     mergePlan:owner=>run(async()=>plan(await walletStatus(owner))),claimPreview:owner=>run(()=>claimPreview(owner)),checkpointPreview:owner=>run(()=>actionPreview(owner,'checkpoint')),
+    squeekStatus:id=>run(async()=>{const tokenId=positive(id),[holder,level,nextMergeHeight,net]=await Promise.all([read('nft',nft9Abi,'ownerOf',[tokenId]),read('nft',nft9Abi,'level',[tokenId]),read('nft',nft9Abi,'nextMergeHeight',[tokenId]),networkStatus()]);const deposited=same(holder,addr.staking),owner=deposited?await read('staking',staking9Abi,'depositor',[addr.nft,tokenId]):holder;return {owner,net,token:{tokenId:String(tokenId),holder,level:Number(level),nextMergeHeight:String(nextMergeHeight),deposited,basePower:net.policy.levels.find(p=>p.level===Number(level))?.basePower,claimable:null}};}),
     art:id=>run(()=>art(id)),artBatch:(ids,limit=24)=>run(async()=>{
       const selected=ids.slice(0,Math.min(limit,24));if(!selected.length)return [];
       const values=await client.multicall({contracts:selected.map(id=>({address:addr.nft,abi:nft9Abi,functionName:'tokenURI',args:[positive(id)]})),allowFailure:true,blockNumber:activeSnapshot.blockNumber});

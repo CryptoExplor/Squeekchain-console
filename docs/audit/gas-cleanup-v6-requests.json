@@ -1,0 +1,26 @@
+[
+  {
+    "action": "checkpoint",
+    "httpRequests": 11,
+    "estimateGasRequests": 0,
+    "simulations": 1
+  },
+  {
+    "action": "claim-32",
+    "httpRequests": 43,
+    "estimateGasRequests": 0,
+    "simulations": 1
+  },
+  {
+    "action": "claim-33",
+    "httpRequests": 46,
+    "estimateGasRequests": 0,
+    "simulations": 2
+  },
+  {
+    "action": "merge",
+    "httpRequests": 12,
+    "estimateGasRequests": 0,
+    "simulations": 1
+  }
+]

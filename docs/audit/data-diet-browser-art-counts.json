@@ -12,13 +12,13 @@
   },
   "firstWallet": {
     "api": 4,
-    "rpc": 6,
-    "walletReads": 7
+    "rpc": 10,
+    "walletReads": 9
   },
   "warmWallet": {
     "api": 2,
-    "rpc": 6,
-    "walletReads": 7
+    "rpc": 10,
+    "walletReads": 9
   },
   "firstVisitArtRequests": 2,
   "secondVisitArtRequests": 0

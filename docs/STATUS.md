@@ -1,6 +1,8 @@
 # Wheelhouse — deployed frontend restored with equal profiles
 
-**Date:** 2026-11-04 (Asia/Calcutta). **Open PR:** [#3](https://github.com/CryptoExplor/Squeekchain-console/pull/3). **Branch:** `arena/417b8688-squeekchain-console`. Phase 3 (`b705683`) remains accepted; this extends that work on the same open PR. No main push, merge or manual deployment. The `thewheel` workflow name is unchanged.
+**Open PR:** [#4](https://github.com/CryptoExplor/Squeekchain-console/pull/4). **Branch:** `arena/285786f4-squeekchain-console`. No merge or manual deployment.
+
+Connected wallets stay connected while holdings load or fail: the holder view shows Loading or Unavailable with Retry, never a second Connect wallet prompt. Retry reloads holdings without requesting wallet access again. Empty portfolios, wrong-chain wallets and read-only watch views remain distinct. Explicit Connect and profile selection request the matching wallet network (Sepolia or Mainnet); cancellation preserves the account and a menu retry is available. Silent restore, cross-tab hints and watch-only navigation do not open network prompts. Mainnet stays not deployed with no deployment reads. Invalid-link recovery, watched-detail reload scope, owner-scoped history and disconnect pagination are covered by regressions. Gas estimates belong to the wallet; snapshot simulation and SQK unstake fee guards are retained.
 
 ## Current scope and result
 

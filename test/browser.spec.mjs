@@ -81,7 +81,7 @@ async function installRaceHarness(page) {
         networkStatus: async () => h.pendingNetwork ? new Promise(resolve => h.reads.push({ profileKey, ...load, resolve })) : h.network('10'),
         verify: async () => ({ ok: true, trusted: true, problems: [] }),
         walletStatus: async () => holdings,
-        checkpointPreview: async () => ({ ok: true, tx: { to: owner, data: '0xc2c4c5c1', value: '0' }, gas: '100' }),
+        checkpointPreview: async () => ({ ok: true, tx: { to: owner, data: '0xc2c4c5c1', value: '0' } }),
         claimPreview: async () => h.pendingSimulation ? new Promise(resolve => h.sims.push({ ...load, resolve })) : { ok: false, reason: 'Fixture stops before signing' },
       };
     }, fetcher: async () => ({ ok: false, status: 503, headers: new Headers(), json: async () => ({}) }) });

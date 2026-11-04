@@ -41,7 +41,7 @@ const BASE_SPECS = [
   {
     name: "squeek_checkpoint_preview",
     description:
-      "Whether checkpoint() can advance now (corePaused / roundSettled), with the reason when it cannot, the unsigned transaction and a gas estimate. checkpoint() is permissionless: no Squeek needed, no caller reward.",
+      "Whether checkpoint() can advance now (corePaused / roundSettled), with the reason when it cannot, the unsigned transaction after simulation. checkpoint() is permissionless: no Squeek needed, no caller reward.",
     inputSchema: obj({ from: str("0x caller address for same-block checkpoint simulation (optional only for connected browser wallet)") }),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
@@ -68,7 +68,7 @@ const BASE_SPECS = [
   {
     name: "squeek_merge_preview",
     description:
-      "Simulate one merge for a survivor/donor pair: gas estimate, resulting level, and an explicit irreversibility warning. Signs nothing.",
+      "Simulate one merge for a survivor/donor pair: resulting level and an explicit irreversibility warning. Signs nothing.",
     inputSchema: obj({ owner: str("0x address (optional)"), survivor: str("token ID that keeps its identity"), donor: str("token ID that gets burned"), confirm: str("must equal BURN-<donor> before building calldata") }, ["survivor", "donor", "confirm"]),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",

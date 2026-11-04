@@ -6,3 +6,5 @@ test-results/
 dist/
 
 live-qualification/
+
+artifacts/

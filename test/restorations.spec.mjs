@@ -7,6 +7,7 @@ const other='0x1111111111111111111111111111111111111111';
 const actions={checkpoint:'checkpoint',claim:'claim',merge:'merge',deposit:'deposit',withdraw:'withdraw',merge_deposited:'mergeDeposited',claim_and_stake:'claimAndStake',stake:'stake',unstake:'unstake'};
 for(const [name,action] of Object.entries(actions)) for(const profile of (['checkpoint','claim','merge'].includes(name)?['sepolia-v6','sepolia-v9']:['sepolia-v9'])) test(`agent request ${name} / ${profile}: simulation and human wallet only`,async({page})=>{
   await installV9Fixture(page);await page.evaluate(()=>squeek.connect());
+  await page.evaluate(()=>Object.assign(v9.tx,{gas:'0x111',gasPrice:'0x222',maxFeePerGas:'0x333',maxPriorityFeePerGas:'0x444'}));
   if(profile==='sepolia-v6'){await page.getByTestId('profile-select').selectOption(profile);expect(await page.evaluate(()=>v9.adapterProfiles)).toContain('sepolia-v6');}
   const input={survivor:'41',donor:'42',confirm:'BURN-42',tokenIds:['87'],amount:'1000000000000000000'};
   if(name.includes('merge')) {
@@ -23,10 +24,11 @@ for(const [name,action] of Object.entries(actions)) for(const profile of (['chec
       await page.getByTestId('modal-input').fill('BURN-42');await page.getByTestId('btn-modal-confirm').click();
       await expect(page.getByTestId('modal-input')).toBeHidden();
     }
-    await page.getByTestId('btn-modal-confirm').click();
+    await expect(page.getByTestId('modal')).not.toContainText('Gas estimate');await expect(page.getByTestId('modal')).not.toContainText('Simulated gas');await page.getByTestId('btn-modal-confirm').click();
   }
   await page.waitForFunction(()=>window.agentResult!==null);
-  const result=await page.evaluate(()=>({result:agentResult,previews:v9.previews,sends:v9.sends}));
+  const result=await page.evaluate(()=>({result:agentResult,previews:v9.previews,sends:v9.sends,transactions:v9.sentTransactions}));
+  expect(result.transactions).toHaveLength(1);expect(Object.keys(result.transactions[0]).sort()).toEqual(['data','from','to','value']);expect(result.transactions[0].value).toBe('0x0');
   expect(result.result.error).toContain('Mock wallet stops');expect(result.sends).toBe(1);
   expect(result.previews).toHaveLength(name==='checkpoint'?1:2);
   expect(result.previews.every(p=>p.action===action)).toBe(true);
@@ -53,7 +55,7 @@ test('watch mode keeps wallet identity, disables owner requests and exits to con
   await expect(page.getByTestId('wallet-button')).toContainText('0x5989');await expect(page.getByTestId('btn-claim')).toBeDisabled();
   expect((await page.evaluate(()=>squeek.callTool('squeek_request_claim'))).error).toContain('view-only');
   await page.getByTestId('btn-exit-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();await expect(page.getByTestId('btn-claim')).toBeEnabled();
-  await page.getByTestId('watch-input').fill((await page.evaluate(()=>squeek.state.account)).toLowerCase());await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();
+  await page.getByTestId('watch-input').fill((await page.evaluate(()=>squeek.state.account)).toLowerCase());await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeVisible();await expect(page.getByTestId('btn-claim')).toBeDisabled();await page.getByTestId('btn-exit-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();
   await page.getByTestId('wallet-button').click();await page.getByTestId('btn-disconnect').click();await page.getByTestId('tab-squeeks').click();
   await page.getByTestId('watch-input').fill(other);await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeVisible();
   await page.getByTestId('btn-exit-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();await expect(page.getByTestId('holder-empty')).toBeVisible();await expect(page.getByTestId('holder-empty')).toContainText('Connect your wallet to see your Squeeks and SQK.');await page.evaluate(()=>squeek.destroy());
@@ -96,4 +98,9 @@ for(const theme of ['light','dark'])for(const width of [1280,390])for(const view
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({fullPage:true,animations:'disabled'});const name=`${view}-${theme}-${width}.png`;await info.attach(name,{body:image,contentType:'image/png'});if(process.env.UPDATE_SCREENSHOTS==='1')fs.writeFileSync('docs/screenshots/'+name,image);
   await page.evaluate(()=>squeek.destroy());
+});
+
+for(const action of ['approveNft','approveAll','approveSqk'])test(`wallet owns gas and fees for ${action}`,async({page})=>{
+ await installV9Fixture(page);await page.evaluate(async action=>{await squeek.connect();Object.assign(v9.tx,{gas:'0x111',gasPrice:'0x222',maxFeePerGas:'0x333',maxPriorityFeePerGas:'0x444'});window.gasActionResult=null;void squeek.requestAction(action,{tokenId:'87',amount:'1000000000000000000'}).then(result=>window.gasActionResult=result);},action);
+ await expect(page.getByTestId('modal')).toBeVisible();await expect(page.getByTestId('modal')).not.toContainText('Gas estimate');await page.getByTestId('btn-modal-confirm').click();await expect.poll(()=>page.evaluate(()=>v9.sentTransactions.length)).toBe(1);const tx=await page.evaluate(()=>v9.sentTransactions[0]);expect(Object.keys(tx).sort()).toEqual(['data','from','to','value']);await page.evaluate(()=>squeek.destroy());
 });

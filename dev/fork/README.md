@@ -27,3 +27,15 @@ Two separate local client views exercise the snapshot/identity adapter; they are
 ## Installation/execution evidence
 
 2026-11-04: Foundry installation failed twice on sandbox-inaccessible download hosts. Hardhat installed successfully; `hardhat node --help` confirms the required flags, and Playwright `--list` discovers all eight tests. **A real upstream-backed fork and the workflows were not run.** They must not be counted in the offline/browser PASS totals or used as live qualification.
+
+## Phase 4 holder workflows
+
+`holder.spec.mjs` adds four browser workflows (both profiles × planner merge / unified Claim) on an explicit local fork. Set `FORK_HOLDER_V6` and `FORK_HOLDER_V9` to real holder addresses already present at the fork block. The node impersonates those accounts locally and adds only fork ETH, never fabricated NFTs/SQK. The merge workflow opens Path to level, uses Do next step, types the actual `BURN-<donor>` into the ordinary production confirmation, reviews the fresh simulation, submits one merge, and asserts the donor disappears and survivor levels up. Claim follows the unified card and normal re-preview path. Receipt reads stay on loopback; twelve blocks are mined locally after each local transaction. Every case snapshots/reverts.
+
+```sh
+FORK_URL=http://127.0.0.1:8545 \
+FORK_HOLDER_V6=0xYourExistingV6Holder \
+FORK_HOLDER_V9=0xYourExistingV9Holder npm run test:fork
+```
+
+This is an explicit user-run command, not part of `npm test`, `test:browser` or `test:live`. Missing prerequisites fail, not skip or weaken checks. The Phase 4 session did not start a fork or execute impersonated transactions: no upstream URL/holder pair was supplied, and live/public signing remains prohibited. Test discovery/syntax and production exclusion are checked separately.

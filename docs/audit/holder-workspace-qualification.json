@@ -1,0 +1,34 @@
+{
+  "generatedAt": "2026-11-04T12:47:11.761210+00:00",
+  "qualifiedCodeHead": "377b8e24a48218fbe27a108b78132f1c4de4b8e0",
+  "pr": 4,
+  "base": "main",
+  "offline": {
+    "command": "npm test",
+    "scripts": 21,
+    "exitCode": 0
+  },
+  "browser": {
+    "command": "npm run test:browser",
+    "tests": 279,
+    "passed": 279,
+    "failed": 0,
+    "duration": "3.6m",
+    "environment": "mocked/intercepted APIs and SDK/wallet fixtures; Chromium 153; no signing"
+  },
+  "newBrowserTests": 33,
+  "newScreenshots": 20,
+  "gzipAllScripts": 186461,
+  "scripts": 18,
+  "budget": 250000,
+  "fork": {
+    "discovered": 12,
+    "newWorkflows": 4,
+    "executed": 0,
+    "qualified": false
+  },
+  "liveTestsRun": false,
+  "signingPerformed": false,
+  "manualDeploymentPerformed": false,
+  "protectedComponentSha256": "c07d1f504601cb70ec29c83d877022d8d062816689d5736297e581a7591633ce"
+}

@@ -1,0 +1,6 @@
+{
+  "profile": "sepolia-v9",
+  "scope": "Synthetic actual-HTTP SDK fallback detail+art cold; detail-only with cached art warm. Excludes API and app shell.",
+  "cold": 26,
+  "warm": 13
+}
