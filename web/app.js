@@ -31,6 +31,8 @@ import {
 
 import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
 import {createHoldings} from './holdings.js';
+import {wheelFeed,formingBlock} from './wheel-feed.js';
+import {createWallet} from './wallet.js';
 import {createImages} from './images.js';
 import { createActivity } from "./activity.js";
 import { createTelemetry, telemetryView } from "./telemetry.js";
@@ -114,12 +116,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     },
   };
 
+  const wallet=createWallet({win,storage:store,pick:pickWallet});
   const state = {
     profileKey: profileFromHash(win.location.hash) ?? profileInput(store.get("squeekchain:profile")),
     profileCounts: {},
     adapter: null,
-    account: null,
-    chainId: null,
+    get account(){return wallet.get().account;},
+    get chainId(){return wallet.get().chainId;},
+    get walletEth(){const value=wallet.get().ethBalance;return value==null?null:Number(value).toFixed(3);},
     inspected: null,
     net: null,
     status: null,
@@ -152,10 +156,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const availability=failure.diagnostics.availability;
     const message=availability?'RPC unavailable. Verified reads need two independent Sepolia peers. Nothing was signed.':'Network or contract checks could not be completed. Actions are stopped. Nothing was signed.';
     el.verified.textContent=availability?'Unavailable':'Stopped';
-    $('profile-status').textContent=availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Read failed';
+    $('profile-status').textContent=availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Unverified';
     $('profile-status').className=`chip ${availability?'warn':'bad'}`;
     $('profile-status').title=el.verified.title='';
-    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent=UNKNOWN;$('trust-result').textContent=availability?'Unavailable':'Stopped';
+    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent=UNKNOWN;$('trust-result').textContent=(availability?'Unavailable':failure.diagnostics.trust?'Stopped':'Unverified')+' — '+errorMessage(error);
     showBanner(message,availability?'warn':'bad');readBanner=true;
   }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
@@ -178,7 +182,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     return err?.revert||/\b(?:storage|slots?|digest|revision|release|runtime)\b|\w+\(/i.test(message)||message.includes(getProfile('sepolia-v9').identities.release)
       ? 'The network or contract check failed. Actions are stopped. See Info › Developers for technical details.' : message;
   };
-  const provider = () => win.ethereum ?? null;
+  const provider = () => wallet.provider();
 
   // ── theme ──────────────────────────────────────────────────────────────────
   function applyTheme(theme) {
@@ -206,7 +210,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   el.theme.onclick = () => applyTheme(doc.documentElement.dataset.theme === "dark" ? "light" : "dark");
 
   // ── profile switching ──────────────────────────────────────────────────────
-  let generation = 0;
+  let generation = 0,verifiedForGeneration=null;
   let loadController = new AbortController();
   const captureLoad = () => ({ generation, signal: loadController.signal, adapter: state.adapter, profileKey: state.profileKey });
   const isCurrent = load => !destroyed && load.generation === generation && !load.signal.aborted;
@@ -229,13 +233,24 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         else {const input={...args[2]};for(const field of ['survivor','donor','tokenId'])if(input[field])input[field]=owned(input[field]);if(input.tokenIds)input.tokenIds=input.tokenIds.map(owned);args=[args[0],action,input];}
       }
     }
-    return load.adapter[method](...args);
+    const value=await load.adapter[method](...args);assertCurrent(load);
+    const verification=method==='verify'?value:value?.verification;if(verification)renderVerification(verification);
+    return value;
   });
-  function resetLoad(){loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
+  function resetLoad(){verifiedForGeneration=null;loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
   const displayCache=createDisplayCache(win.indexedDB),lastGood=new Map();let apiScope;
   function displayApi(load){if(adapterFactory||load.profileKey!=='sepolia-v9')return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
   function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000)),text=`${source.kind==='api'?'API · 12 blocks behind':'RPC display snapshot'}${age?` · as of ${age} min`:''}`;for(const node of doc.querySelectorAll('.stat'))node.title=text;$('display-age').textContent=age?`as of ${age} min`:'';}
-  function displayVerification(value){if(!value.source||value.source.kind==='rpc'){renderVerification(value.verification??{ok:false,trusted:false});return;}renderTrust(null);$('trust-block').textContent=UNKNOWN;$('trust-result').textContent='Display only — verify when an action starts';$('profile-status').textContent='Unverified';$('profile-status').className='chip';$('profile-status').title='Display only; no current action verification. '+(value.source.kind==='api'?'API · 12 blocks behind':'Cached RPC snapshot');el.verified.textContent=$('profile-status').textContent;}
+  function displayVerification(value){
+    if(!value.source||value.source.kind==='rpc'){if(value.verification)renderVerification(value.verification);return;}
+    if(state.lastReadFailure?.profile===state.profileKey)return;
+    if(verifiedForGeneration){renderVerification(verifiedForGeneration);return;}
+    renderTrust(null);$('trust-block').textContent=UNKNOWN;
+    $('trust-result').textContent='Checking… No contract verification has completed. API data is display only; fresh independent checks run before actions.';
+    $('profile-status').textContent='Checking…';$('profile-status').className='chip';
+    $('profile-status').title='Awaiting contract verification. Display data is not transaction authority. Open Info › Trust for details.';
+    el.verified.textContent='Checking…';
+  }
   async function displayRead(load,kind,owner,{force=false}={}){
     if(adapterFactory)return readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
     const profile=getProfile(load.profileKey),key=displayKey(profile,kind+':'+(owner??'')),ttl=profile.abiSet==='v6'&&kind==='network'?DAY:DISPLAY_TTL;
@@ -254,10 +269,19 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       throw error;
     }
   }
-  function feedRows(id,entries,label){const root=$(id);root.replaceChildren(...entries.slice(0,10).map(item=>{const li=doc.createElement('li');li.textContent=label(item);return li;}));root.title='API · 12 blocks behind';}
-  const eventNames={'system.mining_checkpointed':'SQK issuance updated','system.settlement_completed':'Round completed','nft.deposited':'Squeek deposited','nft.withdrawn':'Squeek withdrawn'};
-  async function displayFeeds(load){const api=displayApi(load);if(!api)return;for(const [id,read,label] of [['network-events',()=>api.feed(),e=>eventNames[e.type]??'Network activity'],['network-settlements',()=>api.settlements(),e=>`Round ${e.settledThroughRound??UNKNOWN}`],...(state.inspected?[['account-activity',()=>api.feed(`/accounts/${state.inspected.toLowerCase()}/activity?limit=25`),e=>eventNames[e.kind]??'Account activity']]:[])]){try{const result=await read();assertCurrent(load);feedRows(id,result.data.events??result.data.activity??result.data.recentSettlements,label);}catch(error){if(!isCurrent(load))return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);return;}if(error.kind&&error.kind!=='transport')$(id).replaceChildren();}}}
-  function clearDisplayMismatch(error){wheelGoodAt=0;lastGood.clear();state.net=null;renderNetworkPlaceholder();renderHolder(null);for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';for(const id of ['network-events','network-settlements','account-activity','provisional-blocks'])$(id).replaceChildren();showReadFailure(error,'API identity');}
+  let wheelEvents=[],wheelSettlements=[],feedLimit=5;
+  function feedRows(id,rows){const root=$(id);root.replaceChildren(...rows.map(row=>{const li=$('wheel-feed-item').content.firstElementChild.cloneNode(true),icon=li.querySelector('.feed-icon'),text=li.querySelector('.feed-text');icon.textContent={round:'◷',sqk:'↗',squeek:'◇'}[row.icon]??'◇';text.textContent=row.text;return li;}));root.title='API · 12 blocks behind';}
+  function renderWheelFeed(){const rows=wheelFeed(wheelEvents,wheelSettlements);feedRows('network-events',rows.slice(0,feedLimit));$('wheel-show-more').classList.toggle('hidden',rows.length<=feedLimit);$('wheel-show-more').setAttribute('aria-expanded',String(feedLimit>5));}
+  $('wheel-show-more').onclick=()=>{feedLimit+=5;renderWheelFeed();};
+  async function readWheelEvents(){const load=captureLoad(),api=displayApi(load);const result=await api.feed();assertCurrent(load);wheelEvents=result.data.events;renderWheelFeed();return result;}
+  async function displayFeeds(load){const api=displayApi(load);if(!api)return;
+    for(const [kind,read] of [['events',()=>api.feed()],['settlements',()=>api.settlements()],...(state.inspected?[['account',()=>api.feed(`/accounts/${state.inspected.toLowerCase()}/activity?limit=25`)]]:[])]){
+      try{const result=await read();assertCurrent(load);if(kind==='events')wheelEvents=result.data.events;else if(kind==='settlements')wheelSettlements=result.data.recentSettlements;else feedRows('account-activity',wheelFeed(result.data.events??result.data.activity));renderWheelFeed();}
+      catch(error){if(!isCurrent(load))return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);return;}if(error.kind&&error.kind!=='transport'){if(kind==='events')wheelEvents=[];else if(kind==='settlements')wheelSettlements=[];else $('account-activity').replaceChildren();renderWheelFeed();}}
+    }
+  }
+  function clearWheelFeed(){wheelEvents=[];wheelSettlements=[];feedLimit=5;renderWheelFeed();for(const id of ['account-activity','provisional-blocks'])$(id).replaceChildren();$('provisional-blocks').classList.add('hidden');}
+  function clearDisplayMismatch(error){wheelGoodAt=0;lastGood.clear();state.net=null;renderNetworkPlaceholder();renderHolder(null);for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';clearWheelFeed();showReadFailure(error,'API identity');}
 
   let destroyed = false;
   const telemetry = createTelemetry({ fetcher });
@@ -333,12 +357,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   async function switchProfile(profileKey, { preserveWallet = false } = {}) {
     $('fee-rose').classList.add('hidden');
     $('claim-update').classList.add('hidden');
-    preserveWallet = preserveWallet && Boolean(getProfile(profileKey).addresses);
-    const account = preserveWallet ? state.account : null;
-    const chainId = preserveWallet ? state.chainId : null;
+    // The signer belongs to the wallet store, never to a deployment profile.
+
     // Navigation ALWAYS wins, including while a simulation or wallet prompt is pending.
     loadController.abort();
-    generation++;
+    generation++;verifiedForGeneration=null;
     loadController = new AbortController();
     dialog.close();
     closeSheet();
@@ -346,11 +369,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     state.profileKey = getProfile(profileKey).key;
     poller.start();
     state.adapter = null;
-    state.account = state.inspected = account; state.chainId = chainId;
+    if(!watching())state.inspected=state.account;
     state.net = state.status = state.plan = null;
-    state.walletEth=null;
+    state.lastReadFailure=null;
+
     state.receipts = [];
-    wheelGoodAt=0;for(const id of ['network-events','network-settlements','account-activity','provisional-blocks'])$(id).replaceChildren();
+    wheelGoodAt=0;clearWheelFeed();
     state.art.clear();
     state.artifactsLoaded = false;
     el.art.grid.replaceChildren();
@@ -526,70 +550,50 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
   }
 
-  let walletListenersRegistered = false;
-  async function connect() {
-    const load = captureLoad();
-    if (!state.adapter) { showBanner("Mainnet is not deployed. Select Sepolia to connect and inspect.", "warn"); return null; }
-    const p = provider();
-    if (!p) {
-      showBanner(
-        "No injected wallet in this page. Inside a sandboxed preview iframe extensions often stay out — open the app in its own browser tab and connect there. Read-only inspection works without a wallet.",
-      );
-      return null;
-    }
-    try {
-      const accounts = await viewAwait(load, () => p.request({ method: "eth_requestAccounts" }));
-      await viewAwait(load, () => ensureChain(p, load.profileKey));
-      const chainId = Number(await viewAwait(load, () => p.request({ method: "eth_chainId" })));
-      store.set("wheelhouse:disconnected","false");
-      state.account = accounts?.[0] ?? null;
-      state.chainId = chainId;
-      state.inspected = state.account;
-      if (!walletListenersRegistered) {
-      p.on?.("accountsChanged", (accs) => {
-        if (!state.adapter || destroyed || store.get("wheelhouse:disconnected")==="true") return;
-        resetLoad();dialog.close();
-        state.account = accs?.[0] ?? null;
-        state.walletEth=null;
-        state.profileCounts = {}; renderProfileOptions();
-        state.inspected = state.account;
-        state.status = null;renderHolder(null);
-        renderWalletChip();
-        refreshWallet();
-      });
-      p.on?.("chainChanged", chain=>{if(destroyed)return;resetLoad();state.adapter?.invalidateChain?.();state.chainId=Number(BigInt(chain));dialog.close();renderHolder(null);renderCheckpointGate();if(state.chainId!==11155111)showBanner("Wrong chain: Sepolia required. Actions stopped.","warn");else void refreshAll();});
-      walletListenersRegistered = true;
-      }
-      hideBanner();
-      const connectedDisplay=displayApi(load)?await displayRead(load,'wallet',state.account):null;
-      try {
-        const counts = await viewAwait(load, () => profileBalanceReader ? profileBalanceReader(state.account) : profileBalances(state.account, {rpcUrl: store.get('wheelhouse:rpc') || undefined, provider: () => provider(), chainCache, discoveryCache, signal: load.signal }));
-        state.profileCounts = counts;
-      } catch (err) { if (!isCurrent(load)) return null; state.profileCounts = {}; }
-      renderProfileOptions();
-      const chosen = chooseProfile(state.profileKey, state.profileCounts);
-      if (chosen !== state.profileKey) { await switchProfile(chosen, { preserveWallet: true }); selectTab('squeeks'); return state.account; }
-      renderWalletChip();
-      selectTab('squeeks');
-      await refreshWallet({prefetched:connectedDisplay});
-      return state.account;
-    } catch (err) {
-      if (!isCurrent(load)) return null;
-      showBanner(`Wallet connection failed: ${errorMessage(err)}`, "bad");
-      return null;
-    }
+  function watching(){return Boolean(state.inspected&&state.inspected.toLowerCase()!==state.account?.toLowerCase());}
+  let walletWork=Promise.resolve();
+  async function connect(){
+    if(!getProfile(state.profileKey).addresses){showBanner('Mainnet is not deployed. Select Sepolia to connect and inspect.','warn');return null;}
+    try{await wallet.connect();await walletWork;selectTab('squeeks');return state.account;}catch(error){showBanner(errorMessage(error),'bad');return null;}
   }
-
+  async function loadWalletSession(){
+    const load=captureLoad(),account=state.account;
+    if(!account||!state.adapter||state.chainId!==11155111)return;
+    try{
+      const counts=await viewAwait(load,()=>profileBalanceReader?profileBalanceReader(account):profileBalances(account,{rpcUrl:store.get('wheelhouse:rpc')||undefined,provider,chainCache,discoveryCache,signal:load.signal}));
+      assertCurrent(load);state.profileCounts=counts;renderProfileOptions();
+      const chosen=chooseProfile(state.profileKey,counts);
+      if(chosen!==state.profileKey){await switchProfile(chosen,{preserveWallet:true});return;}
+    }catch(error){if(!isCurrent(load))return;state.profileCounts={};renderProfileOptions();}
+    await refreshAll();
+  }
+  function onWallet(next,previous,reason){
+    if(destroyed)return;
+    renderWalletChip();
+    const changed=next.account?.toLowerCase()!==previous.account?.toLowerCase()||next.chainId!==previous.chainId||next.providerInfo?.rdns!==previous.providerInfo?.rdns;
+    if(!changed||(!next.account&&!previous.account&&next.chainId===previous.chainId))return;
+    const wasWatch=state.inspected&&state.inspected.toLowerCase()!==previous.account?.toLowerCase();
+    resetLoad();chainCache.clear();dialog.close();state.lastReadFailure=null;closeWalletMenu();state.profileCounts={};
+    if(!wasWatch)state.inspected=next.account;
+    renderHolder(null);renderProfileOptions();renderCheckpointGate();renderActivity(activity.list());
+    if(next.status==='wrong-chain'){showBanner('Wrong chain: Sepolia required. Actions stopped.','warn');return;}
+    clearReadBanner();
+    if(next.account){hideBanner();walletWork=loadWalletSession();}
+    else if(wasWatch)walletWork=refreshWallet();
+  }
+  let finishWalletPick;
+  function pickWallet(entries){
+    return new Promise(resolve=>{openSheet('wallet-picker');finishWalletPick=resolve;const root=$('wallet-provider-options');root.replaceChildren(...entries.map(entry=>{const button=doc.createElement('button');button.className='btn';button.textContent=entry.info.name;button.dataset.rdns=entry.info.rdns;button.onclick=()=>{finishWalletPick=null;closeSheet();resolve(entry);};return button;}));});
+  }
   function renderWalletChip() {
     const deployed = Boolean(getProfile(state.profileKey).addresses);
     const hasMenu = state.account || Number(el.connect.dataset.activityCount) > 0 || !deployed;
-    el.connect.textContent = state.account ? `${short(state.account)} ▾` : hasMenu ? 'Activity ▾' : 'Connect wallet';
+    el.connect.textContent = wallet.get().status==='connecting'?'Connecting…':state.account ? `${short(state.account)} ▾` : hasMenu ? 'Activity ▾' : 'Connect wallet';
     el.connect.setAttribute('aria-label', hasMenu ? 'Wallet menu' : 'Connect wallet');
     $('btn-menu-connect').classList.toggle('hidden', Boolean(state.account) || !deployed);
     $('btn-copy-address').classList.toggle('hidden', !state.account);
     $('btn-disconnect').classList.toggle('hidden', !state.account);
     el.connect.setAttribute('aria-expanded', String(!$('wallet-menu').classList.contains('hidden')));
-    if(!state.account)state.walletEth=null;
     el.walletEth.classList.toggle('hidden',!state.account||state.walletEth==null);
     el.walletEth.textContent=state.account?`ETH balance: ${state.walletEth??UNKNOWN}${state.walletEth==null?'':' ETH'}`:'';
   }
@@ -671,7 +675,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   function renderWalletChipStats(status) {
     if (!status || !state.account || status.owner?.toLowerCase() !== state.account.toLowerCase()) return;
-    state.walletEth=num(status.ethBalance?.eth)===UNKNOWN?null:Number(status.ethBalance.eth).toFixed(3);
+    wallet.acceptBalance(status.owner,state.chainId,status.ethBalance?.eth);
     el.walletEth.classList.toggle('hidden',!state.account||state.walletEth==null);
     el.walletEth.textContent=`ETH balance: ${state.walletEth??UNKNOWN}${state.walletEth==null?'':' ETH'}`;
   }
@@ -775,6 +779,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── refresh ───────────────────────────────────────────────────────────────
   function renderVerification(v) {
+      verifiedForGeneration=v;state.lastReadFailure=null;
       renderTrust(v);
       el.verified.textContent = v.ok && v.trusted ? "Verified" : "Stopped";
       el.verified.className = "sr-only"; $("profile-status").className = `chip ${v.ok && v.trusted ? "ok" : "bad"}`;
@@ -829,7 +834,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     } catch (err) {
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       renderHolder(null);
-      state.walletEth=null;renderWalletChip();if(err.name==='RpcTrustError'){state.net=null;renderNetworkPlaceholder();}
+  renderWalletChip();if(err.name==='RpcTrustError'){state.net=null;renderNetworkPlaceholder();}
       showReadFailure(err,'Wallet read');
       return null;
     }
@@ -1180,6 +1185,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   let activeSheet = null, sheetFocus = null;
   function closeSheet() {
+    if(finishWalletPick){const resolve=finishWalletPick;finishWalletPick=null;resolve(null);}
     if (!activeSheet) return;
     activeSheet.classList.add('hidden'); activeSheet = null;
     if (sheetFocus?.isConnected) sheetFocus.focus();
@@ -1234,11 +1240,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
   $('btn-open-activity').onclick = () => openSheet('activity-drawer');
   $('btn-disconnect').onclick = () => {
-    store.set("wheelhouse:disconnected","true");resetLoad();
-    const wallet=provider();void wallet?.request({method:"wallet_revokePermissions",params:[{eth_accounts:{}}]}).catch(()=>{});
-    $('account-activity').replaceChildren();
-    closeWalletMenu(); state.account = state.inspected = state.status = null; state.profileCounts={}; renderProfileOptions();
-    renderWalletChip(); renderHolder(null); selectTab('network'); el.connect.focus();
+    const p=provider();wallet.disconnect();void p?.request({method:'wallet_revokePermissions',params:[{eth_accounts:{}}]}).catch(()=>{});
+    $('account-activity').replaceChildren();closeWalletMenu();selectTab('network');el.connect.focus();
   };
   el.refresh.onclick = () => {void refreshTelemetry({reset:false});void displayFeeds(captureLoad());return viewTask(()=>refreshAll({force:true}));};
   el.cp.button.onclick = () => viewTask(requestCheckpoint);
@@ -1330,22 +1333,25 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   if(adapterFactory)void refreshTelemetry();
   renderActivity(activity.list());
   void activity.refresh();
-  let provisionalResult;
-  function renderProvisional(result){provisionalResult=result;feedRows('provisional-blocks',result.data.blocks,b=>`Block ${BigInt(b.height).toLocaleString('en-US')} · ${BigInt(b.roundId)<=BigInt(state.net?.core?.settledThroughRound??0)&&BigInt(b.height)<=BigInt(state.net?.core?.blockHeight??0)?'confirmed':'provisional'}`);}
+  let provisionalResult,liveMeasurement;
+  function renderProvisional(result=provisionalResult){provisionalResult=result;const active=liveMeasurement?.freshness==='online'&&liveMeasurement.coreStatus==='ACTIVE'&&Date.now()-Date.parse(liveMeasurement.receivedAt)<120000;const text=formingBlock(result?.data,active);$('provisional-blocks').textContent=text??'';$('provisional-blocks').classList.toggle('hidden',!text);}
   const poller=createWheelPoller({enabled:()=>state.profileKey==='sepolia-v9',doc,setTimer:win.setTimeout.bind(win),clearTimer:win.clearTimeout.bind(win),
     contextKey:()=>`${generation}:${state.profileKey}`,
     readStatus:async()=>{const load=captureLoad();if(load.profileKey!=='sepolia-v9')throw new Error('No v6 wheel poll');const api=displayApi(load);const result=api?await api.status():{data:await telemetry.read({signal:load.signal})};assertCurrent(load);return result;},
-    readEvents:adapterFactory?null:async()=>displayApi(captureLoad()).feed(),
+    readEvents:adapterFactory?null:readWheelEvents,
     readBlocks:adapterFactory?null:async()=>displayApi(captureLoad()).blocks(),
     frontier:()=>({settled:state.net?.core?.settledThroughRound,processed:state.net?.mining?.processedThroughRound}),
-    onStatus:async(data,result)=>{const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
+    onStatus:async(data,result)=>{liveMeasurement=result.stale?null:data.measurement;renderProvisional();const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
     onFrontier:async()=>{const net=await refreshNetwork();if(!net||net.source?.stale)return false;await refreshAll();if(state.inspected&&!state.status)return false;if(provisionalResult)renderProvisional(provisionalResult);await displayFeeds(captureLoad());if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();return true;},
     onBlocks:renderProvisional,
-    onError:(error,scope)=>{if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);}else if(scope==='status'&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL&&errorIsTransient(error))$('wheel-note').textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;else if(scope==='status'){for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}}
+    onError:(error,scope)=>{if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);}else if(scope==='status'&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL&&errorIsTransient(error))$('wheel-note').textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;else if(scope==='status'){liveMeasurement=null;renderProvisional();for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}}
   });
   if(adapterFactory)poller.start();else void poller.tick();void displayFeeds(captureLoad());
 
+  const unsubscribeWallet=wallet.subscribe(onWallet);
+  void wallet.init();
   return {
+    wallet,
     get adapter() {
       return state.adapter;
     },
@@ -1367,7 +1373,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
+    destroy: () => { unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
   };
 }
 

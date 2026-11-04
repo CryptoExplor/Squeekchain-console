@@ -690,3 +690,18 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 
 #sqk-claim-host { display: contents; }
 .sqk-actions { gap: 8px; align-items: end; }
+
+/* Wallet/session picker and one unboxed, left-aligned wheel activity stream. */
+.wallet-options { display: grid; gap: 12px; margin-top: 18px; }
+.wallet-options .btn { width: 100%; min-height: 44px; justify-content: flex-start; }
+.overview-layout > * { min-width: 0; }
+.wheel-panel { min-width: 0; text-align: left; align-items: stretch; box-sizing: border-box; }
+.wheel-panel .wheel-glyph, .wheel-panel .wheel-speed { align-self: center; }
+.wheel-live { min-width: 0; width: 100%; margin: 0 0 18px; }
+.wheel-live h3 { margin: 0 0 10px; font-size: var(--sqk-body-size); }
+.wheel-feed { list-style: none; padding: 0; margin: 0; }
+.wheel-feed li, #account-activity li { display: flex; gap: 8px; align-items: baseline; padding: 7px 0; font-size: var(--sqk-caption-size); line-height: 1.6; overflow-wrap: anywhere; }
+.wheel-feed li > span:last-child { min-width: 0; }
+.feed-icon { flex: 0 0 16px; color: var(--sqk-gold-bright); }
+.provisional-line { margin: 0 0 9px; font-size: var(--sqk-caption-size); line-height: 1.6; color: var(--sqk-ink); overflow-wrap: anywhere; }
+#wheel-show-more { min-height: 44px; margin-top: 8px; }
