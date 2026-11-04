@@ -10,6 +10,7 @@
  * Every action is simulated first and signed in the user's wallet. No key ever reaches this code.
  */
 import {
+  createDisplayApi, createDisplayCache, displayKey, apiNetwork, apiWallet, createWheelPoller, DAY, DISPLAY_TTL,
   createSqueekchain,
   createSqueek9,
   PROFILES,
@@ -152,7 +153,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('profile-status').textContent=availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Read failed';
     $('profile-status').className=`chip ${availability?'warn':'bad'}`;
     $('profile-status').title=el.verified.title='';
-    renderTrust(availability?null:{ok:false,trusted:false});$('trust-result').textContent=availability?'Unavailable':'Stopped';
+    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent=UNKNOWN;$('trust-result').textContent=availability?'Unavailable':'Stopped';
     showBanner(message,availability?'warn':'bad');readBanner=true;
   }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
@@ -204,7 +205,47 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     assertCurrent(load);
     return value;
   }
-  const readFor = (load, method, ...args) => viewAwait(load, () => load.adapter[method](...args));
+  const readFor = (load, method, ...args) => viewAwait(load, async () => {
+    if(['mergePreview','claimPreview','actionPreview','checkpointPreview'].includes(method)&&state.account&&state.chainId!==11155111)throw new Error('Wrong chain: Sepolia required');
+    // API rows are display hints, NEVER a transaction ID/eligibility source.
+    if(!adapterFactory&&['mergePreview','claimPreview','actionPreview'].includes(method)){
+      const action=method==='mergePreview'?'merge':method==='claimPreview'?'claim':args[1];
+      const needsIds=['merge','mergeDeposited','deposit','withdraw','approveNft'].includes(action)||(action==='claim'&&getProfile(load.profileKey).abiSet!=='v9'&&args[1]?.length);
+      if(needsIds){const live=await load.adapter.walletStatus(args[0]);assertCurrent(load);const owned=id=>{const found=live.squeeks.find(item=>String(item.tokenId)===String(id));if(!found)throw new Error('Token not in fresh on-chain inventory');return found.tokenId;};
+        if(method==='mergePreview')args=[args[0],owned(args[1]),owned(args[2]),args[3]];
+        else if(method==='claimPreview')args=[args[0],args[1].map(owned)];
+        else {const input={...args[2]};for(const field of ['survivor','donor','tokenId'])if(input[field])input[field]=owned(input[field]);if(input.tokenIds)input.tokenIds=input.tokenIds.map(owned);args=[args[0],action,input];}
+      }
+    }
+    return load.adapter[method](...args);
+  });
+  function resetLoad(){loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
+  const displayCache=createDisplayCache(win.indexedDB),lastGood=new Map();let apiScope;
+  function displayApi(load){if(adapterFactory||load.profileKey!=='sepolia-v9')return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
+  function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000)),text=`${source.kind==='api'?'API · 12 blocks behind':'RPC display snapshot'}${age?` · as of ${age} min`:''}`;for(const node of doc.querySelectorAll('.stat'))node.title=text;$('display-age').textContent=age?`as of ${age} min`:'';}
+  function displayVerification(value){if(!value.source||value.source.kind==='rpc'){renderVerification(value.verification??{ok:false,trusted:false});return;}renderTrust(null);$('trust-block').textContent=UNKNOWN;$('trust-result').textContent='Display only — verify when an action starts';$('profile-status').textContent='Unverified';$('profile-status').className='chip';$('profile-status').title='Display only; no current action verification. '+(value.source.kind==='api'?'API · 12 blocks behind':'Cached RPC snapshot');el.verified.textContent=$('profile-status').textContent;}
+  async function displayRead(load,kind,owner,{force=false}={}){
+    if(adapterFactory)return readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
+    const profile=getProfile(load.profileKey),key=displayKey(profile,kind+':'+(owner??'')),ttl=profile.abiSet==='v6'&&kind==='network'?DAY:DISPLAY_TTL;
+    let saved=lastGood.get(key);if(!saved&&profile.abiSet==='v6'&&kind==='network')saved=await displayCache.get(key);assertCurrent(load);
+    if(!force&&profile.abiSet==='v6'&&kind==='network'&&saved&&Date.now()-saved.at<ttl)return {...saved.value,source:{kind:'cached-rpc',at:saved.at}};
+    try{let value;const api=displayApi(load);
+      if(api){if(kind==='network'){const economy=await api.economy(),core=await api.core();value=apiNetwork(core,economy);}
+        else {const net=!force&&state.net?.source?.kind==='api'?state.net:await displayRead(load,'network',null,{force});value=apiWallet(await api.account(owner),net,owner);}
+      }else value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
+      assertCurrent(load);if(!value.source)value={...value,source:{kind:'rpc',at:Date.now()}};const entry={value,at:value.source.at};lastGood.set(key,entry);if(profile.abiSet==='v6'&&kind==='network')await displayCache.set(key,entry);return value;
+    }catch(error){assertCurrent(load);if(error.name==='TypeError'&&!error.kind)throw error;if(error.name==='RpcTrustError'||error.kind==='mismatch'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
+      if(error.kind==='unavailable'||error.kind==='schema'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
+      if(saved&&Date.now()-saved.at<ttl&&(error.kind==='transport'||error.name==='TypeError'))return {...saved.value,source:{...saved.value.source,kind:saved.value.source?.kind==='api'?'api':'cached-rpc',at:saved.at,stale:true}};
+      // Unavailable API is not zero. Only the fresh guarded SDK may supply fallback.
+      if(displayApi(load)){const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);return {...value,source:{kind:'rpc',at:Date.now()}};}
+      throw error;
+    }
+  }
+  function feedRows(id,entries,label){const root=$(id);root.replaceChildren(...entries.slice(0,10).map(item=>{const li=doc.createElement('li');li.textContent=label(item);return li;}));root.title='API · 12 blocks behind';}
+  async function displayFeeds(load){const api=displayApi(load);if(!api)return;for(const [id,read,label] of [['network-events',()=>api.feed(),e=>String(e.type??'Event')],['network-settlements',()=>api.settlements(),e=>`Round ${e.settledThroughRound??UNKNOWN}`],...(state.inspected?[['account-activity',()=>api.feed(`/accounts/${state.inspected.toLowerCase()}/activity?limit=25`),e=>String(e.kind??'Activity')]]:[])]){try{const result=await read();assertCurrent(load);feedRows(id,result.data.events??result.data.activity??result.data.recentSettlements,label);}catch(error){if(!isCurrent(load))return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);return;}if(error.kind&&error.kind!=='transport')$(id).replaceChildren();}}}
+  function clearDisplayMismatch(error){wheelGoodAt=0;lastGood.clear();state.net=null;renderNetworkPlaceholder();renderHolder(null);for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';for(const id of ['network-events','network-settlements','account-activity','provisional-blocks'])$(id).replaceChildren();showReadFailure(error,'API identity');}
+
   let destroyed = false;
   const telemetry = createTelemetry({ fetcher });
   const verificationCache = new Map();
@@ -295,6 +336,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     state.net = state.status = state.plan = null;
     state.walletEth=null;
     state.receipts = [];
+    wheelGoodAt=0;for(const id of ['network-events','network-settlements','account-activity','provisional-blocks'])$(id).replaceChildren();
     state.art.clear();
     state.artifactsLoaded = false;
     el.art.grid.replaceChildren();
@@ -418,6 +460,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }));
   }
 
+  let wheelGoodAt=0;const errorIsTransient=error=>error.name!=='RpcTrustError'&&(!error.kind||error.kind==='transport');
   async function refreshTelemetry({ reset = true } = {}) {
     const load = captureLoad();
     const enabled = state.profileKey === "sepolia-v9";
@@ -428,15 +471,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     if (!enabled) return;
     try {
-      const view = telemetryView(await viewAwait(load, () => telemetry.read({ signal: load.signal })));
+      const api=displayApi(load);const result=await viewAwait(load,()=>api?api.status():telemetry.read({signal:load.signal}));const data=api?result.data:result;const view=telemetryView(data);
       if (!isCurrent(load)) return;
       $("wheel-state").textContent = view.state;
       $("wheel-rpm").textContent = view.rpm;
       $("wheel-speed").textContent = view.speed;
       $("wheel-distance").textContent = view.distance;
-      $("wheel-note").textContent = view.note;
+      $("wheel-note").textContent = view.note;wheelGoodAt=result.at??Date.now();
     } catch (err) {
       if (!isCurrent(load)) return;
+      if(errorIsTransient(err)&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL){$("wheel-note").textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;return;}
       for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = UNKNOWN;
       $("wheel-state").textContent = "Unknown";
       $("wheel-note").textContent = `${err.message} No live reading to display.`;
@@ -483,27 +527,29 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       const accounts = await viewAwait(load, () => p.request({ method: "eth_requestAccounts" }));
       await viewAwait(load, () => ensureChain(p, load.profileKey));
       const chainId = Number(await viewAwait(load, () => p.request({ method: "eth_chainId" })));
+      store.set("wheelhouse:disconnected","false");
       state.account = accounts?.[0] ?? null;
       state.chainId = chainId;
       state.inspected = state.account;
       if (!walletListenersRegistered) {
       p.on?.("accountsChanged", (accs) => {
-        if (!state.account || !state.adapter || destroyed) return;
-        dialog.close();
+        if (!state.adapter || destroyed || store.get("wheelhouse:disconnected")==="true") return;
+        resetLoad();dialog.close();
         state.account = accs?.[0] ?? null;
         state.walletEth=null;
         state.profileCounts = {}; renderProfileOptions();
         state.inspected = state.account;
-        state.status = null;
+        state.status = null;renderHolder(null);
         renderWalletChip();
         refreshWallet();
       });
-      p.on?.("chainChanged", () => { state.adapter?.invalidateChain?.(); if (!state.account || destroyed) return; dialog.close(); void refreshAll(); });
+      p.on?.("chainChanged", chain=>{if(destroyed)return;resetLoad();state.adapter?.invalidateChain?.();state.chainId=Number(BigInt(chain));dialog.close();renderHolder(null);renderCheckpointGate();if(state.chainId!==11155111)showBanner("Wrong chain: Sepolia required. Actions stopped.","warn");else void refreshAll();});
       walletListenersRegistered = true;
       }
       hideBanner();
+      const connectedDisplay=displayApi(load)?await displayRead(load,'wallet',state.account):null;
       try {
-        const counts = await viewAwait(load, () => profileBalanceReader ? profileBalanceReader(state.account) : profileBalances(state.account, { rpcUrl: store.get('wheelhouse:rpc') || undefined, provider: () => provider(), chainCache, discoveryCache, signal: load.signal }));
+        const counts = await viewAwait(load, () => profileBalanceReader ? profileBalanceReader(state.account) : profileBalances(state.account, {v9Display:connectedDisplay?.source?.kind==='api'?{wallet:String(connectedDisplay.totals.count-connectedDisplay.totals.deposited),staked:String(connectedDisplay.totals.deposited),nftPower:connectedDisplay.nftPower}:undefined, rpcUrl: store.get('wheelhouse:rpc') || undefined, provider: () => provider(), chainCache, discoveryCache, signal: load.signal }));
         state.profileCounts = counts;
       } catch (err) { if (!isCurrent(load)) return null; state.profileCounts = {}; }
       renderProfileOptions();
@@ -511,7 +557,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (chosen !== state.profileKey) { await switchProfile(chosen, { preserveWallet: true }); selectTab('squeeks'); return state.account; }
       renderWalletChip();
       selectTab('squeeks');
-      await refreshWallet();
+      await refreshWallet({prefetched:connectedDisplay});
       return state.account;
     } catch (err) {
       if (!isCurrent(load)) return null;
@@ -543,6 +589,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (state.net) renderNetwork(state.net);
     let hash;
     try {
+      if(state.chainId!=null&&state.chainId!==11155111)throw new Error('Wrong chain: Sepolia required. Start again.');
       await ensureChain(p, load.profileKey);
       assertCurrent(load);
       const accounts = await p.request({ method: "eth_accounts" });
@@ -575,7 +622,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const observedRounds = new Map();
   function renderCheckpointGate() {
     const unknownHoldings=Boolean(state.inspected) && (state.status?.owner?.toLowerCase()!==state.inspected.toLowerCase() || num(state.status?.totals?.count)===UNKNOWN);
-    el.cp.button.disabled=state.busy || unknownHoldings || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
+    el.cp.button.disabled=state.busy || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
   }
   function renderNetwork(net) {
     const previous = observedRounds.get(state.profileKey);
@@ -659,12 +706,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!status) {
       for (const node of [el.holder.count, el.holder.power, el.holder.share, el.holder.claimable]) setStat(node, null);
       el.holder.tbody.replaceChildren(); el.holder.head.replaceChildren(); el.holder.mergeList.replaceChildren();
-      el.holder.claim.disabled = true; $("btn-custom-merge").disabled = true; $("v9-actions").classList.add("hidden"); return;
+      el.holder.claim.disabled = true; $("btn-custom-merge").disabled = true;$("v9-review").disabled=true; $("v9-actions").classList.add("hidden"); return;
     }
     const totals = status.totals ?? {};
 
     const has = num(totals.count) !== UNKNOWN && Number(totals.count) > 0;
-    const signerOwns = Boolean(state.account && status.owner?.toLowerCase() === state.account.toLowerCase());
+    const signerOwns = Boolean((state.chainId==null||state.chainId===11155111) && state.account && status.owner?.toLowerCase() === state.account.toLowerCase());
     setStat(el.holder.count, totals.count, num);
     setStat(el.holder.power, isV9 ? totals.deposited : totals.power, num);
     setStat(el.holder.share, totals.sharePercent, value => num(value, 4) === UNKNOWN ? UNKNOWN : `${num(value, 4)}%`);
@@ -734,16 +781,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       $("profile-status").title = el.verified.title;
   }
 
-  async function refreshNetwork() {
+  async function refreshNetwork(options={}) {
     if (!state.adapter) return null;
     const load = captureLoad();
     try {
       networkPanel.setBusy(true);
-      const net = await readFor(load, "networkStatus");
-      const v = net.verification ?? await readFor(load, "verify");
+      const net = await displayRead(load,"network",null,options);
+      const v = net.source?null:net.verification ?? await readFor(load,"verify");
       if (!isCurrent(load)) return null;
       renderNetwork(net);
-      renderVerification(v);
+      if(net.source){displayVerification(net);displayStamp(net);}else renderVerification(v);
       clearReadBanner();
       return net;
     } catch (err) {
@@ -753,11 +800,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       showReadFailure(err,'Network read');
       return null;
     } finally {
-      if (isCurrent(load)) networkPanel.setBusy(false);
+      if (isCurrent(load)){networkPanel.setBusy(false);renderCheckpointGate();}
     }
   }
 
-  async function refreshWallet() {
+  async function refreshWallet(options={}) {
     const owner = state.inspected ?? state.account;
     if (!state.adapter || !owner) {
       renderHolder(null);
@@ -765,7 +812,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     const load = captureLoad();
     try {
-      const status = await readFor(load, "walletStatus", owner);
+      const status = options.prefetched??await displayRead(load,"wallet",owner,options);
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       renderWalletChipStats(status);
       let plan = status.mergePlan ?? null;
@@ -774,29 +821,29 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       }
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       renderHolder(status, plan);
-      if (status.net && status.verification) { renderNetwork({...status.net,snapshot:status.snapshot??status.net.snapshot}); renderVerification(status.verification); }
+      if(status.net&&(status.verification||status.source)){renderNetwork({...status.net,snapshot:status.snapshot??status.net.snapshot});if(status.source){displayVerification(status);displayStamp(status);}else renderVerification(status.verification);}
       clearReadBanner();
       return status;
     } catch (err) {
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       renderHolder(null);
-      state.walletEth=null;renderWalletChip();state.net=null;renderNetworkPlaceholder();
+      state.walletEth=null;renderWalletChip();if(err.name==='RpcTrustError'){state.net=null;renderNetworkPlaceholder();}
       showReadFailure(err,'Wallet read');
       return null;
     }
   }
 
   let refreshFlight;
-  function refreshAll() {
+  function refreshAll(options={}) {
     if(refreshFlight?.generation===generation)return refreshFlight.promise;
     const load=captureLoad(),flight={generation};
     flight.promise=(async()=>{
       if(state.adapter&&(state.inspected??state.account)) {
-        const status=await refreshWallet();
+        const status=await refreshWallet(options);
         // A failed wallet snapshot is already diagnosed. Do not immediately
         // enqueue another failing network snapshot against the same endpoints.
-        if(isCurrent(load)&&status&&!status.net)await refreshNetwork();
-      }else await refreshNetwork();
+        if(isCurrent(load)&&status&&!status.net)await refreshNetwork(options);
+      }else await refreshNetwork(options);
     })().finally(()=>{if(refreshFlight===flight)refreshFlight=null;});
     refreshFlight=flight;return flight.promise;
   }
@@ -828,7 +875,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       return { ok: false, reason: "no wallet" };
     }
     const result = await sendTransaction(preview.tx, "checkpoint()", owner, load);
-    await refreshAll();
+    await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});
     return { ok: true, ...result, gas: preview.gas };
   }
 
@@ -840,6 +887,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
   async function requestClaim(tokenIds) {
     $('claim-update').classList.add('hidden');
+    if(state.account&&state.chainId!==11155111)throw new Error('Wrong chain: Sepolia required');
     const load = captureLoad();
     const caps = capabilities();
     if (!caps.claim) throw new Error(capabilities().reasons.unavailable);
@@ -871,7 +919,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(v9&&BigInt(fresh.batches[0].amount.base)>BigInt(batch.amount.base)){showClaimIncrease(batch.amount,fresh.batches[0].amount);showOut(el.holder.claimOut,fresh);}
       receipts.push(await sendTransaction(fresh.batches[0].tx, `claim(${batch.tokenIds.length} ids)`, owner, load));
     }
-    await refreshAll();
+    await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});
     return { ok: true, total: preview.total, receipts };
   }
 
@@ -879,6 +927,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!capabilities().merge) throw new Error(capabilities().reasons.unavailable);
     const owner = state.account ?? state.inspected;
     const load = captureLoad();
+    if(!adapterFactory){const fresh=await load.adapter.walletStatus(owner);assertCurrent(load);const find=id=>{const token=fresh.squeeks.find(t=>String(t.tokenId)===String(BigInt(id)));if(!token)throw new Error('Token not in fresh on-chain inventory');return token;};const a=find(pair.survivor),b=find(pair.donor);pair={survivor:a.tokenId,donor:b.tokenId,nextLevel:a.level+1,deposited:a.deposited};}
     const confirm = `BURN-${BigInt(pair.donor)}`;
     const confirmed = await confirmModal({
       title: `Keep #${pair.survivor} · burn #${pair.donor}`,
@@ -898,7 +947,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!fresh.ok) return fresh;
     if(fresh.nextLevel!==preview.nextLevel)throw new Error("Outcome changed. Review a fresh preview.");
     const result = await sendTransaction(fresh.tx, `merge(${pair.survivor} ← ${pair.donor})`, owner, load);
-    await refreshAll();
+    await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});
     return { ok: true, ...result };
   }
 
@@ -928,6 +977,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!capabilities().deposit) throw new Error(capabilities().reasons.unavailable);
     const load = captureLoad(), owner = state.account;
     if (!owner || owner.toLowerCase() !== state.inspected?.toLowerCase()) throw new Error('Connect the inspected owner wallet');
+    if(action==='mergeDeposited'&&!adapterFactory){const fresh=await load.adapter.walletStatus(owner);assertCurrent(load);const canonical=id=>{const token=fresh.squeeks.find(t=>String(t.tokenId)===String(BigInt(id)));if(!token)throw new Error('Token not in fresh on-chain inventory');return token.tokenId;};input={...input,survivor:canonical(input.survivor),donor:canonical(input.donor)};}
     if (action === 'mergeDeposited') {
       const burn = `BURN-${BigInt(input.donor)}`;
       if (!await confirmModal({ title: `Keep #${input.survivor} · burn #${input.donor}`, body: `Keep #${input.survivor} · burn #${input.donor}. #${input.donor} is BURNED permanently and cannot be restored. #${input.survivor} survives. Type ${burn} before we build or simulate this call. You will review the simulation before your wallet opens.`, requireText: burn, confirmLabel: 'Acknowledge burn & simulate' })) return {ok:false,reason:'cancelled'};
@@ -946,7 +996,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(action==='unstake'&&['feeRose','quoteExpired'].includes(fresh.reasonCode))return showFeeRose(action,input,load,fresh.reason);
     if (!fresh.ok || (action==='mergeDeposited' && fresh.nextLevel!==preview.nextLevel) || (preview.amount?.base!=null && (action==='claimAndStake'?BigInt(fresh.amount?.base)<BigInt(preview.amount.base):fresh.amount?.base!==preview.amount.base)) || (action==='claimAndStake'&&recipientOf(fresh,owner)!==recipientOf(preview,owner)) || (action==='unstake' && (fresh.maxFee!==preview.maxFee || fresh.net.base!==preview.net.base))) throw new Error('Outcome or fee changed. Review a fresh preview; no automatic retry.');
     if(action==='claimAndStake'&&BigInt(fresh.amount.base)>BigInt(preview.amount.base)){showClaimIncrease(preview.amount,fresh.amount);showOut($('v9-result'),fresh);}
-    const result=await sendTransaction(fresh.tx,action,owner,load);await refreshAll();return result;
+    const result=await sendTransaction(fresh.tx,action,owner,load);await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});return result;
   }
   function renderActionFields() {
     $('fee-rose').classList.add('hidden');
@@ -976,7 +1026,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for (let offset = 0; offset < missing.length; offset += 24) {
       const ids = missing.slice(offset, offset + 24);
       try {
-        const batch = load.adapter.artBatch ? await readFor(load, 'artBatch', ids) : await Promise.all(ids.map(id => readFor(load, 'art', id)));
+        const api=displayApi(load);const batch=api?await Promise.all(ids.map(async id=>{const level=state.status?.squeeks.find(item=>String(item.tokenId)===String(id))?.level;try{const result=await api.squeek(String(id),level),m=result.data.metadata;if(m?.status!=='available'||!/^data:image\/svg\+xml;base64,/.test(m.imageDataUri??''))throw new Error('Metadata unavailable');return {tokenId:String(id),level:result.data.level,name:m.name,description:m.description,image:m.imageDataUri,attributes:(m.attributes??[]).map(a=>({trait:a.traitType,value:a.value}))};}catch(error){if(error.name==='RpcTrustError')throw error;return readFor(load,'art',id);}})):load.adapter.artBatch?await readFor(load,'artBatch',ids):await Promise.all(ids.map(id=>readFor(load,'art',id)));
         if (!isCurrent(load)) return [];
         for (const item of batch) {
           if (item.error) toast(`art ${item.tokenId}: ${item.error}`, 'err');
@@ -1180,10 +1230,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
   $('btn-open-activity').onclick = () => openSheet('activity-drawer');
   $('btn-disconnect').onclick = () => {
+    store.set("wheelhouse:disconnected","true");resetLoad();
+    const wallet=provider();void wallet?.request({method:"wallet_revokePermissions",params:[{eth_accounts:{}}]}).catch(()=>{});
+    $('account-activity').replaceChildren();
     closeWalletMenu(); state.account = state.inspected = state.status = null; state.profileCounts={}; renderProfileOptions();
     renderWalletChip(); renderHolder(null); selectTab('network'); el.connect.focus();
   };
-  el.refresh.onclick = () => { void refreshTelemetry({ reset: false }); return viewTask(refreshAll); };
+  el.refresh.onclick = () => {void refreshTelemetry({reset:false});void displayFeeds(captureLoad());return viewTask(()=>refreshAll({force:true}));};
   el.cp.button.onclick = () => viewTask(requestCheckpoint);
   el.holder.claim.onclick = () => viewTask(() => {
     const raw = $("claim-ids").value.trim();
@@ -1267,15 +1320,23 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   renderNetworkPlaceholder();
   renderDeploymentVisibility();
   if (state.adapter) refreshAll().then(() => { if (!destroyed) renderToolOptions(); });
-  void refreshTelemetry();
+  if(adapterFactory)void refreshTelemetry();
   renderActivity(activity.list());
   void activity.refresh();
-  const activityTimer = win.setInterval?.(() => { if (!destroyed) void activity.refresh(); }, 15_000);
-
-  const telemetryTimer = win.setInterval?.(() => { if (!destroyed) void refreshTelemetry({ reset: false }); }, 15_000);
-  const timer = win.setInterval?.(() => {
-    if (state.adapter) void refreshAll();
-  }, 45_000);
+  let provisionalResult;
+  function renderProvisional(result){provisionalResult=result;feedRows('provisional-blocks',result.data.blocks,b=>`Block ${BigInt(b.height).toLocaleString('en-US')} · ${BigInt(b.roundId)<=BigInt(state.net?.core?.settledThroughRound??0)&&BigInt(b.height)<=BigInt(state.net?.core?.blockHeight??0)?'confirmed':'provisional'}`);}
+  const poller=createWheelPoller({doc,setTimer:win.setTimeout.bind(win),clearTimer:win.clearTimeout.bind(win),
+    contextKey:()=>`${generation}:${state.profileKey}`,
+    readStatus:async()=>{const load=captureLoad();if(load.profileKey!=='sepolia-v9')throw new Error('No v6 wheel poll');const api=displayApi(load);const result=api?await api.status():{data:await telemetry.read({signal:load.signal})};assertCurrent(load);return result;},
+    readEvents:adapterFactory?null:async()=>displayApi(captureLoad()).feed(),
+    readBlocks:adapterFactory?null:async()=>displayApi(captureLoad()).blocks(),
+    frontier:()=>({settled:state.net?.core?.settledThroughRound,processed:state.net?.mining?.processedThroughRound}),
+    onStatus:async(data,result)=>{const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
+    onFrontier:async()=>{await refreshNetwork();await refreshAll();if(provisionalResult)renderProvisional(provisionalResult);await displayFeeds(captureLoad());if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();},
+    onBlocks:renderProvisional,
+    onError:(error,scope)=>{if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);}else if(scope==='status'&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL&&errorIsTransient(error))$('wheel-note').textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;else if(scope==='status'){for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}}
+  });
+  if(adapterFactory)poller.start();else void poller.tick();void displayFeeds(captureLoad());
 
   return {
     get adapter() {
@@ -1290,7 +1351,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     manifest,
     activity,
     connect,
-    refresh: refreshAll,
+    refresh: ()=>refreshAll({force:true}),
+    pollDisplay:()=>poller.tick(),
     switchProfile,
     loadArt,
     requestAction: (action,input) => viewTask(()=>requestAction(action,input)),
@@ -1298,7 +1360,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); win.clearInterval?.(activityTimer); win.clearInterval?.(timer); win.clearInterval?.(telemetryTimer); },
+    destroy: () => { headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
   };
 }
 

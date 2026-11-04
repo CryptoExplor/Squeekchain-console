@@ -1,3 +1,4 @@
+import { DISPLAY_TTL } from './bundle.js';
 // Display-only device telemetry. Never used as input to an unsigned transaction.
 const DEFAULT_RETRY_SECONDS = 30;
 const MAX_RETRY_SECONDS = 300;
@@ -33,11 +34,11 @@ export function createTelemetry({ fetcher = globalThis.fetch, now = Date.now } =
       }
       const data = await response.json();
       signal?.throwIfAborted();
-      if (data.schemaVersion !== 1) throw new Error('Unsupported telemetry schema.');
-      if (data.status === 'unavailable') throw new Error(String(data.reason ?? 'Device data unavailable.'));
+      if (data.schemaVersion !== 1) throw Object.assign(new Error('Unsupported telemetry schema.'),{kind:'schema'});
+      if (data.status === 'unavailable') throw Object.assign(new Error(String(data.reason ?? 'Device data unavailable.')),{kind:'unavailable'});
       const m = data.measurement;
       if (m !== null && (!m || !['online', 'stale'].includes(m.freshness) || !['rpmMilli', 'speedMmPerSecond', 'distanceMm'].every(k => Number.isSafeInteger(m[k]) && m[k] >= 0) || !Number.isFinite(Date.parse(m.receivedAt)))) {
-        throw new Error('Invalid device reading.');
+        throw Object.assign(new Error('Invalid device reading.'),{kind:'schema'});
       }
       etag = response.headers.get('ETag');
       cached = data;
@@ -50,12 +51,13 @@ export function telemetryView(data, now = Date.now()) {
   const m = data.measurement;
   if (!m) return { state: 'Unknown', note: 'No device reading available.', rpm: 'Unknown', speed: 'Unknown', distance: 'Unknown' };
   const age = Math.max(0, Math.floor((now - Date.parse(m.receivedAt)) / 1000));
+  if(age*1000>=DISPLAY_TTL)return {state:'Unknown',note:'Device reading expired.',rpm:'Unknown',speed:'Unknown',distance:'Unknown'};
   const stale = m.freshness !== 'online' || age > 120;
   return {
     state: stale ? 'Stale' : m.coreStatus === 'COUNTER_FAULT' ? 'Device fault' : m.rpmMilli > 0 ? 'Running' : 'Resting',
-    rpm: stale ? 'Unknown' : (m.rpmMilli / 1000).toFixed(1),
-    speed: stale ? 'Unknown' : `${(m.speedMmPerSecond / 1000).toFixed(2)} m/s`,
-    distance: stale ? 'Unknown' : `${(m.distanceMm / 1_000_000).toFixed(2)} km`,
+    rpm: (m.rpmMilli / 1000).toFixed(1),
+    speed: `${(m.speedMmPerSecond / 1000).toFixed(2)} m/s`,
+    distance: `${(m.distanceMm / 1_000_000).toFixed(2)} km`,
     age,
     note: `${stale ? 'Stale device data' : 'Device reading'} · ${age}s ago. Measurement is not settled work.`,
   };

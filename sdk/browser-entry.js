@@ -28,3 +28,6 @@ export { settlementStatus } from "./reward-status.js";
 export { feeLimitExceeded, unstakeQuoteError } from './fee-error.js';
 
 export { runPublicReadTool } from './public-tools.js';
+export { createDisplayCache, displayKey, DAY, DISPLAY_TTL } from './display-cache.js';
+export { createDisplayApi, apiNetwork, apiWallet } from './display-api.js';
+export { createWheelPoller } from './display-poller.js';

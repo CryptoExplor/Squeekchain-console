@@ -21,21 +21,21 @@ export function chooseProfile(current,counts) {
 export function profileCountLabel(count) {return `${count?.wallet??'Unknown'} in wallet · ${count?.staked==null?'Staked (Unknown)':count.staked+' staked'}`;}
 // Balance and NFT POWER are read together at the guarded snapshot. Power detects
 // holdings; it is NEVER presented as a token count. Count comes from confirmed logs.
-export async function profileBalances(owner,{signal,rpcContext,context=rpcContext,discoveryCache=createDiscoveryStore(),accountSource,...options}={}) {
+export async function profileBalances(owner,{signal,rpcContext,context=rpcContext,discoveryCache=createDiscoveryStore(),accountSource,v9Display,...options}={}) {
   owner=getAddress(owner.toLowerCase());context??=createRpcContext({...options,signal});
   throwIfAborted(signal);
   const snapshot=await context.snapshot();
   const values=await context.client.multicall({contracts:[
     {address:PROFILES['sepolia-v6'].addresses.nft,abi:nftAbi,functionName:'balanceOf',args:[owner]},
-    {address:PROFILES['sepolia-v9'].addresses.nft,abi:nft9Abi,functionName:'balanceOf',args:[owner]},
-    {address:PROFILES['sepolia-v9'].addresses.staking,abi:staking9Abi,functionName:'accountPower',args:[owner]},
+    ...(!v9Display?[{address:PROFILES['sepolia-v9'].addresses.nft,abi:nft9Abi,functionName:'balanceOf',args:[owner]},
+    {address:PROFILES['sepolia-v9'].addresses.staking,abi:staking9Abi,functionName:'accountPower',args:[owner]}]:[]),
   ],allowFailure:true,blockNumber:snapshot.blockNumber});
-  const power=values[2].status==='success'?values[2].result[0]:null;
-  let staked=power===0n?'0':null;
-  if(power!==0n)try {staked=String((await depositedIds({client:context.client,snapshot,profile:PROFILES['sepolia-v9'],owner,store:discoveryCache,signal})).length);}
+  const power=v9Display?BigInt(v9Display.nftPower):values[2].status==='success'?values[2].result[0]:null;
+  let staked=v9Display?v9Display.staked:power===0n?'0':null;
+  if(!v9Display&&power!==0n)try {staked=String((await depositedIds({client:context.client,snapshot,profile:PROFILES['sepolia-v9'],owner,store:discoveryCache,signal})).length);}
   catch(error){if(signal?.aborted||isTrustError(error)||!isRpcAvailabilityError(error))throw error; /* Unknown count, but positive power still proves held. */}
   if(power>0n && staked==='0')staked=null;
   await context.check(snapshot);throwIfAborted(signal);
   return {'sepolia-v6':{wallet:values[0].status==='success'?String(values[0].result):null,staked:'0',nftPower:'0'},
-    'sepolia-v9':{wallet:values[1].status==='success'?String(values[1].result):null,staked,nftPower:power==null?null:String(power)}};
+    'sepolia-v9':v9Display??{wallet:values[1].status==='success'?String(values[1].result):null,staked,nftPower:power==null?null:String(power)}};
 }

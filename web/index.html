@@ -56,8 +56,8 @@
 
 
       <!-- ── overview ──────────────────────────────────────────────────────── -->
-      <section data-panel="network" id="panel-network" data-testid="panel-network" role="tabpanel" aria-labelledby="tab-network">
-        <div class="section-heading"><div><h2>Network at a glance<span class="brand-dot">.</span></h2></div><div class="row"><span class="label">ONCHAIN READS · AUTO-REFRESH 45s</span><a href="#info/how-it-works" data-testid="network-how-link">How it works</a></div></div>
+      <p id="display-age" data-testid="display-age" class="muted small" aria-live="polite"></p><section data-panel="network" id="panel-network" data-testid="panel-network" role="tabpanel" aria-labelledby="tab-network">
+        <div class="section-heading"><div><h2>Network at a glance<span class="brand-dot">.</span></h2></div><div class="row"><span class="label">DISPLAY READS · FOLLOWS THE WHEEL</span><a href="#info/how-it-works" data-testid="network-how-link">How it works</a></div></div>
         <div class="overview-layout">
         <div>
         <div class="panel" id="profile-panel" data-testid="profile-panel">
@@ -103,7 +103,7 @@
           <p class="muted small" id="wheel-note" role="status" data-testid="wheel-note">Waiting for an official device reading.</p>
           <div class="mini-metrics"><div><span class="label">Speed</span><strong id="wheel-speed" data-testid="wheel-speed">Unknown</strong></div><div><span class="label">Daily distance</span><strong id="wheel-distance" data-testid="wheel-distance">Unknown</strong></div></div>
           <a class="btn stream-link" href="https://sepolia.squeekchain.com/#stream-game" target="_blank" rel="noreferrer">↗ Watch Squeektoshi</a>
-          <span class="label telemetry-source">OFFICIAL API · DISPLAY ONLY</span>
+          <section class="panel"><h2>Live wheel</h2><ol id="provisional-blocks" data-testid="provisional-blocks"></ol><h3>Recent events</h3><ol id="network-events" data-testid="network-events"></ol><h3>Settlements</h3><ol id="network-settlements" data-testid="network-settlements"></ol></section>
         </aside>
         </div>
 
@@ -158,6 +158,7 @@
             </div>
             <p class="small muted">Choose which image and token ID survives. Type the exact BURN-&lt;id&gt; acknowledgement before call construction or simulation; review the simulation before wallet signing.</p>
           </div>
+          <section class="panel"><h2>Account activity</h2><ol id="account-activity" data-testid="account-activity"></ol></section>
           <p class="muted small" id="holder-empty" data-testid="holder-empty">Connect a wallet, or inspect an address, to see positions.</p>
         </div>
       </section>
