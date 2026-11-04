@@ -16,7 +16,7 @@ for(const profile of ['v6','v9'])for(const width of [390,1280])for(const mode of
  }else{
   await page.evaluate(()=>squeek.activity.record('0x'+'ab'.repeat(32),'Checkpoint',11155111,'sepolia-v6'));for(const button of await page.locator('.toast-close').all())await button.click();await page.getByTestId('profile-select').selectOption(profile==='v6'?'sepolia-v9':'sepolia-v6');await expect(page.locator('.toast').last()).toContainText("1 transaction still pending. Switching won't cancel it.");const [toast,header]=await Promise.all([page.locator('.toast').last().boundingBox(),page.locator('.topbar').boundingBox()]);expect(toast.y).toBeGreaterThanOrEqual(header.y+header.height);if(width===390)expect(toast.y+toast.height).toBeLessThanOrEqual(960-15);await expect(page.locator('.toast').last()).toHaveAttribute('role','status');
  }
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.evaluate(()=>document.fonts.ready);await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:`docs/screenshots/squeeks-layout-${profile}-${mode}-${width}.png`,fullPage:true});expect(errors).toEqual([]);await page.evaluate(()=>squeek.destroy());
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.evaluate(()=>document.fonts.ready);await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:`artifacts/screenshots/squeeks-layout-${profile}-${mode}-${width}.png`,fullPage:true});expect(errors).toEqual([]);await page.evaluate(()=>squeek.destroy());
 });
 
 test('selection gates enforce count, level and custody; preview/BURN still precedes simulation; refresh clears stale selection',async({page})=>{

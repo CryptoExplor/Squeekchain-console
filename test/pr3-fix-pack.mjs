@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+const requestBudgets=JSON.parse(fs.readFileSync(new URL('./budgets.json',import.meta.url)));
 import {spawnSync} from 'node:child_process';
 import {encodeErrorResult,decodeFunctionData,encodeFunctionResult,multicall3Abi,toHex} from 'viem';
 import {nftAbi} from '../sdk/abi.js';
@@ -66,9 +67,10 @@ globalThis.fetch=async(_url,init)=>{
 try {
  const context=createRpcContext(),options={rpcContext:context,discoveryCache:createDiscoveryStore(null),accountSource:async()=>{throw new Error('Zero power must skip API discovery');}};
  const counts=await profileBalances(owner,options);assert.equal(counts['sepolia-v9'].staked,'0');const cold=wire.length;wire.length=0;
- await profileBalances(owner,options);const warm=wire.length;assert.ok(warm<=25);
+ await profileBalances(owner,options);const warm=wire.length;assert.ok(warm<=requestBudgets.profileInventory.warm);
  const report={operation:'connect-only dual-profile inventory',fixture:'v6 wallet 2 / v9 wallet 0 / v9 NFT power 0',cold,warm,discoveryRequests:0,apiRequests:0,finalSnapshotGuard:true};
- fs.writeFileSync('docs/audit/profile-inventory-request-budget.json',JSON.stringify(report,null,2)+'\n');console.log('PASS zero-power actual wire budget: '+JSON.stringify(report));
+ for(const key of ['cold','warm'])assert.ok(report[key]<=requestBudgets.profileInventory[key],key+' inventory budget');for(const key of ['discoveryRequests','apiRequests','finalSnapshotGuard'])assert.equal(report[key],requestBudgets.profileInventory[key]);
+ fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/profile-inventory-request-budget.json',JSON.stringify(report,null,2)+'\n');console.log('PASS zero-power actual wire budget: '+JSON.stringify(report));
 }finally{globalThis.fetch=realFetch;}
 // Fresh-checkout-safe: dist is ignored; do not rely on artifacts of a prior build.
 const build=spawnSync(process.execPath,['build.mjs'],{encoding:'utf8'});assert.equal(build.status,0,build.stdout+build.stderr);

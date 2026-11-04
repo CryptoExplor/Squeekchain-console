@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+const requestBudgets=JSON.parse(fs.readFileSync(new URL('./budgets.json',import.meta.url)));
 import { spawnSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { encodeFunctionResult, decodeFunctionData, multicall3Abi, encodeEventTopics, parseAbi, toHex, keccak256 } from 'viem';
@@ -279,7 +280,7 @@ try {
   wire.length = 0;
   const warm = await wireSdk.networkStatus();
   assert.equal(warm.verification.cacheHit, true);
-  assert.ok(wire.length <= 25, `Warm v6 page load exceeded RPC budget: ${wire.length}`);
+  assert.ok(wire.length <= requestBudgets.v6.limit, `Warm v6 page load exceeded RPC budget: ${wire.length}`);
   assert.equal(wire.flatMap(request=>Array.isArray(request)?request:[request]).filter(request => request.method === 'eth_getStorageAt').length, 8);
   assert.equal(wire.flatMap(request=>Array.isArray(request)?request:[request]).filter(request => request.method === 'eth_getCode').length, 0);
   assert.equal(wire.flatMap(request=>Array.isArray(request)?request:[request]).filter(request => request.method === 'eth_chainId').length, 0);
@@ -290,14 +291,15 @@ try {
   assert.equal(wire.filter(request => request.method === 'eth_call').length, 1, 'all art in one multicall/snapshot');
   wire.length = 0;
   await wireSdk.walletStatus(owner);
-  assert.ok(wire.length <= 25, `Warm wallet page load exceeded RPC budget: ${wire.length}`);
-  fs.writeFileSync('docs/audit/v6-request-budget.json',JSON.stringify({profile:'sepolia-v6',coldNetwork:cold,warmNetwork:warmCount,wallet:wire.length,limit:25},null,2)+'\n');
+  assert.ok(wire.length <= requestBudgets.v6.limit, `Warm wallet page load exceeded RPC budget: ${wire.length}`);
+  assert.ok(cold<=requestBudgets.v6.coldNetwork);assert.ok(warmCount<=requestBudgets.v6.warmNetwork);assert.ok(wire.length<=requestBudgets.v6.wallet);
+  fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/v6-request-budget.json',JSON.stringify({profile:'sepolia-v6',coldNetwork:cold,warmNetwork:warmCount,wallet:wire.length,limit:25},null,2)+'\n');
   console.log(`PASS actual wire budget: cold network ${cold}; warm network ${warmCount}; wallet ${wire.length} requests; art batch one eth_call`);
   // Feature-isolated SDK fallback: cold detail + art; warm detail reuses cached art.
-  const pageSdk=createFixtureSdk({rpcContext:createRpcContext()});wire.length=0;await pageSdk.squeekStatus('1');await pageSdk.art('1');const pageCold=wire.length;wire.length=0;await pageSdk.squeekStatus('1');const pageWarm=wire.length;assert.ok(pageWarm<=25);fs.writeFileSync('docs/audit/v6-squeek-page-budget.json',JSON.stringify({profile:'sepolia-v6',scope:'Synthetic actual-HTTP SDK detail+art cold; detail-only with cached art warm. Excludes app shell.',cold:pageCold,warm:pageWarm},null,2)+'\n');console.log(`PASS v6 Squeek page SDK HTTP: cold ${pageCold}, warm ${pageWarm}`);
+  const pageSdk=createFixtureSdk({rpcContext:createRpcContext()});wire.length=0;await pageSdk.squeekStatus('1');await pageSdk.art('1');const pageCold=wire.length;wire.length=0;await pageSdk.squeekStatus('1');const pageWarm=wire.length;assert.ok(pageWarm<=requestBudgets.v6.limit);assert.ok(pageCold<=requestBudgets.v6SqueekPage.cold);assert.ok(pageWarm<=requestBudgets.v6SqueekPage.warm);fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/v6-squeek-page-budget.json',JSON.stringify({profile:'sepolia-v6',scope:'Synthetic actual-HTTP SDK detail+art cold; detail-only with cached art warm. Excludes app shell.',cold:pageCold,warm:pageWarm},null,2)+'\n');console.log(`PASS v6 Squeek page SDK HTTP: cold ${pageCold}, warm ${pageWarm}`);
   const actions=[['checkpoint',()=>wireSdk.checkpointPreview(owner)],['claim-32',()=>wireSdk.claimPreview(owner,Array.from({length:32},(_,i)=>String(i+1)))],['claim-33',()=>wireSdk.claimPreview(owner,Array.from({length:33},(_,i)=>String(i+1)))],['merge',()=>wireSdk.mergePreview(owner,'1','2',{confirm:'BURN-2'})]],actionCounts=[];
   for(const[action,preview]of actions){wire.length=0;const simulationsBefore=wireClient.requests.filter(r=>r.name==='simulateContract').length;const result=await preview();assert.equal(result.ok,true,action);assertGasFree(result);assert.equal(wireClient.requests.filter(r=>r.name==='simulateContract').length-simulationsBefore,result.batches?.length??1,action+' keeps snapshot simulation');const requests=wire.flat();assert.equal(requests.some(r=>r.method==='eth_estimateGas'),false);assert.equal(result.batches?.length??1,action==='claim-33'?2:1);actionCounts.push({action,httpRequests:wire.length,estimateGasRequests:requests.filter(r=>r.method==='eth_estimateGas').length,simulations:result.batches?.length??1});}
-  fs.writeFileSync('docs/audit/gas-cleanup-v6-requests.json',JSON.stringify(actionCounts,null,2)+'\n');console.log('PASS v6 action previews: every snapshot simulation retained; no eth_estimateGas or gas fields');
+  fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/gas-cleanup-v6-requests.json',JSON.stringify(actionCounts,null,2)+'\n');console.log('PASS v6 action previews: every snapshot simulation retained; no eth_estimateGas or gas fields');
   const wireFetch = globalThis.fetch, contacted = [];
   globalThis.fetch = async (url, init) => {
     contacted.push(url);

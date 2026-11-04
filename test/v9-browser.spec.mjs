@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import {encodeErrorResult} from 'viem';
 import {staking9Abi} from '../sdk/abi-v9.js';
 import {installV9Fixture}from './v9-fixture.mjs';
-const capture=async(page,testInfo,name)=>{await page.evaluate(()=>document.fonts.ready);if(name.includes('fee-rose'))await page.evaluate(()=>scrollTo(0,0));const image=await page.screenshot({fullPage:name.includes('squeeks')||name.includes('fee-rose'),animations:'disabled'});await testInfo.attach(name,{body:image,contentType:'image/png'});if(process.env.UPDATE_SCREENSHOTS==='1')fs.writeFileSync('docs/screenshots/'+name,image);};
+const capture=async(page,testInfo,name)=>{await page.evaluate(()=>document.fonts.ready);if(name.includes('fee-rose'))await page.evaluate(()=>scrollTo(0,0));const image=await page.screenshot({fullPage:name.includes('squeeks')||name.includes('fee-rose'),animations:'disabled'});await testInfo.attach(name,{body:image,contentType:'image/png'});fs.mkdirSync('artifacts/screenshots',{recursive:true});fs.writeFileSync('artifacts/screenshots/'+name,image);};
 for(const theme of ['light','dark'])for(const width of [1280,390])for(const view of ['squeeks','merge','unstake'])test(`v9 mocked ${view} / ${theme} / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);
  if(theme==='dark')await page.getByTestId('btn-theme').click();await page.evaluate(()=>window.squeek.connect());

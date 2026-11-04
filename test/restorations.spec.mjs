@@ -96,7 +96,7 @@ for(const theme of ['light','dark'])for(const width of [1280,390])for(const view
   if(view==='stall-network')await expect(page.getByTestId('settlement-notice')).toBeVisible();
   if(view==='pending'){await page.getByTestId('profile-select').selectOption('sepolia-v9');await expect(page.locator('.toast').last()).toContainText('1 transaction still pending');}
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({fullPage:true,animations:'disabled'});const name=`${view}-${theme}-${width}.png`;await info.attach(name,{body:image,contentType:'image/png'});if(process.env.UPDATE_SCREENSHOTS==='1')fs.writeFileSync('docs/screenshots/'+name,image);
+  await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({fullPage:true,animations:'disabled'});const name=`${view}-${theme}-${width}.png`;await info.attach(name,{body:image,contentType:'image/png'});fs.mkdirSync('artifacts/screenshots',{recursive:true});fs.writeFileSync('artifacts/screenshots/'+name,image);
   await page.evaluate(()=>squeek.destroy());
 });
 

@@ -34,8 +34,8 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          fs.mkdirSync('live-qualification', { recursive: true });
-          fs.writeFileSync('live-qualification/live-qualification.json', JSON.stringify({
+          fs.mkdirSync('artifacts/live-qualification', { recursive: true });
+          fs.writeFileSync('artifacts/live-qualification/live-qualification.json', JSON.stringify({
             schemaVersion: 1,
             sourceCommit: process.env.LIVE_SOURCE_COMMIT,
             runUrl: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
@@ -57,9 +57,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: thewheel-live-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            playwright-report/
-            test-results/
-            live-qualification/
+          path: artifacts/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7

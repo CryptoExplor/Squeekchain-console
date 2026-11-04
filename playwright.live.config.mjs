@@ -7,7 +7,7 @@ export default defineConfig({
   testMatch: '**/live.spec.mjs',
   reporter: process.argv.includes('--list') ? [['list']] : [
     ['list'],
-    ['html', { outputFolder: 'playwright-report', open: 'never' }],
+    ['html', { outputFolder: 'artifacts/playwright-report', open: 'never' }],
     ['./test/live-reporter.mjs'],
   ],
 });

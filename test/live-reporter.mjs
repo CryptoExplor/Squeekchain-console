@@ -13,7 +13,7 @@ function commit() {
  * performs RPC requests, changes repository phase status, signs or uses keys.
  */
 export default class LiveQualificationReporter {
-  constructor({ outputFile = 'live-qualification/live-qualification.json' } = {}) {
+  constructor({ outputFile = 'artifacts/live-qualification/live-qualification.json' } = {}) {
     this.outputFile = path.resolve(outputFile);
     this.record = {
       schemaVersion: 1,

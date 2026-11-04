@@ -21,7 +21,7 @@ export const PROFILES = {
     },
     identities: {
       "release": "stream-game-sepolia-test-20261026-01",
-      "source": "docs/audit/v9-identity-2026-11-03.json",
+      "source": "docs/pins/v9-identity-2026-11-03.json",
       "capturedAt": "2026-11-03T15:45:43.869Z",
       "blockNumber": "12056257",
       "blockHash": "0x0c8d3619dbfd24c577c119248f472a5c4809cf342651134700b1122731642b22",

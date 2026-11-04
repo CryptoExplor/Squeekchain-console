@@ -1,158 +1,65 @@
 # Wheelhouse
 
-A static, browser-first Squeekchain holder console. The app is branded **Wheelhouse**; the GitHub repository remains **CryptoExplor/Squeekchain-console**.
+A static, browser-first Squeekchain holder console. Inspect Squeeks and SQK, plan merges, and review transactions before your own wallet signs. Independent community software, not the official dApp.
 
-**Deployed frontend restored, with equal-profile functionality.** [PR #3](https://github.com/CryptoExplor/Squeekchain-console/pull/3) restores the frontend from `b705683` / [the original Pages preview](https://1cfe468b.wheel-house.pages.dev), keeping canonical v6/v9 profiles and all later functional safety fixes, with the user's approval to extend the current draft rather than create a separate branch. Phase 1 merged in PR #2; Phase 0 remains complete from its historical qualified source. This head has not run `test:live`. Offline tests are not live qualification. The approved central-wallet, compact-wheel and Squeeks/notification follow-ups extend that baseline. See [status and validation](docs/STATUS.md).
+**Live:** https://wheel-house.pages.dev · **Hosting:** Cloudflare Pages
 
-The light-first Wheelhouse design uses local Barlow Condensed, Quicksand and IBM Plex Mono, warm neutral surfaces and gold/blue accents. It is an independent community console, not the official dApp. See the [design contract and offline checks](docs/DESIGN.md).
+## Quick start
 
-[Latest wallet/Squeeks audit](docs/audit/squeeks-layout-notifications.md), with matching desktop/mobile captures. [Earlier mocked screenshot gallery](docs/screenshots/README.md): Squeeks, Network, Info, Settings, Merge dialog and not-deployed Mainnet, v9 Unstake, Fee rose and full-address recipient warnings, plus connected/disconnected header crops, each in light/dark at 1280px/390px. These are synthetic review fixtures, not live qualification. Shared DOM components live in `web/components.js`; missing values read **Unknown**, never an invented zero. All dist JavaScript totals **174,543 bytes gzipped**, below the build-enforced 250,000-byte budget, including lazy Developers/Settings modules ([breakdown](docs/audit/data-diet-js-size.json)).
+Use the Node version in `.nvmrc` (Node 22) and npm:
 
-## Deployments and safety
-
-Old `sepolia` inputs migrate once at hash/storage/MCP boundaries. Internal SDK, Activity and cache keys use canonical profile keys only. Mainnet is never guessed.
-
-| Profile | Status |
-|---|---|
-| `sepolia-v6` | Sepolia v6. Published identity pins; verified reads and simulated owner actions. |
-| `sepolia-v9` (default) | Sepolia v9. Dated two-peer identity pins; verified NFT/staking/issuance reads and simulated owner actions. |
-| `mainnet` | **Not deployed**. No chain data/action panels. Saved Sepolia transaction Activity remains visible. |
-
-- Sepolia is `11155111` / `0xaa36a7`. A connected Sepolia EIP-1193 wallet is preferred; otherwise reads go browser-direct to the configured role-aware public RPCs or a browser-local custom HTTPS RPC in Settings. No server proxy, paid RPC key or backend.
-- Every snapshot requires block-hash agreement with two independent RPC peers (public endpoints plus any supplied RPC), checked again after the reads. Any disagreement makes the result unavailable.
-- Full v6 verification checks the published implementations, runtime hashes, layout digests, admins/owners, versions, configuration and wiring at one block. Its four EIP-1967 slots are checked against **both snapshot peers on every operation**, including cache hits; cold runtime-code reads also use both peers and independently check the published Core/Mining implementation hashes. General graph/configuration reads still use the serving client; the session cache retains the initial full graph verification. v9 checks its export-pinned six-contract graph against **both snapshot peers**: cold storage/code reads share one JSON-RPC batch per peer; unsupported batches fall back to chain-checked singles, not a trust failure. The caller-owned session code-hash cache survives profile switches. **Every v9 snapshot re-reads all twelve slots per peer, bindings/wiring, versions/layouts and Core/issuance/staking/NFT paused state**; a cache hit cannot bypass mutable checks. Mismatches stop. Cache writes occur only after the final two-peer block-hash guard; output distinguishes the initial full-verification block from current slot/wiring checks.
-- **Bounded RPC trust, not storage proofs:** agreement on a block hash does not authenticate every storage value. The independent identity checks above protect the pinned deployment identity, not all balances, ownership, rewards, arbitrary contract reads or simulation results. Those post-identity reads still rely on the selected serving RPC (which may be a custom RPC or wallet). Do not configure an untrusted RPC; a hash-agreeing malicious serving RPC can still forge general state. This client does not verify `eth_getProof` against a locally verified state root.
-- Chain ID is probed once per transport, with concurrent probes shared; errors and wallet `chainChanged` invalidate it. Verification/status/art contract reads use multicall at the snapshot block. Several artwork IDs share one run/snapshot, in batches of up to 24.
-- Public HTTPS peers, in the user-requested order for state, snapshots and log fallback: **Tenderly → PublicNode → 0xRPC**. Each provider is a candidate, not a live-availability guarantee; log queries try the same range across candidates before shrinking. The supplied WSS aliases duplicate PublicNode/0xRPC operators and are not enabled in the current HTTP JSON-RPC transport or counted as independent peers. Network fetch failures/timeouts trigger a shared 30-second cooldown (without claiming CORS from TypeError alone). HTTP 429/503 triggers a shared per-endpoint cooldown honoring `Retry-After` (positive seconds or HTTP date up to 300s; otherwise 30s), without delaying healthy fallbacks. Pruned/history/range/plan errors are availability failures; identity/hash mismatches still stop immediately. A custom RPC is tried first for state/log reads and joins the peers; a Sepolia wallet remains preferred. Public endpoints change often: use `npm run rpc:probe` for current capabilities.
-- NFT discovery uses **owner-filtered incoming and outgoing Transfer events**. IndexedDB stores `{lastScannedBlock, lastScannedHash, ids}` per chain/release/NFT/owner. Subsequent reads scan only new blocks, detect reorged checkpoints, and confirm the final set using `balanceOf` and multicall `ownerOf` at the snapshot. Storage is never an ownership oracle. Node/private mode has an in-memory fallback. Provider log-range capabilities vary, so preserving the incremental cache is especially important; the current candidate order follows the latest user instruction and is not a live qualification. Canonical v6/v9 wallet discovery uses `accountSource:null`: if all log endpoints fail, wallet status and v6 claim previews fail closed rather than substituting API IDs. The separately tested discovery helper can validate candidate hints when explicitly configured, but this is not enabled in production action inventory. The display API remains display-only; unavailable canonical inventory is Unknown, never an empty balance.
-- Connect probes both NFT balances and v9 `accountPower(owner).nftPower` in one same-snapshot multicall. Only balance/power decide held-profile suggestions, never API counts. The selector separates wallet/staked counts. Complete staked ID sets come from owner/collection-filtered deposit/withdraw/merge logs, not API subsets; one multicall confirms `staking.depositor(nft,id)` and NFT custody at the snapshot. API hints cannot prove staking completeness and never seed a canonical history cursor. Wallet hints still require snapshot balance count and owner confirmation. Proven `nftPower === 0n` returns `staked: '0'` without API/log/depositor discovery; the final snapshot guard still runs. Otherwise unavailable history displays **Staked (Unknown)**, never an invented zero.
-- v6 claims deduplicate/sort NFT IDs in batches of 32. v9 claims account rewards, including SQK-only stakers, and supports claimAndStake. Both show simulated payout and re-preview after review. v9 claim/claimAndStake allow equal or larger fresh payouts (displaying increases), but stop for lower payouts or recipient changes. Non-owner claim recipients appear as a warning-styled Recipient row with the full address. v6 keeps its strict payout guard. v9 deposit/withdraw/mergeDeposited require confirmed depositor/custody; NFT and exact SQK approvals are separate explicit steps. Unstake uses the exact quoted fee as `maxFee` (no padding), reviews fee/net/deadline in the browser's local time zone, and rejects a changed quote. Decoded `FeeLimitExceeded` from simulation or wallet submission displays **Fee rose** (or **Quote expired** for official-ABI `DeadlineExpired`), a fresh quote, and one **Re-quote** button—never an automatic resubmission. Mixed-custody merges name the staked NFT and the withdraw/deposit remedy. Unknown holdings keep Claim and Checkpoint disabled for the inspected account; a known-zero NFT count still permits v9 SQK-only claims.
-- Merges require **`BURN-<donorId>` before call construction**, then simulation, human review, a fresh verified simulation, and the owner's wallet signature. No automatic donor selection/submission. Address comparisons are case-insensitive.
-- CLI/MCP hold **no owner keys** and never sign/submit transactions. The optional keeper is isolated in `keeper/`, off by default, and can only call `checkpoint()` after explicit dual opt-in.
-
-The official API supplies display-only telemetry and untrusted discovery hints; it never supplies authoritative transaction inputs, ownership, payout, deployment addresses or capabilities. Unavailable data is Unknown, not zero. Artwork metadata is schema-checked on fresh and 24-hour cached reads. Raster `cardImageUrl` accepts only the exact `https://api.squeekchain.com` origin (relative paths resolve there), without credentials; redirects are rejected. No CDN origin is implicitly allowed. An invalid URL is rejected, not silently replaced with SVG. An allowed card fetch that fails can use its isolated SVG fallback. Blob URLs are reused per profile/token/cache version and revoked on replacement or view destruction. DotGrid metadata is isolated in `<img>`; immutable renderer/page runtime hashes are not published, so artwork integrity is not claimed verified.
-
-## Run and test
-
-Node 22 is pinned in `.nvmrc` and used in CI (within the package engine range).
-
-```bash
+```sh
 npm ci
-npm run web                    # build + local static file server, port 5173
-npm run rpc:probe              # endpoint capability table; diagnostic, not live qualification
-npm test                       # deterministic offline regressions, safety, RPC budget, discovery and Activity
-npx playwright install --with-deps chromium
-npm run test:browser            # real Chromium, injected/offline data: components, profile races, persistence, and 78 mocked screenshot states and action-safety checks
-npm run test:live               # real Chromium + public Sepolia RPCs; no RPC mocks or signatures
+npm run web
 ```
 
-The live test records public CORS RPC availability, two-peer block agreement and the published v6 graph/network snapshot. A failure must not be reported as a pass. The earlier sandbox attempt failed on the old three-endpoint list. That list was replaced following the user's real-network findings; the real-browser gate **passed on dd0afff in run 41618128325**. That pass does not qualify later commits automatically. Run `npm run rpc:probe` and `npm run test:live` locally. The Node probe checks chain ID, a head-minus-12 block, the pinned mining implementation slot at that block, and a 10k-block NFT Transfer log query per endpoint. It does not establish browser CORS, two-peer agreement or full deployment verification. The normal CI workflow installs Chromium **and OS libraries** and runs offline/browser checks only. Live qualification is isolated in the explicit-opt-in **thewheel** workflow; a failed live check fails that manual gate.
+Open the URL printed by the static server (default port 5173). `HOST` and `PORT` configure its listener. The browser talks directly to public APIs/RPCs and the selected wallet; there is no application backend or RPC proxy. Custom HTTPS RPC settings stay in the browser.
 
-### Opt-in CI qualification gate: thewheel
+## Profiles
 
-`.github/workflows/live.yml` is named **thewheel**. It accepts `workflow_dispatch` or `pull_request` **`labeled` only**, with the live job gated on explicit dispatch or the newly added **`run-live`** label. No push, PR-open/synchronize, or scheduled live runs occur; other labels skip the job. On `ubuntu-latest`, with Node from `.nvmrc` and a 15-minute job timeout, it runs:
+| Profile | Support |
+| --- | --- |
+| `sepolia-v9` (default) | Verified holdings, NFT deposits/withdrawals, SQK staking/unstaking, claims, approvals and merges. |
+| `sepolia-v6` | Verified holdings, claims, checkpoints and wallet-held NFT merges; no staking or claim-and-stake. |
+| `mainnet` | Not deployed. No deployment reads or actions. |
 
-1. `npm ci`
-2. `npx playwright install --with-deps chromium`
-3. `npm run rpc:probe`
-4. `npm run test:live`
+Both Sepolia profiles have the same safety requirements. Saved/profile-qualified links retain context; connection checks holdings across both profiles. Explicit Connect and profile selection can request the matching wallet network; confirmation remains in the wallet. Silent restore and read-only watch navigation do not open network prompts.
 
-It uses read-only repository permissions and no configured secrets, wallet, keeper or signing variables. Opted-in runs are serialized under the same concurrency group to avoid hammering public RPCs. Test failures are not ignored. An always-run artifact upload retains the HTML Playwright report, screenshots/traces/test attachments and **`live-qualification/live-qualification.json`**, including failure evidence. A not-run JSON is seeded before dependency/browser setup so a later setup or probe failure is not mistaken for a pass. The dedicated live reporter rejects empty/skipped/incomplete suites as qualification passes; ordinary browser tests remain separate.
+Squeeks has separate NFT and SQK views, a merge planner, token detail pages, shareable read-only address links, Activity and available earnings. A planned step only selects the next action; it never signs or runs a whole merge path automatically. Missing data is **Unknown**, not zero. Loading, failed reads, empty portfolios and disconnection are different states.
 
-**For the intended final follow-up head, the user re-triggers the pre-merge gate:** remove/re-add the **`run-live`** label and manually review the app in their browser before merge. The job checks out the event's exact **PR head SHA**, not GitHub's synthetic merge commit. `LIVE_SOURCE_COMMIT` carries that same SHA into both the initial and final qualification JSON. For `workflow_dispatch`, the checkout/evidence use the selected ref's event SHA. No `pull_request_target`, configured secrets or write permissions are used.
+## Commands
 
-Dispatch from the Actions tab still requires the workflow on the default branch; the label trigger avoids that bootstrap requirement. I.e. no merge of this WIP PR is needed to run the label gate. Adding subsequent commits does not rerun live RPC tests automatically: remove and re-add `run-live` to qualify a newer head.
+| Script | Purpose |
+| --- | --- |
+| `npm run web` / `serve` | Build and serve the static app. |
+| `npm run dev` | Serve local source without rebuilding. |
+| `npm run build` | Build `dist/`; enforce 250,000 gzip bytes across all JavaScript, including lazy modules. |
+| `npm test` | Offline SDK, safety, documentation and integration checks. |
+| `npm run test:browser` | Mocked Chromium regressions; install with `npx playwright install --with-deps chromium`. |
+| `npm run test:web` / `test:audit` | Focused UI / deployment-baseline checks. |
+| `npm run verify` / `status` | CLI verification / reads. |
+| `npm run checkpoint` / `claim` / `merge` | Prepare unsigned calls; consult CLI help for arguments. |
+| `npm run mcp` | Local stdio MCP: public reads and unsigned preparation, no keys or submission. |
+| `npm run rpc:probe` / `test:live` | Explicit opt-in public-network diagnostics / read-only qualification; not part of ordinary tests. |
+| `npm run fork:start` / `fork:web` / `test:fork` | Explicit local fork workflows; see [fork instructions](dev/fork/README.md). |
 
-**Phase 0 is complete**, supported by the offline audit and [successful live run 41618128325 on dd0afff](docs/audit/live-qualification-run-41618128325.json). The Phase 3 structure head needs its own user-triggered live pass. Before merge, the opted-in live job must pass for the intended final source SHA. A skipped job, successful SDK call, endpoint probe, offline test, or stale JSON artifact is not a substitute. The workflow does not write phase status back to the repository or enable signing/keeper behavior.
+Tests must not write into `docs/`. Screenshots and measured counts belong in gitignored `artifacts/`; CI uploads results with seven-day retention. Request ceilings are maintained in `test/budgets.json`, not rewritten by measurements. Offline/mock passes do not establish live availability or fork qualification.
 
-### Live failure diagnostics
+## Safety in brief
 
-The live gate retains `verified-network-snapshot.json` and the Playwright failure trace, and also attaches **`rpc-network-diagnostics.json`**, plus **`rpc-tool-diagnostics.json`** when a tool returns error diagnostics. The network attachment passively records endpoint origin, method, HTTP status and JSON-RPC failure codes, plus explicit browser CORS-policy signals. A browser `TypeError`/`ERR_FAILED` alone is not proof of CORS. Tool diagnostics preserve the cause chain, original errors when chain-ID availability rechecks fail, and a bounded history of endpoint failures. Endpoint URL credentials, paths/query strings, request parameters/headers and arbitrary provider messages are deliberately omitted. Only recognized fetch-failure TypeErrors qualify as availability; other TypeErrors stop immediately, including through viem HTTP wrappers. Trust mismatches and reverts still fail closed; availability fallback does not retry changed transaction inputs.
+Contract identity is pinned and rechecked at a single snapshot, with independent-peer identity checks and a final snapshot guard. API data is display-only: ownership, custody, eligibility and transaction inputs require canonical reads and simulation. Merging permanently burns the donor and requires exact `BURN-<id>` confirmation. Every transaction needs fresh review/preparation and a human wallet prompt. The wallet sets gas/network fees; the unstake SQK fee cap remains independently enforced.
 
-### Chromium downloads and local Chrome
+RPC agreement is not authentication of arbitrary state. Read [SECURITY](docs/SECURITY.md) for trust boundaries, cancellation limits, approvals, CSP and cross-origin access.
 
-Some **linux-arm64** environments return **403** from the Playwright Chromium CDN. For `test:live`, use an **x64 machine** with the standard Chromium install above, or an already-installed local Chrome on a supported platform. The config accepts `PLAYWRIGHT_CHROMIUM_CHANNEL=chrome` and passes it as Playwright's `channel: 'chrome'`:
+A separate checkpoint-only keeper under `keeper/` is disabled by default and outside CLI/MCP/UI; holders do not need it.
 
-```bash
-PLAYWRIGHT_CHROMIUM_CHANNEL=chrome npm run test:live
-# Alternatively, point directly at an existing compatible local Chrome/Chromium:
-PLAYWRIGHT_CHROMIUM_EXECUTABLE=/absolute/path/to/chrome npm run test:live
-```
+## Project reference
 
-Choose one override. These options do not install Chrome or make an unsupported browser/platform combination work; Chrome must already be installed. This bypasses the bundled Chromium download, not RPC/CORS or verification checks. CI still installs Chromium with `npx playwright install --with-deps chromium`.
+- [Current support and open items](docs/STATUS.md)
+- [Design and copy rules](docs/DESIGN.md)
+- [Security model](docs/SECURITY.md)
+- [Merged changes](docs/CHANGELOG.md)
+- [Official Squeekchain documentation](https://docs.squeekchain.com/)
+- `web/`: static UI; `sdk/`: verified adapters and tool registry; `mcp/`: local stdio; `src/`: CLI; `test/`: offline/mocked checks.
 
-The v6 Chain pulse panel shows the **live settlement frontier**, not a hardcoded round. If the live next round is unsettled and mining has no settlement backlog, it says no new rewards are being issued **at that snapshot**, while existing rewards may still be claimable. The notice updates when checkpoint readiness/frontier changes and clears on read failure or profile switch; it does not infer a permanent freeze from one read.
-
-Switching profiles always wins: reads abort, generation IDs invalidate late results, profile/wallet/position/claim/merge/receipt-view state clears before new reads, and only signing has a busy lock. A wallet request or transaction already sent cannot be cancelled by navigation. Broadcast hashes are saved immediately in localStorage and shown under **Activity across all profiles**, including Mainnet; receipts are monitored while the tab is open and rechecked after reload. No transaction is automatically resubmitted. Closing the tab stops monitoring until it is opened again.
-
-## Static deployment (Cloudflare Pages only)
-
-Build with `npm run build` and publish `dist/` through the existing Pages Git integration. Vercel is paused and `vercel.json` is removed. No backend, RPC proxy or Worker entry point; alerts stay in-tab. Cron, push/closed-tab notifications and OG services are deferred and require backend design/consent.
-
-`web/_headers` is copied verbatim to `dist/_headers`: self-hosted script/style/font CSP, no framing/base/forms/objects, isolated data/blob images, API plus public/custom HTTPS RPC connections, and retained nosniff/referrer/permissions headers. **`connect-src https:` intentionally permits arbitrary HTTPS for user-supplied RPCs. It is not a network destination allowlist or an exfiltration boundary.** The artwork code enforces its narrower API-origin policy separately; `img-src` restricts images to self/data/blob. The RPC list is a reviewed HTTP candidate list, not a runtime Chainlist download. WSS aliases need a separate WebSocket transport and cannot be supplied to `http()`. Seven former inline style attributes use equivalent external classes; a tiny self-hosted `theme.js` applies the saved theme before paint. All **twelve** scripts, including lazy modules, count toward the gzip budget. The local static server applies the same headers for mocked-browser CSP checks. Lighthouse/remaining Phase 7 work is deferred.
-
-Use a **Pages** Git integration, not Workers Builds:
-
-| Setting | Value |
-|---|---|
-| Build command | `npm run build` |
-| Output directory | `dist` |
-| Root | Repository root |
-| Build variables | None required |
-
-Pages publishes `dist/` automatically on branch push. `dist/` is generated, ignored and **not committed**; the build checks source/output/header parity. Keep the existing Pages project and `wrangler.toml`/`thewheel` names unchanged. No manual deployment or merge is part of this fix pack.
-
-## Holder-first navigation
-
-- **Squeeks · Art · Network · Info**, with URL hashes (`#sepolia-v9/squeeks`, `#sepolia-v6/info/trust`, etc.). New sessions default to Network; connecting a wallet or viewing an address selects Squeeks. Explicit hashes survive reload and browser history. Legacy `selectTab('holdings'|'overview'|'agent')` API calls remain display-only aliases.
-- A single visible verification badge opens **Info › Trust**. The header address appears only in the wallet button; its menu shows the connected owner’s snapshot ETH balance on both profiles, plus copy address, Activity with a pending count, and disconnect. Watching a different address never replaces the connected owner’s balance; unavailable balances read Unknown. Saved Activity remains reachable without reconnecting, including on Mainnet, where the menu cannot connect or submit.
-- **Settings**: browser-local custom HTTPS RPC save/test/remove, IndexedDB log-cache clear, confirmed Activity clear, and light/dark/system theme. RPC tests show chainId/block but do not establish two-peer trust.
-- **Info**: How it works, Trust, Status, Contracts, Developers (existing console, tools.json and local MCP snippet), About. Trust lists snapshot hash peers as Agreed and unsampled configured peers as Not sampled; it does not invent per-read provenance.
-- Existing claim/merge inputs and BURN/simulation/signing behavior are unchanged. Selection actions, merge planner and per-Squeek pages are Phase 4, not implemented here. v9 staking actions are integrated; policy reads follow the active profile.
-- The Genesis referral link now lives in Info › About, unchanged. Hero, introductory/section eyebrows, network strip and action/capability cards on Squeeks are removed.
-
-## Unsigned CLI and MCP
-
-```bash
-node src/cli.js --help
-npm run verify
-npm run status
-npm run checkpoint -- --from 0xCALLER
-npm run claim -- --owner 0xOWNER --ids 1,2
-npm run merge -- --owner 0xOWNER --survivor 1 --donor 2 --confirm BURN-2
-npm run mcp
-```
-
-Replace the illustrative addresses with real public addresses. Owner actions return unsigned calls for the owner's wallet. No `--live`, private-key option, unattended owner automation or `mine` command exists.
-
-MCP defaults to `SQUEEK_PROFILE=sepolia-v9`; every read/prepare tool accepts `profile: "sepolia-v6" | "sepolia-v9"`. Shared names/descriptions/schemas live only in `sdk/tools.js`, published as `web/tools.json` and checked against MCP/browser metadata. Browser tools use `window.squeek.callTool(name, args)`. MCP and SDK are read/prepare only. Browser-only `squeek_request_*` tools can ask the human wallet after simulation, via `window.squeek` or same-origin postMessage; merges require BURN acknowledgement and agents never see a private key. Cross-origin postMessage is a narrower public-only surface: only `squeek_network_status`, `squeek_verify`, `squeek_wallet_status`, `squeek_merge_plan`, and `squeek_art` are allowed. **Every call requires an explicit `owner`**, including network/art reads. Omitted `profile` uses the static default, not the active/saved profile. Calls use fresh public-RPC adapters and memory-only discovery, never the connected/inspected address, wallet/provider, custom RPC or session caches/diagnostics. Prepare/preview/request tools are refused, opaque origins get no reply, and replies target the exact sender origin. Public on-chain balances for an explicitly supplied owner are not wallet/session state. The CLI commands above remain v6 helpers.
-
-For an operator-run checkpoint keeper, read `keeper/checkpoint.mjs`: both `CHECKPOINT_KEEPER_ENABLED=true` and `--submit-checkpoint` are required, with a dedicated low-value keeper account supplied outside the app. Its target, calldata and value are fixed/checked; it is not exposed through CLI/MCP and is not enabled by any package script. Never supply an owner key.
-
-## Repository layout
-
-- `sdk/`: pinned record, snapshot/RPC trust, verification cache, discovery, unsigned previews, shared tool schemas.
-- `web/`: light-default UI, saved theme, local fonts, telemetry and persistent transaction Activity.
-- `mcp/`: local stdio, read/prepare-only.
-- `src/`: unsigned public owner CLI and compatibility facades.
-- `keeper/`: separate checkpoint-only opt-in script.
-- `test/`: offline and Playwright suites.
-- `build.mjs`, `wrangler.toml`: existing static build/Pages architecture, preserved.
-
-Independent community software. Sepolia testnet only; not investment advice.
-
-## Manual-preview follow-up
-
-The v6 Squeeks live count now reads the existing official NFT ABI's `totalSupply()` in the same snapshot multicall as network state. The network amount is labelled **Minted by v6 mining** (`mining.state().minted`) or **Issued by v9 checkpoints** (`issuance.state().minted`). v9 token `totalSupply()` remains a separate SDK value; it is not the displayed issuance amount. The processed issuance round is shown, because Core settlement advancing does not itself checkpoint issuance. Both states are reread at every verified snapshot, not frozen to the dated identity export. Round counts use “0 rounds”, “1 round”, etc.
-
-Banners are positioned below the measured header, including scrolling/resizing. Availability failures show **RPC unavailable. Verified reads need two independent Sepolia peers. Nothing was signed.** Trust failures still stop with a red banner. Redacted failure scope/cause/attempts are available locally at `window.squeek.state.lastReadFailure`; cross-origin tools cannot access it. Successful verified reads clear a stale read-error banner without clearing unrelated transaction warnings. Refreshes coalesce per generation, and failed wallet reads no longer immediately enqueue another network snapshot.
-
-The exact original nested banner error from the user's `19370e3` session was not captured. Earlier console evidence shows 429/CORS/connection failures, not a demonstrated contract mismatch. Offline reproductions cover those availability paths, stale-error recovery, and a separately injected trust mismatch; they are not live reproduction/qualification.
-
-### Security review follow-up (offline / mocked only)
-
-Cancellation deadlines use a shared feature-detected helper; browsers without `AbortSignal.any` or `AbortSignal.timeout` use AbortController/listener/timer composition. Callers dispose scoped resources after the response body is consumed, including errors. Deadline expiry remains an availability error, not a corrupt identity response.
-
-Cancel stops awaiting a wallet send and releases navigation/read busy state; it cannot close the wallet popup or cancel a broadcast. A separate provider-scoped outstanding-request lock prevents another transaction prompt until the real provider request settles, including preflight calls. A late hash is persisted in Activity, followed through receipt resolution, and refreshes holdings only for the currently matching profile/account. Close or reject the original prompt in your wallet before submitting again. Approval reviews display the SDK warning, exact spender, amount or NFT scope; collection-wide approval is explicit. Re-simulation still runs before each prompt and changed reviewed terms stop.
-
-CI rebuilds and rejects drift in committed `web/bundle.js` / `web/tools.json` before tests (which themselves rebuild). Scope, synthetic evidence and remaining limitations: [security review follow-up](docs/audit/security-review-followup.md). No live gate qualification is implied.
+History, per-run measurements and review reports live in Git/PR descriptions, not current documentation.

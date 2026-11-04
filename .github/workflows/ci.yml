@@ -28,5 +28,6 @@ jobs:
         if: always()
         with:
           name: browser-test-results
-          path: test-results/
+          path: artifacts/
+          retention-days: 7
           if-no-files-found: ignore

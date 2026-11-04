@@ -51,7 +51,7 @@ test('offline browser: Wheelhouse identity, default/saved themes, mobile visibil
   await page.locator('.skip-link').focus();
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('main-content')).toBeInViewport();
-  await page.screenshot({ path: 'test-results/wheelhouse-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'artifacts/screenshots/wheelhouse-mobile.png', fullPage: true });
   await page.evaluate(() => window.squeek.destroy());
 });
 
