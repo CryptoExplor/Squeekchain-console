@@ -119,6 +119,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     },
   };
 
+  let networkRequest=null;
   const wallet=createWallet({win,storage:store,pick:pickWallet});
   const state = {
     profileKey: profileFromHash(win.location.hash) ?? profileInput(store.get("squeekchain:profile")),
@@ -135,7 +136,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     holderReadState: 'idle',
     plan: null,
     art: new Map(),
-    get walletPromptPending(){return outstandingPrompts.has(wallet.provider());},
+    get walletPromptPending(){return outstandingPrompts.has(wallet.provider())||Boolean(networkRequest&&networkRequest.p===wallet.provider());},
     busy: false, // transaction signing ONLY; never used to gate reads or navigation
     receipts: [],
     artifactsLoaded: false,
@@ -363,7 +364,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('profile-choice').textContent = `v6: ${profileCountLabel(state.profileCounts['sepolia-v6'])}. v9: ${profileCountLabel(state.profileCounts['sepolia-v9'])}. Choose either profile in the selector.`;
   }
 
-  async function switchProfile(profileKey, { preserveWallet = false } = {}) {
+  async function switchProfile(profileKey, { preserveWallet = false, syncWallet = false } = {}) {
     if(getProfile(profileKey).key!==state.profileKey)pendingSwitchNotice();
     $('fee-rose').classList.add('hidden');
     $('claim-update').classList.add('hidden');
@@ -413,6 +414,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     state.adapter = buildAdapter(state.profileKey);
     renderToolOptions();
     void refreshTelemetry();
+    const selectedProfile=state.profileKey;
+    if(syncWallet)await requestProfileChain();
+    if(selectedProfile!==state.profileKey||destroyed)return;
     if (!state.adapter) {
       if (state.busy) showBanner("A prior wallet request may still complete; check that wallet before retrying.", "warn");
       return;
@@ -536,35 +540,52 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   // ── wallet ────────────────────────────────────────────────────────────────
-  async function ensureChain(p, profileKey = state.profileKey) {
+  async function ensureChain(p, profileKey = state.profileKey, currentRequest = () => true) {
     const profile = getProfile(profileKey);
     const current = await p.request({ method: "eth_chainId" });
+    if (!currentRequest()) return;
     if (String(current).toLowerCase() === profile.hexChainId) return;
     try {
       await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: profile.hexChainId }] });
     } catch (err) {
-      if (err?.code === 4902 || /Unrecognized chain/i.test(err?.message ?? "")) {
+      if ((err?.code === 4902 || /Unrecognized chain/i.test(err?.message ?? "")) && profile.chainId === CHAIN.id) {
+        if(!currentRequest())return;
         await p.request({
           method: "wallet_addEthereumChain",
           params: [
             {
               chainId: profile.hexChainId,
-              chainName: profile.chainId === CHAIN.id ? "Sepolia" : "Ethereum",
+              chainName: "Sepolia",
               nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
               rpcUrls: CHAIN.rpcUrls,
               blockExplorerUrls: [EXPLORER],
             },
           ],
         });
+        if(!currentRequest())return;
+        await p.request({method:'wallet_switchEthereumChain',params:[{chainId:profile.hexChainId}]});
       } else throw err;
     }
+    if(currentRequest()&&String(await p.request({method:'eth_chainId'})).toLowerCase()!==profile.hexChainId)throw new Error('Wallet network did not change. Try switching again.');
   }
 
   function watching(){return Boolean(state.watchOnly||state.inspected&&state.inspected.toLowerCase()!==state.account?.toLowerCase());}
   let walletWork=Promise.resolve();
+  // Only explicit local Connect/profile/menu actions may open a network prompt.
+  async function requestProfileChain(){
+    const key=state.profileKey,profile=getProfile(key),p=provider(),owner=state.account;
+    if(!p||!owner||watching()||state.chainId===profile.chainId)return;
+    if(networkRequest||state.busy||state.walletPromptPending){toast('Finish the open wallet request before switching networks.','warn');return;}
+    const sameWallet=()=>!destroyed&&provider()===p&&state.account?.toLowerCase()===owner.toLowerCase();
+    const currentRequest=()=>sameWallet()&&state.profileKey===key&&!watching();
+    networkRequest={key,p};renderWalletChip();renderCheckpointGate();
+    try{await ensureChain(p,key,currentRequest);if(sameWallet())await wallet.refresh();}
+    catch(error){if(currentRequest())showBanner(error?.code===4001?'Network switch cancelled. Your wallet is still connected.':errorMessage(error),'warn');}
+    finally{networkRequest=null;if(!destroyed){renderWalletChip();renderCheckpointGate();renderHolder(state.status,state.plan);}}
+  }
   async function connect(){
     if(!getProfile(state.profileKey).addresses){showBanner('Mainnet is not deployed. Select Sepolia to connect and inspect.','warn');return null;}
-    try{await wallet.connect();await walletWork;selectTab(holderRoute(win.location.hash)?currentRoute():'squeeks');return state.account;}catch(error){showBanner(errorMessage(error),'bad');return null;}
+    try{await wallet.connect();await requestProfileChain();await walletWork;selectTab(holderRoute(win.location.hash)?currentRoute():'squeeks');return state.account;}catch(error){showBanner(errorMessage(error),'bad');return null;}
   }
   async function loadWalletSession(){
     const load=captureLoad(),account=state.account;
@@ -587,6 +608,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(previous.account&&next.account?.toLowerCase()!==previous.account.toLowerCase())pendingSwitchNotice();
     if(!wasWatch)state.inspected=next.account;
     renderHolder(null);renderProfileOptions();renderCheckpointGate();renderActivity(activity.list());
+    if(!getProfile(state.profileKey).addresses)return;
     if(next.status==='wrong-chain'){showBanner('Wrong chain: Sepolia required. Actions stopped.','warn');return;}
     clearReadBanner();
     if(next.account){hideBanner();walletWork=loadWalletSession();}
@@ -602,6 +624,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.connect.textContent = wallet.get().status==='connecting'?'Connecting…':state.account ? `${short(state.account)} ▾` : hasMenu ? 'Activity ▾' : 'Connect wallet';
     el.connect.setAttribute('aria-label', hasMenu ? 'Wallet menu' : 'Connect wallet');
     $('btn-menu-connect').classList.toggle('hidden', Boolean(state.account) || !deployed);
+    const target=getProfile(state.profileKey);
+    $('btn-switch-chain').classList.toggle('hidden',!state.account||watching()||state.chainId===target.chainId);
+    $('btn-switch-chain').textContent=target.chainId===1?'Switch to Mainnet':'Switch to Sepolia';
+    $('btn-switch-chain').disabled=Boolean(networkRequest);
     $('btn-copy-address').classList.toggle('hidden', !state.account);
     $('btn-disconnect').classList.toggle('hidden', !state.account);
     el.connect.setAttribute('aria-expanded', String(!$('wallet-menu').classList.contains('hidden')));
@@ -1297,7 +1323,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   doc.addEventListener('click', onDocumentClick);
   doc.addEventListener('keydown', onOverlayKey);
   doc.addEventListener('focusin', onSheetFocus);
-  el.profileSelect.onchange = () => switchProfile(el.profileSelect.value, { preserveWallet: true });
+  el.profileSelect.onchange = () => switchProfile(el.profileSelect.value, { preserveWallet: true, syncWallet: true });
   el.connect.onclick = async () => {
     if (!state.account && !Number(el.connect.dataset.activityCount) && getProfile(state.profileKey).addresses) return viewTask(connect);
     const open = $('wallet-menu').classList.contains('hidden');
@@ -1332,6 +1358,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   });
   el.holder.refresh.onclick = () => viewTask(()=>refreshWallet({force:true}));
   $('holder-retry').onclick = () => viewTask(()=>refreshWallet({force:true}));
+  $('btn-switch-chain').onclick = () => {closeWalletMenu();return viewTask(requestProfileChain);};
   el.holder.owner.onclick=async()=>{const address=el.holder.owner.title;if(!address)return;try{await win.navigator.clipboard.writeText(address);toast('Address copied','ok');}catch{toast('Clipboard unavailable','warn');}};
   $('btn-exit-watch').onclick = () => viewTask(async()=>{
     state.watchOnly=false;activeWatchRoute=null;state.inspected=state.account;resetLoad();el.holder.watchInput.value='';renderHolder(null);win.history.pushState(null,'',`#${state.profileKey}/squeeks`);selectTab('squeeks');
