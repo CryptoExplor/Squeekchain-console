@@ -113,7 +113,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
   // Every final set (cache/logs/API) is confirmed onchain at this snapshot.
   const discoverTokenIds = owner => discoverOwnedIds({ client, snapshot: activeSnapshot,
     nft: addr.nft, abi: nftAbi, owner, startBlock: DEPLOYMENT.nftStartBlock,
-    namespace: DEPLOYMENT.release, store: discoveryCache, signal });
+    namespace: DEPLOYMENT.release+':chain-only', store: discoveryCache, signal, accountSource:null });
 
   const sortIds = (ids) => [...new Set(ids.map(String))].map(BigInt).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 

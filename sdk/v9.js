@@ -1,4 +1,3 @@
-import { accountTokenIds } from './account-discovery.js';
 import { unstakeQuoteError } from './fee-error.js';
 import { ACTION_REASONS, blocked } from './capabilities.js';
 /** Equal-profile v9 adapter. Expected identities are dated pins, never API authority. */
@@ -18,7 +17,7 @@ export { parseSqueekMetadata } from './metadata.js';
 const same = (a,b) => String(a).toLowerCase() === String(b).toLowerCase();
 const positive = value => { if (!/^\d+$/.test(String(value)) || BigInt(value) <= 0n || BigInt(value) >= 2n ** 256n) throw new Error('Positive uint256 required'); return BigInt(value); };
 const idsInput = values => { if (!Array.isArray(values) || !values.length || values.length > 1000) throw new Error('Supply token IDs'); const ids = values.map(positive); if (new Set(ids.map(String)).size !== ids.length) throw new Error('Duplicate token IDs'); return ids.sort((a,b)=>a<b?-1:1); };
-export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpcContext, signal, chainCache, discoveryCache = createDiscoveryStore(), accountSource = accountTokenIds, verificationCache } = {}) {
+export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpcContext, signal, chainCache, discoveryCache = createDiscoveryStore(), verificationCache } = {}) {
   const profile = getProfile(profileKey);
   if (profile.abiSet !== 'v9' || !profile.addresses) throw new Error('v9 profile required');
   const addr = Object.fromEntries(Object.entries(profile.addresses).map(([k,v])=>[k,getAddress(v.toLowerCase())]));
@@ -105,7 +104,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
   }
 
 
-  const idsOwned = owner => discoverOwnedIds({ client, snapshot: activeSnapshot, nft: addr.nft, abi: nft9Abi, owner, startBlock: profile.startBlock, namespace: profile.identities.release, store: discoveryCache, signal });
+  const idsOwned = owner => discoverOwnedIds({ client, snapshot: activeSnapshot, nft: addr.nft, abi: nft9Abi, owner, startBlock: profile.startBlock, namespace: profile.identities.release+':chain-only', store: discoveryCache, signal, accountSource:null });
   async function walletStatus(owner) {
     owner = getAddress(owner.toLowerCase());
     const powerRead=read('staking',staking9Abi,'accountPower',[owner]);
