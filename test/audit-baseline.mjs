@@ -1,7 +1,9 @@
-// Phase 0 characterization, not production or live-chain qualification.
-// Uses a dated official-source excerpt. Never update runtime deployment configuration from API fixtures.
+// Offline deployment/ABI/tool characterization; not live qualification.
+// Published v6 constants and the byte-stable v9 pin export, never API observations.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {createHash} from 'node:crypto';
+import {DEPLOYMENT,SQUEEKS_POLICY} from '../sdk/record.js';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { PROFILES } from '../sdk/deployments.js';
@@ -10,27 +12,17 @@ import { createSqueekchain } from '../sdk/squeekchain.js';
 import { TOOL_SPECS, buildManifest } from '../sdk/tools.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const evidence = JSON.parse(fs.readFileSync(new URL('../docs/audit/observations-2026-11-02.json', import.meta.url), 'utf8'));
-const lower = value => String(value).toLowerCase();
-const record = evidence.publishedRecord;
-const documented = PROFILES['sepolia-v6'];
-
-assert.equal(documented.chainId, record.chainId);
-for (const key of ['core', 'mining', 'nft', 'token']) {
-  assert.equal(lower(documented.addresses[key]), lower(record.addresses[key]), `documented ${key} matches the dated record excerpt`);
-}
-assert.equal(record.collection, 0);
-assert.equal(record.maximumLevel, 10);
-assert.equal(record.implementationVersions.mining, 6);
-assert.notEqual(lower(evidence.apiCore.core), lower(record.addresses.core));
-assert.notEqual(evidence.apiEconomy.release, record.release);
-for (const key of ['core', 'mining', 'staking', 'nft', 'token', 'launch']) {
-  assert.equal(lower(PROFILES['sepolia-v9'].addresses[key]), lower(evidence.apiEconomy.addresses[key]), `experimental ${key} matches historical API observation only`);
-}
-assert.equal(evidence.apiGenesis.status, 'unavailable');
-assert.equal(evidence.apiGenesis.reason, 'launch_unconfigured');
-assert.equal('inventory' in evidence.apiGenesis, false, 'unconfigured does not mean zero inventory');
-console.log('PASS audit evidence: documented profile vs dated record; historical API mismatch is explicit; Genesis unknown');
+const pinBytes=fs.readFileSync(new URL('../docs/pins/v9-identity-2026-11-03.json',import.meta.url));
+assert.equal(createHash('sha256').update(pinBytes).digest('hex'),'fbedcbe2979cf650ff42b1e0f35c679b3afce08da4d13f7b21efe9361e286979','identity export must remain byte-identical');
+const evidence=JSON.parse(pinBytes),lower=value=>String(value).toLowerCase(),documented=PROFILES['sepolia-v6'];
+const published={core:'0x74665dAecA35A2303e767E76a2FF1FB6F93e119f',mining:'0x3beE588fC20dE788Bac17d33b41Da7346cb27EC4',nft:'0x0eAF3E0d40A0a8E5a6Ac030b2459E9FB0B7905c6',token:'0x6872bfa5ccc3e9e440c6c16e5ffdabb8dba4cc76'};
+assert.equal(documented.chainId,11155111);
+for(const [key,address] of Object.entries(published))assert.equal(lower(documented.addresses[key]),lower(address),'published v6 '+key);
+assert.equal(DEPLOYMENT.versions.mining,6);assert.equal(SQUEEKS_POLICY.length,10);
+assert.notEqual(lower(documented.addresses.core),lower(PROFILES['sepolia-v9'].addresses.core));
+assert.equal(evidence.peersAgree,true);
+for(const peer of Object.values(evidence.peers))for(const [contract,pin] of Object.entries({core:'core',mining:'issuance',staking:'staking',nft:'nft',token:'token',launch:'launch'}))assert.equal(lower(PROFILES['sepolia-v9'].addresses[contract]),lower(peer[pin].address),'v9 '+contract+' matches independent pin export');
+console.log('PASS published v6 constants, both-peer v9 pin provenance and byte-identical identity SHA-256');
 
 // Local parity only. A complete remote ABI comparison remains an audit exit gate.
 for (const [name, exported] of Object.entries({ SqueekCore: coreAbi, SqueekMining: miningAbi, SqueekNFT: nftAbi, SqueekToken: tokenAbi })) {

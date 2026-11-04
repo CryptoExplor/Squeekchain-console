@@ -25,7 +25,7 @@ assert.doesNotMatch(workflow, /continue-on-error|secrets\.|PRIVATE_KEY|KEEPER_|e
 assert.match(workflow, /contents: read/);
 assert.match(workflow, /persist-credentials: false/);
 assert.match(workflow, /if: always\(\)/);
-for (const directory of ['playwright-report/', 'test-results/', 'live-qualification/']) assert.ok(workflow.includes(directory));
+assert.ok(workflow.includes('path: artifacts/'));assert.match(workflow,/retention-days: 7/);
 assert.ok(config.reporter.some(([name]) => name === 'html'));
 assert.ok(config.reporter.some(([name]) => name === './test/live-reporter.mjs'));
 assert.equal(config.testMatch, '**/live.spec.mjs');
@@ -37,7 +37,7 @@ const originalLive = process.env.LIVE_SOURCE_COMMIT, originalGithub = process.en
 try {
   process.env.GITHUB_SHA = 'b'.repeat(40);
   process.env.LIVE_SOURCE_COMMIT = 'a'.repeat(40);
-  const reporter = new LiveReporter({ outputFile: '.cache/live-reporter-tests/pr-head.json' });
+  const reporter = new LiveReporter({ outputFile: 'artifacts/live-reporter-tests/pr-head.json' });
   reporter.onBegin({}, { allTests: () => [{}] });
   reporter.onError(new Error('Synthetic setup failure; no live requests'));
   await reporter.onEnd({ status: 'failed' });
@@ -49,7 +49,7 @@ try {
   if (originalGithub === undefined) delete process.env.GITHUB_SHA; else process.env.GITHUB_SHA = originalGithub;
 }
 
-const directory = path.resolve('.cache/live-reporter-tests');
+const directory = path.resolve('artifacts/live-reporter-tests');
 fs.mkdirSync(directory, { recursive: true });
 const rpc = { endpoints: [{ url: 'https://example.invalid', error: 'Failed to fetch' }], error: 'Need at least two public CORS Sepolia RPCs' };
 for (const scenario of [

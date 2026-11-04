@@ -9,7 +9,7 @@ async function capture(page, testInfo, name, locator = null, fullPage = true) {
   const image = locator ? await locator.screenshot({ animations: 'disabled' }) : await page.screenshot({ fullPage, animations: 'disabled' });
   await testInfo.attach(name, { body: image, contentType: 'image/png' });
   fs.writeFileSync(testInfo.outputPath(name), image);
-  if (process.env.UPDATE_SCREENSHOTS === '1') fs.writeFileSync(path.resolve('docs/screenshots', name), image);
+  fs.mkdirSync('artifacts/screenshots',{recursive:true});fs.writeFileSync(path.resolve('artifacts/screenshots', name), image);
 }
 
 for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (const view of ['squeeks', 'network', 'info', 'settings', 'merge', 'mainnet']) {

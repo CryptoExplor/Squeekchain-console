@@ -118,7 +118,7 @@ const data=encodeErrorResult({abi:staking9Abi,errorName:'FeeLimitExceeded',args:
 for(const error of [{cause:{data}},{code:-32000,data:{originalError:{data}}},{cause:{data:{errorName:'FeeLimitExceeded',args:[3n,2n]}}}])assert.deepEqual(feeLimitExceeded(error),{reasonCode:'feeRose',reason:'Fee rose',fee:'3',maxFee:'2'});
 assert.equal(feeLimitExceeded(new Error('FeeLimitExceeded text alone is not decoded evidence')),null);
 const cyclic={};cyclic.cause=cyclic;assert.equal(feeLimitExceeded(cyclic),null);
-const evidence=JSON.parse(fs.readFileSync('docs/audit/v9-identity-2026-11-03.json'));
+const evidence=JSON.parse(fs.readFileSync('docs/pins/v9-identity-2026-11-03.json'));
 const normalize=value=>JSON.stringify(value,(_key,item)=>['string','number','bigint'].includes(typeof item)?String(item).toLowerCase():item);
 for(const peerPins of Object.values(evidence.peers))for(const [name,pin] of Object.entries(profile.identities.pins)) {
   for(const [key,value] of Object.entries(pin)) {

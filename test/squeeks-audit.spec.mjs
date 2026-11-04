@@ -15,5 +15,5 @@ for(const theme of ['light','dark'])for(const profile of ['v6','v9'])for(const w
  if(mode==='disconnected')await expect(page.locator('#holder-connect')).toBeVisible();
  if(mode==='watch')for(const button of await page.locator('[data-action]').all())await expect(button).toBeDisabled();
  for(const image of await page.locator('#squeek-cards img').all()){await image.scrollIntoViewIfNeeded();await expect(image).toHaveAttribute('src',/^(data:|blob:)/);}await page.evaluate(()=>scrollTo(0,0));expect(errors).toEqual([]);}
- await page.screenshot({path:`docs/screenshots/squeeks-${phase}-${theme}-${profile}-${mode}-${width}.png`,fullPage:true});await page.evaluate(()=>squeek.destroy());
+ await page.screenshot({path:`artifacts/screenshots/squeeks-${phase}-${theme}-${profile}-${mode}-${width}.png`,fullPage:true});await page.evaluate(()=>squeek.destroy());
 });

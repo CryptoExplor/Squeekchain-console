@@ -28,7 +28,7 @@ for(const theme of ['light','dark'])for(const width of [1280,390])test(`non-owne
  await expect(page.getByTestId('modal-body')).toContainText('Recipient differs from the owner');
  expect(await details.locator('dd').evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(await page.evaluate(()=>v9.sends)).toBe(0);
- await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({animations:'disabled'});const name=`claim-recipient-${theme}-${width}.png`;await info.attach(name,{body:image,contentType:'image/png'});if(process.env.UPDATE_SCREENSHOTS==='1')fs.writeFileSync('docs/screenshots/'+name,image);
+ await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({animations:'disabled'});const name=`claim-recipient-${theme}-${width}.png`;await info.attach(name,{body:image,contentType:'image/png'});fs.mkdirSync('artifacts/screenshots',{recursive:true});fs.writeFileSync('artifacts/screenshots/'+name,image);
  await page.getByTestId('btn-modal-cancel').click();await page.evaluate(()=>squeek.destroy());
 });
 const expired=encodeErrorResult({abi:staking9Abi,errorName:'DeadlineExpired',args:[]});

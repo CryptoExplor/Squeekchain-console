@@ -1,9 +1,0 @@
-{
-  "operation": "connect-only dual-profile inventory",
-  "fixture": "v6 wallet 2 / v9 wallet 0 / v9 NFT power 0",
-  "cold": 10,
-  "warm": 8,
-  "discoveryRequests": 0,
-  "apiRequests": 0,
-  "finalSnapshotGuard": true
-}

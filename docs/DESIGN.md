@@ -1,65 +1,45 @@
-# Wheelhouse design contract
+# Design contract
 
-Browser-first Squeekchain holder utility. Preserve `sdk/`, `mcp/`, `src/`, `test/`, `build.mjs`, `wrangler.toml`; no architecture restart or RPC backend. The existing Cloudflare Pages GitHub integration supplies preview URLs; `thewheel` workflow, repository name and `wrangler.toml` names are unchanged. Hosting is **Cloudflare Pages only**; paused Vercel configuration is removed.
+Wheelhouse is a holder-first utility, not a trading dashboard. Keep the static browser/SDK/MCP architecture and the equal Sepolia profiles. Do not introduce a backend, redesign the application or change deployment authority as a documentation task.
 
-## Equal profiles
+## Tokens
 
-**Sepolia v6 / Sepolia v9** are equal user choices. Canonical keys: `sepolia-v6` / `sepolia-v9`. Legacy `sepolia` migrates only at hash, saved-storage and MCP input boundaries; adapters and caches never receive it. Default v9, then saved choice. Hashes include profile. Connect probes both collection balances and v9 NFT power in one snapshot multicall: one held selects it, both held shows counts/choice, neither retains selection; Unknown never silently selects another profile. Only snapshot balance/power, not a hint-derived count, decides holdings. Wallet and staked counts are separate; wallet API hints need a snapshot balance count and owner proof. Staked inventory requires canonical indexed history plus snapshot depositor/custody confirmation; an API subset is not completeness proof. Proven zero NFT power skips deposited-ID discovery and reports zero staked, with the final snapshot guard intact. Otherwise unavailable history says Staked (Unknown). Proven zero NFT power also skips staking history in the v9 wallet SDK. Mainnet is Not deployed and routes to the static Info panel, never to a selected hidden deployment panel.
+`web/styles.css` is the source of exact token values. Use its warm neutral surfaces, gold primary actions, blue focus/links, shared radii and spacing. Light is the default; saved light/dark/system choices take precedence. Fonts are local Barlow Condensed (headings), Quicksand (body) and IBM Plex Mono (addresses/data). No remote font dependency.
 
-Every operation uses the same fail-closed chain/snapshot/identity/slot/runtime/layout/version/wiring protection. Verification or stopped badges reflect runtime checks, not version policy. v9 expected identities come from the exact dated two-peer export, not an API configuration feed. Official-dApp-derived `sdk/abi-v9.js` is unchanged. v9 identity storage/code is batched once per independent peer, with checked single-request fallback for unsupported batches and transient HTTP gateways, never malformed successful data. 401/429/503 do not fan out; HTTP status is retained. Only code hashes survive profile switches: slots, bindings/wiring, versions/layouts and paused state are fresh each v9 snapshot; cache commits follow the final guard. Staking admin is a storage-slot check, not an invented ABI method; staking.launch zero is normal.
+Core tokens (dark theme overrides the same names):
 
-## Frontend baseline (restored 2026-11-04)
+| Token | Light | Dark |
+| --- | --- | --- |
+| `--sqk-bg` / `--sqk-panel` | `#fafaf7` / `#ffffff` | `#10120f` / `#141418` |
+| `--sqk-ink` / `--sqk-line` | `#292b26` / `#dedfd7` | `#edeee7` / `#353b30` |
+| `--sqk-gold-bright` / `--sqk-blue` | `#d9a017` / `#4460cf` | `#ffc048` / `#9aafff` |
+| Panel / control radius | 10px / 4px | Same |
+| Spacing scale | 8 / 16 / 20 / 24 / 40px | Same |
 
-The user explicitly superseded the subtract-pass presentation. `web/index.html`, `web/styles.css`, `web/components.js` and the UI/copy portions of `web/app.js` use deployed commit **b7056836cec731a7165ba48e9d571dee9c150524**, identical in `14fe6e5`, as their baseline ([original Pages preview](https://1cfe468b.wheel-house.pages.dev)). This is a new additive restoration commit, not a Git revert.
+Header controls: 36px height, shared radius, 8px gaps, 18px SVG glyphs. Body/dialog controls: at least 44px targets. Use visible focus, sufficient contrast in both themes and reduced-motion support. Do not cover the wallet/header with banners; position notices below its measured bottom edge.
 
-Preserve the baseline brand subtitle, Network at a glance heading, original checkpoint/claim/merge-plan labels and helper text, gallery introduction, Activity explanation, Developers console, Settings labels, footer tagline and one non-affiliation line. Trust uses the baseline definition-list layout plus the live seven-item checklist. Baseline table columns show next merge and deposited yes/no; the SDK's confirmed wallet/staked custody data and merge rules are unchanged. The original CSS is an unchanged prefix; only rules needed for v9 actions, quote details and contextual states are appended. Components differ only by additive structured review details (unstake fields and warning-styled full-address claim recipients). Seven legacy inline layout styles are equivalent external classes for strict CSP; the baseline normalizer permits only those substitutions and harmless attribute ordering.
+## Layout
 
-Layer only functional later updates: canonical profiles/inputs; equal-profile wallet + NFT-power suggestions and confirmed wallet/staked counts; v9 actions/approvals; shared tool registry and nine human-wallet requests; identity batching/cache; stalled rewards; Viewing/Exit; Trust checks; conditional pending warning; Developers wallet-popup permissions; decoded fee-rise re-quote and mixed-custody remedy. Developers and Settings remain lazy. The existing conditional custom-RPC privacy warning is retained alongside the baseline browser-local warning label.
+- One verification badge opens Trust. One address-only wallet button opens ETH balance, network-switch retry, copy, Activity and disconnect.
+- Squeeks is the main holder workspace: separate NFT grid and SQK actions. Wallet/Deposited filters share verified counts. Avoid nested border cards and an action dropdown.
+- Selection reveals appropriate action/review controls; empty portfolios hide irrelevant actions. Mobile stacks at 390px with full-width controls and no horizontal overflow.
+- Token pages, merge paths and address links retain the selected profile. Watch mode has a contextual Viewing chip and Exit, independent of connected wallet identity. Watch actions cannot sign, even for the connected owner's address.
+- The merge planner explains readiness/custody/cooldown and selects only the next step. Keep permanent burn review separate from planning.
+- Network uses a compact deduplicated feed (five entries plus More), a single ACTIVE line and a Checking state. Distinguish settlement, issuance and provisional measurements.
+- Developers and Settings remain lazy-loaded. Put raw technical details behind a collapsed section with Copy JSON; ordinary reviews use human labels.
 
-Never restore obsolete version restrictions. The profile badge reflects live state (Verified / Mismatch: stop / Not deployed; Checking while loading), not a version-policy Read-only label. Both profiles use guarded actions; Mainnet alone is not deployed. The watch placeholder is `0x… (view only)`. Active-profile policy replaces static v6-only explanatory claims. Unknown values, stopped states, human review and permanent-burn warnings remain visible.
+## Subtract and copy rules
 
-`test/frontend-baseline.mjs` compares selected baseline DOM sections, CSS/component hashes and original table columns against the committed source fixture. It also executes the v9 restriction-copy `git grep` gate and checks functional additions/lazy imports. This fixture works in shallow CI clones without fetching historical Git objects. Browser coverage includes both 1280px and 390px layouts, live badge transitions and the original race/Unknown safety assertions.
+Subtract before adding: remove duplication, decorative panels, redundant helpers and internal jargon. Do not remove a safety warning or replace a known limitation with optimistic copy. Use one non-affiliation footer.
 
-## Safety and agents
+Say **Squeeks**, **SQK**, **Keep**, **Burn**, **SQK issued**, **Viewing**, **Unknown**, **Checking**, **Fee rose** and **Quote expired** where applicable. Internal release IDs, storage slots, digests, method names and revisions belong only in Info/Developers, not ordinary labels. The read-only address placeholder is `0x… (view only)`.
 
-Both wallet and staked merges require exact BURN-<donorId> before construction/simulation. The original burn-confirmation input and accessible permanent-burn acknowledgement remain; the dialog explains that the donor is irreversibly burned before construction/simulation. Fresh simulation precedes every wallet prompt. Claims re-preview actual payout and recipient. v9 claim/claimAndStake accept equal or larger fresh payouts and display increases before the wallet; lower payouts or recipient changes stop. v6 retains strict payout equality. A non-owner recipient gets a full-address Recipient warning row. Unstake uses a labelled amount/fee-maxFee/net/deadline/gas review in local time, and reuses the reviewed cap/deadline on re-preview. The cap is the exact quoted fee, never padded. A decoded simulation/wallet FeeLimitExceeded shows Fee rose; DeadlineExpired shows Quote expired. Both show a new quote and exactly one Re-quote button, with no automatic wallet retry. Mixed custody names the staked token and offers withdrawal or depositing the other NFT first. Unknown holdings disable Claim/Checkpoint; a known-zero v9 NFT count still allows SQK-only claims. The single registry in `sdk/tools.js` drives generated JSON, local stdio MCP and browser tools. MCP/SDK read or prepare unsigned calls. Browser-only request tools can open a human wallet popup after simulation; cross-origin postMessage permits only five public reads with an explicit owner on every call, using isolated public-RPC adapters, a static default profile and memory-only discovery. It never uses/discloses wallet, inspected address, custom RPC or session defaults. Preview/prepare/request tools and opaque-origin replies are refused. Profile/owner/watch guards and typed BURN confirmation apply. Agents never see a private key.
+Loading, Unavailable/Retry, wrong chain, empty portfolio and disconnected are distinct. Never ask a connected wallet to reconnect because a read failed. Unknown is not zero. ETA needs fresh measurements; cooldown is completed Squeek blocks, not a guaranteed wall-clock deadline.
 
-## Structure and accessibility
+## Interaction and accessibility
 
-Squeeks · Art · Network · Info, profile-qualified hash routes, back/deep-link support. Info contains How it works, Trust, Status, Contracts, Developers and About; Contracts uses the original active-profile address list, backed by the unchanged SDK deployment pins/provenance. Wallet menu: copy, Activity and disconnect. Settings: HTTPS RPC save/test/remove, discovery-cache clear, confirmed Activity clear, light/dark/system. Developers and Settings code stay lazy-loaded.
+Review before a wallet prompt; fresh canonical preparation/simulation follows review. Show full differing claim recipient and approval scope/spender. Collection approval explicitly covers all current and future Squeeks. Never imply that network gas is the SQK unstake fee cap.
 
-Light default; saved light/dark/system override. Local Barlow Condensed, Quicksand, IBM Plex Mono; warm panels, gold primary and blue focus/links. Header controls remain 36px/common radius/8px gap/18px glyphs; body/dialog action controls 44px. Visible 3px focus, keyboard tab/menu navigation, modal/sheet traps and focus restoration, reduced motion and skip link. Artwork remains an isolated image. Unknown is not an invented zero.
+Use exact `BURN-<donorId>` before constructing/simulating a merge. Re-quote is explicit, not an automatic wallet retry. Wallet waiting has inline progress and Cancel, with honest provider-prompt/broadcast limitations and late-hash Activity links.
 
-## Evidence
-
-See [STATUS](STATUS.md) for exact current results and limits, [Mocked captures](screenshots/README.md), [gzip report](audit/data-diet-js-size.json), and both request-budget reports. Total external JavaScript is **174,543 bytes / 250,000 cap**, independently gzipped across twelve scripts including the tiny pre-paint external theme bootstrap and lazy modules. Offline tests are not live qualification. No live suite, signing, live workflow dispatch, keeper, merge or manual deployment was run. The requested preview is built by the existing Pages integration after the branch push. Owned Squeek cards, automatic lazy art and separate SQK actions are implemented; see the DATA DIET screenshot audit.
-
-## Context-only signals
-
-Stall detection uses verified snapshot time and Core genesis/round duration, not checkpoint lag or the wall clock. Only a >2 completed-round deficit shows the approved rewards-paused line beside Claim and on Network. Missing configuration/time stays Unknown. Watch mode has a contextual Viewing chip and Exit without replacing wallet identity. Pending transactions show a selector-local non-cancellation notice only while unresolved. Trust summarizes its seven check categories with live Checked/Stopped/Unknown state. Contextual captures cover both themes and desktop/mobile on the restored baseline, including its approved tagline/helper text.
-
-## Updated sequence (2026-11-04; supersedes earlier plan)
-
-- **Done:** Phase 0 audit/live gate, Phase 1 safety/design, Phase 2 data layer, Phase 3 accepted `b705683` structure and its restoration; equal profiles, all v9 actions and the shared SDK/MCP/in-page tool registry.
-- **Now:** seven-item PR #3 audit fix pack → **user-triggered run-live green on the exact head** → manual Cloudflare preview check → merge only when authorized. Offline/mocked checks do not qualify the live gate.
-- **Phase 4 — holder workspace:** selection grid/action bar replaces dropdown and typed IDs; merge path and custody steps; unified claim; per-Squeek page; shareable watch link; Activity; earnings Unknown, never zero without evidence.
-- **Phase 5 — slim Network + Genesis:** rounds/checkpoint/mining; Genesis details TBD.
-- **Phase 6 — agents:** docs/examples for `window.squeek`, MCP and SDK, including the explicit-owner cross-origin policy.
-- **Phase 7 — quality:** Lighthouse 90+ mobile, accessibility, lazy v9 ABI/art, README and mocked-wallet E2E for every action. CSP hardening is brought forward into this fix pack; no Lighthouse result is claimed yet.
-
-Staking is live under the equal-v9-profile decision; the superseded documentation-only restriction must not return. Alerts remain in-tab; cron/push/OG and other backend services are deferred. Typed BURN, simulation before every prompt, mismatch stops, Unknown ≠ zero, Mainnet Not deployed and the single non-affiliation footer remain mandatory.
-
-## Manual-preview corrections
-
-One visible verification badge opens Trust; one header wallet button identifies the connected owner. ETH balance lives in that menu consistently on both profiles, with Unknown for unavailable data and connected-owner isolation in watch mode. Banners use a measured header-bottom offset and remain readable while scrolling/resizing; actual identity/hash mismatches remain red stops, while RPC availability is identified separately. Only read-error banners clear on successful verified reads. Refreshes coalesce within a generation, never across profile changes; failed wallet reads do not immediately repeat the network snapshot.
-
-v6 network reads include NFT `totalSupply()` in the existing same-block multicall. Issuance labels are explicit: v6 mining `state().minted`, v9 issuance `state().minted` with processed round; token totalSupply is not labelled issued. Core settlement is not issuance checkpointing. Round grammar is singular only for 1.
-
-The current default order is Tenderly, PublicNode, 0xRPC, plus custom Settings. This supersedes the historical five-host pool. Nodies/OnFinality remain omitted after TLS-only probe failures; no CORS/429 conclusion is claimed. WSS aliases are not counted as additional independent providers. Network fetch failures/timeouts share bounded cooldown for singles and identity batches, without treating range errors, programming TypeErrors or trust failures as network failover. No live availability assertion is made.
-
-
-### RPC and review follow-up
-
-Multicall3 `getEthBalance` joins same-block contract reads in both SDKs; v9 `artBatch` uses one `allowFailure` multicall and preserves valid tokens when another URI fails. Storage slots/code still require independent RPC identity reads; event history still requires indexed `eth_getLogs`. Exact provider range-limit wording, including “getLogs request exceeded max allowed range”, enables wallet availability fallback and adaptive history intervals down to a single block. Each shrink halves the attempted interval, avoiding repeated identical short-tail queries. Failure at one block remains unavailable, never empty ownership.
-
-Discovery clear invalidates queued memory/durable writes and reports an unopened durable database honestly. Activity synchronizes shared storage before saving and on storage events, so an awaited receipt cannot restore another tab’s cleared list. Legacy untagged records migrate to v6. Activity rows identify the deployment. Browser/MCP errors take attempt history from the serving adapter; staking schemas advertise only v9. See [review disposition](audit/pr3-rpc-review-followup.md).
+Preserve keyboard tab/menu navigation, skip link, modal/sheet focus traps, focus restoration and accessible lifecycle toasts. Announce loading/failure states without hiding the header. Isolate artwork as images; lazy loading and skeletons must not become transaction authority.
