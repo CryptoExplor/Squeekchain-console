@@ -35,7 +35,6 @@ jobs:
     # This explicitly scoped job is separate from offline qualification. It never
     # installs a wallet, injects an adapter, mocks responses or calls signing tools.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'arena/9bffa41d-squeekchain-console'
-    needs: offline
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
