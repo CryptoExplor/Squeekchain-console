@@ -80,7 +80,7 @@ test('Trust checklist tracks verified, stopped and unknown; Developers wallet pe
   for(const text of ['Network','Contract permissions','Contract software','Versions','Data compatibility','Connected contracts','Two RPC peers agreeing on the block hash'])await expect(page.getByTestId('trust-checklist')).toContainText(text);
   await page.evaluate(async()=>{v9.net.verification.trusted=false;await squeek.refresh();});await expect(page.getByTestId('trust-checklist')).toHaveAttribute('data-state','stopped');await expect(page.getByTestId('verified-chip')).toHaveText('Stopped');
   await page.getByTestId('profile-select').selectOption('mainnet');await expect(page.getByTestId('trust-checklist')).toHaveAttribute('data-state','unknown');
-  await expect(page.getByTestId('developer-surfaces').locator('tbody tr').nth(1)).toContainText('Your wallet popup');
+  await page.getByTestId('info-link-developers').click();await expect(page.getByTestId('developer-surfaces')).toBeHidden();await page.locator('#agent-setup>summary').click();await expect(page.getByTestId('developer-surfaces').locator('tbody tr').nth(1)).toContainText('Your wallet popup');
   await expect(page.getByTestId('developer-surfaces').locator('tbody tr').nth(0)).toContainText('No');await expect(page.getByTestId('developer-surfaces').getByRole('row').filter({has:page.getByRole('rowheader',{name:'SDK',exact:true})})).toContainText('No');
   await expect(page.getByTestId('developer-surfaces').locator('tfoot')).toHaveText('Agents never see a private key.');await page.evaluate(()=>squeek.destroy());
 });

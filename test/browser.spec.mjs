@@ -46,7 +46,7 @@ test('offline browser: Wheelhouse identity, default/saved themes, mobile visibil
   await expect(page.getByTestId('btn-menu-connect')).toBeHidden();
   await expect(page.getByTestId('btn-checkpoint')).toBeHidden();
   await expect(page.getByTestId('btn-checkpoint')).toBeDisabled();
-  await expect(page.getByTestId('net-round')).toHaveText('Unknown');
+  await expect(page.getByTestId('net-round')).toHaveText('—');
   await page.keyboard.press('Control+Home');
   await page.locator('.skip-link').focus();
   await page.keyboard.press('Enter');
@@ -108,7 +108,7 @@ test('switch during pending RPC: abort the load and discard old-profile data', a
     window.races.reads[0].resolve(window.races.network('999'));
     await window.pendingRead;
   });
-  await expect(page.getByTestId('net-round')).toHaveText('Unknown');
+  await expect(page.getByTestId('net-round')).toHaveText('—');
   await expect(page.getByTestId('claim-result')).toBeEmpty();
   await expect(page.getByTestId('squeeks-tbody')).toBeEmpty();
   expect(await page.evaluate(() => [window.squeek.state.account, window.squeek.state.inspected, window.squeek.state.status, window.squeek.state.plan, window.squeek.state.receipts.length])).toEqual(['0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54', '0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54', null, null, 0]);
@@ -128,13 +128,13 @@ test('three rapid switches: only the final generation may render', async ({ page
     window.races.reads[1].resolve(window.races.network('200'));
     window.races.reads[0].resolve(window.races.network('100'));
   });
-  await expect(page.getByTestId('net-round')).toHaveText('Unknown');
+  await expect(page.getByTestId('net-round')).toHaveText('—');
   await page.evaluate(() => { window.races.reads[2].resolve(window.races.network('300')); });
   await expect(page.getByTestId('net-round')).toHaveText('300');
   // The baseline Kind stat is shared by equal profiles; retain explicit profile/generation checks.
   expect(await page.evaluate(() => window.squeek.state.profileKey)).toBe('sepolia-v9');
   await expect(page.getByTestId('profile-select')).toHaveValue('sepolia-v9');
-  await expect(page.getByTestId('net-kind')).toHaveText('deployed');
+  await expect(page.getByTestId('net-kind')).toHaveCount(0);
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
   await page.evaluate(() => window.squeek.destroy());
 });
@@ -226,7 +226,7 @@ test('offline browser wire: state TypeError/cooldown fail over through bundled t
     if (url.hostname === '127.0.0.1') return route.continue();
     const request = route.request().postDataJSON();
     wire.push({ endpoint: url.origin, method: request?.method });
-    if (url.hostname === 'sepolia.gateway.tenderly.co' && request?.method === 'eth_getStorageAt') return route.abort('failed');
+    if (url.hostname === 'ethereum-sepolia-rpc.publicnode.com' && request?.method === 'eth_getStorageAt') return route.abort('failed');
     if (request?.method !== 'eth_chainId' && request?.method !== 'eth_getStorageAt') return route.abort();
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ jsonrpc: '2.0', id: request.id,
       result: request.method === 'eth_chainId' ? '0xaa36a7' : `0x${'00'.repeat(32)}` }) });
@@ -240,14 +240,14 @@ test('offline browser wire: state TypeError/cooldown fail over through bundled t
     const fromTypeError = await context.client.getStorageAt(request);
     const cooldowns = new Map(), rateLimited = createRpcContext({ rpcCooldowns: cooldowns });
     await rateLimited.client.getChainId();
-    cooldowns.set('https://sepolia.gateway.tenderly.co/', Date.now() + 60_000);
+    cooldowns.set('https://ethereum-sepolia-rpc.publicnode.com/', Date.now() + 60_000);
     const fromCooldown = await rateLimited.client.getStorageAt(request);
     return { fromTypeError, fromCooldown, failures: context.rpcDiagnostics(), cooldownFailures: rateLimited.rpcDiagnostics() };
   });
   expect(result.fromTypeError).toBe(`0x${'00'.repeat(32)}`);
   expect(result.fromCooldown).toBe(result.fromTypeError);
   expect(wire.filter(call => call.method === 'eth_getStorageAt').map(call => call.endpoint)).toEqual([
-    'https://sepolia.gateway.tenderly.co', 'https://ethereum-sepolia-rpc.publicnode.com', 'https://ethereum-sepolia-rpc.publicnode.com',
+    'https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.gateway.tenderly.co', 'https://sepolia.gateway.tenderly.co',
   ]);
   expect(result.failures.some(record => record.availability && record.method === 'eth_getStorageAt' && record.causeChain.some(cause => cause.name === 'TypeError'))).toBe(true);
   expect(result.cooldownFailures.some(record => record.causeChain.some(cause => cause.kind === 'cooldown'))).toBe(true);

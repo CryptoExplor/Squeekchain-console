@@ -1,5 +1,5 @@
 // Small DOM components; no framework, signing, RPC or authority over capabilities.
-export const UNKNOWN = 'Unknown';
+export const UNKNOWN = '—';
 export function valueText(value) {
   if (value == null || (typeof value === 'number' && !Number.isFinite(value))) return UNKNOWN;
   const text = String(value).trim();
@@ -19,7 +19,7 @@ export function Skeleton(node, busy) {
   node.dataset.component = 'Skeleton';
   const loading = Boolean(busy && valueText(node.textContent) === UNKNOWN);
   node.classList.toggle('is-skeleton', loading);
-  if (loading) node.setAttribute('aria-label', 'Loading; value Unknown');
+  if (loading) node.setAttribute('aria-label', 'Loading');
   else node.removeAttribute('aria-label');
 }
 export function Panel(node) {

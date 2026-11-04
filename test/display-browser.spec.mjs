@@ -19,7 +19,7 @@ for(const width of [390,1280])for(const theme of ['light','dark'])test(`API netw
  await page.setViewportSize({width,height:1000});await install(page);await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);await expect(page.getByTestId('net-round')).toHaveText('1198');await page.screenshot({path:`artifacts/screenshots/api-wheel-${theme}-${width}.png`,fullPage:true});
 });
 test('API identity mismatch cannot retain or paint the previous API value; fresh RPC fallback may fail closed',async({page})=>{
- const {fixtures}=await install(page,{countsReader:true});fixtures.economy.release.id='wrong-release';await page.evaluate(()=>window.squeek.refresh());await expect(page.getByTestId('net-round')).toHaveText('Unknown');await expect(page.getByTestId('btn-checkpoint')).toBeDisabled();
+ const {fixtures}=await install(page,{countsReader:true});fixtures.economy.release.id='wrong-release';await page.evaluate(()=>window.squeek.refresh());await expect(page.getByTestId('net-round')).toHaveText('—');await expect(page.getByTestId('btn-checkpoint')).toBeDisabled();
 });
 
 test('automatic owned art survives a full reload with zero art network requests',async({page})=>{
@@ -31,6 +31,6 @@ test('automatic owned art survives a full reload with zero art network requests'
 
 test('projected-block schema failure preserves telemetry; failed frontier refresh retries the same round',async({page})=>{
  const {fixtures,counts}=await install(page,{countsReader:true});fixtures.blocks.schemaVersion='bad';fixtures.status.builder.projected.blockHeight='2395';await page.evaluate(()=>squeek.pollDisplay());await expect(page.getByTestId('wheel-rpm')).toHaveText('12.5');await expect(page.getByTestId('wheel-state')).toHaveText('Running');
- fixtures.core.status='unavailable';fixtures.status.builder.anchor.settledThroughRound='1199';await page.evaluate(()=>squeek.pollDisplay());await expect(page.getByTestId('net-round')).toHaveText('Unknown');const failedReads=counts.paths.filter(p=>p==='/core').length;
+ fixtures.core.status='unavailable';fixtures.status.builder.anchor.settledThroughRound='1199';await page.evaluate(()=>squeek.pollDisplay());await expect(page.getByTestId('net-round')).toHaveText('—');const failedReads=counts.paths.filter(p=>p==='/core').length;
  fixtures.core.status='available';await page.evaluate(()=>squeek.pollDisplay());await expect(page.getByTestId('net-round')).toHaveText('1198');expect(counts.paths.filter(p=>p==='/core').length).toBeGreaterThan(failedReads);await expect(page.getByTestId('wheel-rpm')).toHaveText('12.5');await page.evaluate(()=>squeek.destroy());
 });

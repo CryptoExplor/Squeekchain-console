@@ -23,7 +23,7 @@ function normalize(node) {
   return node.outerHTML;
 }
 // DATA DIET explicitly replaces the old fixed-loop label; all other baseline DOM remains exact.
-for(const [selector,expected] of Object.entries(evidence.nodes).filter(([selector])=>!['#holder-empty','#btn-plan','#panel-network .section-heading','#activity-panel > p'].includes(selector)))assert.equal(normalize(doc.querySelector(selector)),normalize(new JSDOM(expected.replace('ONCHAIN READS · AUTO-REFRESH 45s','DISPLAY READS · FOLLOWS THE WHEEL').replace('rendered by the DotGrid renderer · shown as an isolated image','Your Squeek collection')).window.document.body.firstElementChild),`${selector}: preserve deployed b705683 layout/copy`);
+for(const [selector,expected] of Object.entries(evidence.nodes).filter(([selector])=>!['#holder-empty','#btn-plan','#panel-network .section-heading','#activity-panel > p'].includes(selector)))assert.equal(normalize(doc.querySelector(selector)),normalize(new JSDOM(expected.replace('ONCHAIN READS · AUTO-REFRESH 45s','DISPLAY READS · FOLLOWS THE WHEEL').replace('rendered by the DotGrid renderer · shown as an isolated image','Your Squeek collection').replace('Clear IndexedDB log cache','Clear saved data')).window.document.body.firstElementChild),`${selector}: preserve deployed b705683 layout/copy`);
 assert.equal(doc.querySelector('#activity-panel > p'),null,'approved removal of drawer-wide help');
 assert.equal(doc.querySelector('#panel-network'),null,'v3 removes the Network dashboard');assert.ok(doc.querySelector('#panel-explore'));assert.ok(doc.querySelector('.network-strip'));assert.ok(doc.querySelector('#info-about').textContent.includes('Also see'));
 assert.equal(doc.querySelector('#btn-plan'),null,'text plan refresh removed');assert.equal(doc.querySelector('#btn-holder-refresh').getAttribute('aria-label'),'Refresh Squeeks');
@@ -33,7 +33,8 @@ const styles=fs.readFileSync('web/styles.css','utf8');
 const end=evidence.stylesPrefixEndAnchor,index=styles.indexOf(end);assert.ok(index>=0,'preserve original prefix boundary');assert.equal(styles.indexOf(end,index+1),-1);
 const withoutStrip=css=>{const ast=parse(css);walk(ast,{visit:'Rule',enter(node,item,list){if(/^\.network-strip(?:$|[ .>:#\[])/.test(generate(node.prelude)))list.remove(item);}});return generate(ast);};
 assert.equal(sha(withoutStrip(styles.slice(0,index+end.length))),evidence.stylesExceptNetworkStripSha256,'all baseline styles except the explicitly replaced network strip remain unchanged');
-const components=fs.readFileSync('web/components.js','utf8').replace(/export function Toast[\s\S]*?(?=export function ConfirmDialog)/,fs.readFileSync('test/fixtures/frontend-toast-b705683.txt','utf8')).replace(', details = []','').replace(/\n      if\(details.length\) \{.*?\n      \}/s,'');
+// Only the explicitly approved missing-value presentation and loading label are normalized.
+const components=fs.readFileSync('web/components.js','utf8').replace("UNKNOWN = '—'","UNKNOWN = 'Unknown'").replace("node.setAttribute('aria-label', 'Loading')","node.setAttribute('aria-label', 'Loading; value Unknown')").replace(/export function Toast[\s\S]*?(?=export function ConfirmDialog)/,fs.readFileSync('test/fixtures/frontend-toast-b705683.txt','utf8')).replace(', details = []','').replace(/\n      if\(details.length\) \{.*?\n      \}/s,'');
 assert.equal(sha(components),evidence.componentsSha256,'original components plus structured unstake details only');
 const app=fs.readFileSync('web/app.js','utf8');
 const columns=app.slice(app.indexOf('  function columnsForProfile() {'),app.indexOf('\n  function renderWatchMode()',app.indexOf('  function columnsForProfile() {')));

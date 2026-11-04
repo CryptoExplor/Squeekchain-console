@@ -65,7 +65,7 @@ test('Cloudflare strict CSP is enforced without breaking external styles/modules
  await page.addInitScript(()=>{window.cspViolations=[];document.addEventListener('securitypolicyviolation',e=>cspViolations.push(e.violatedDirective));});
  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.getByTestId('btn-claim').click();await expect(page.getByTestId('modal')).toBeVisible();await page.getByTestId('btn-modal-cancel').click();
  await page.getByTestId('settings-open').click();await expect(page.getByTestId('settings-sheet')).toBeVisible();await page.keyboard.press('Escape');
- await page.getByTestId('tab-info').click();await page.getByTestId('info-link-developers').click();await page.getByTestId('btn-copy-manifest').click();
+ await page.getByTestId('tab-info').click();await page.getByTestId('info-link-developers').click();await page.locator('#agent-setup>summary').click();await page.getByTestId('btn-copy-manifest').click();
  expect(await page.evaluate(()=>cspViolations)).toEqual([]);
  const headers=(await page.request.get('/')).headers();expect(headers['content-security-policy']).toContain("frame-ancestors 'none'");
  await page.evaluate(()=>{window.inlineRan=false;const script=document.createElement('script');script.textContent='window.inlineRan=true';document.body.append(script);});

@@ -24,7 +24,7 @@ function validCache(value,profile){return value?.version===3&&value.key===indexK
 export function createExploreIndex({profile,store,reader,signal,progress=()=>{},now=()=>performance.now()}){
  let flight;const check=()=>{if(signal?.aborted)throw signal.reason??new DOMException('Aborted','AbortError');};
  async function perform({restart=false}={}){
-  const started=now();check();let cached=restart?null:await store.get(indexKey(profile));if(!validCache(cached,profile))cached=null;
+  const started=now();check();let cached=restart?null:await store.get(indexKey(profile));if(!validCache(cached,profile)||cached?.totalSupply!=null&&!cached.complete)cached=null;
   const snapshot=await reader.begin(profile.abiSet==='v6'&&cached?.complete?BigInt(cached.lastBlock):undefined);check();const target=BigInt(snapshot.blockNumber),start=BigInt(profile.startBlock);
   if(target<start)throw new Error('Index incomplete');
   let state=cached?structuredClone(cached):{version:3,key:indexKey(profile),lastBlock:String(start-1n),lastHash:null,tokens:{},events:[],complete:false};let cursor=cached?BigInt(cached.lastBlock)+1n:start,reorg=false;

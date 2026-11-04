@@ -37,6 +37,7 @@ export function createNetworkStrip(doc,{now=()=>Date.now()}={}) {
         loading();
       }
       $('wheel-line').hidden=key!=='sepolia-v9';
+      $('strip-status').hidden=key!=='sepolia-v9';
     },
     loading,
     network(net) {

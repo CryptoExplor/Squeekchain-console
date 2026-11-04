@@ -43,8 +43,8 @@ export function initSettings({$,state,store,fetcher,captureLoad,assertCurrent,is
       if (!isCurrent(load)) return;
       state.adapter = buildAdapter(state.profileKey);
       await refreshAll();
-      if (isCurrent(load)) $('cache-result').textContent = 'Log cache cleared. Ownership rechecked onchain where available.';
-    } catch { if (isCurrent(load)) { state.adapter = buildAdapter(state.profileKey); $('cache-result').textContent = 'Could not clear the log cache. No ownership or trust checks were bypassed.'; } }
+      if (isCurrent(load)) $('cache-result').textContent = 'Saved data cleared. Fresh checks still apply.';
+    } catch { if (isCurrent(load)) { state.adapter = buildAdapter(state.profileKey); $('cache-result').textContent = 'Could not clear saved data.'; } }
   };
   $('btn-clear-activity').onclick = async () => {
     const load=captureLoad();

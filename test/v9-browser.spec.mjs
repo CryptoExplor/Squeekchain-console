@@ -49,7 +49,7 @@ test('restored frontend: active policy, one footer, baseline copy, conditional w
  await expect(page.getByTestId('core-pause-note')).toBeHidden();await page.evaluate(async()=>{v9.net.core.paused=true;await squeek.refresh();});await expect(page.getByTestId('core-pause-note')).toBeVisible();await expect(page.getByTestId('trust-summary')).toContainText('Current snapshot block');await expect(page.getByTestId('trust-block')).toHaveText('12101024');await expect(page.getByTestId('trust-result')).toHaveText('Verified');await expect(page.getByTestId('trust-rpcs')).toContainText('Agreed');
  await expect(page.getByTestId('developer-surfaces').locator('tbody tr')).toHaveCount(4);
  await page.getByTestId('settings-open').click();await expect(page.getByTestId('settings-sheet')).toBeVisible();expect(loaded).toContain('/settings.js');await page.getByTestId('rpc-url').fill('https://rpc.example/');await expect(page.getByTestId('rpc-secret-warning')).toBeHidden();await page.getByTestId('rpc-url').fill('https://rpc.example/?apiKey=private');await expect(page.getByTestId('rpc-secret-warning')).toBeVisible();await page.keyboard.press('Escape');
- await page.getByTestId('info-link-developers').click();await page.getByTestId('btn-copy-manifest').click();expect(loaded).toContain('/developers.js');
+ await page.getByTestId('info-link-developers').click();await page.locator('#agent-setup>summary').click();await page.getByTestId('btn-copy-manifest').click();expect(loaded).toContain('/developers.js');
  const body=await page.locator('body').textContent();expect(body.match(/not affiliated with Squeekchain/g)).toHaveLength(1);expect(body).toMatch(/Powered by a hamster/);expect(body).toMatch(/Build with Squeekchain/);expect(body).toMatch(/Network/);expect(body).not.toMatch(/undocumented|no v9 transactions|read-only and unverified|all transactions disabled/);
  await page.getByTestId('tab-squeeks').click();await expect(page.locator('.telemetry-source')).toHaveCount(0);await expect(page.getByTestId('panel-explore')).toBeHidden();await expect(page.locator('.network-strip')).toContainText('Status ↗');await page.evaluate(()=>squeek.destroy());
 });
@@ -62,7 +62,7 @@ for(const [name,v6,v9,expected] of [
  await installV9Fixture(page);await page.evaluate(async({v6,v9})=>{window.v9.counts={'sepolia-v6':v6,'sepolia-v9':v9};await squeek.switchProfile('sepolia-v6');await squeek.connect();},{v6,v9});
  await expect(page.getByTestId('profile-select')).toHaveValue(expected);
  const text=await page.getByTestId('profile-select').locator('option[value="sepolia-v9"]').textContent();
- expect(text).toContain(v9.staked==null?'Staked (Unknown)':'0 in wallet · 2 staked');expect(text).not.toContain('9000');
+ expect(text).toContain(v9.staked==null?'Staked (—)':'0 in wallet · 2 staked');expect(text).not.toContain('9000');
  if(name==='wallet v6 and staked v9'){await expect(page.getByTestId('profile-choice')).toBeVisible();await expect(page.getByTestId('profile-choice')).toContainText('3 in wallet · 0 staked');await expect(page.getByTestId('profile-choice')).toContainText('0 in wallet · 2 staked');}
  await page.evaluate(()=>squeek.destroy());
 });
@@ -108,4 +108,9 @@ for(const width of [1280,390])test(`b705683 layout and live-only badges / ${widt
  await page.evaluate(async()=>{v9.net.verification.trusted=false;await squeek.refresh();});await expect(page.getByTestId('profile-status')).toHaveText('Mismatch: stop');
  await page.getByTestId('profile-select').selectOption('mainnet');await expect(page.getByTestId('profile-status')).toHaveText('Not deployed');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.evaluate(()=>squeek.destroy());
+});
+
+test('profile counts with both wallets present never expose missing staked-count placeholders',async({page})=>{
+ await installV9Fixture(page);await page.evaluate(async()=>{v9.counts={'sepolia-v6':{wallet:'1',staked:null},'sepolia-v9':{wallet:'1',staked:null}};await squeek.connect();});
+ await expect(page.getByTestId('profile-choice')).toBeVisible();await expect(page.getByTestId('profile-choice')).not.toContainText('Unknown');await expect(page.getByTestId('profile-select')).not.toContainText('Unknown');expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });

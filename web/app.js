@@ -34,7 +34,7 @@ import {
 import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
 import {holderRoute,watchAddress,watchHash} from './holder-routes.js';
 import {createHoldings} from './holdings.js';
-import {wheelFeed,formingBlock} from './wheel-feed.js';
+import {formingBlock} from './wheel-feed.js';
 import {createWallet} from './wallet.js';
 import {createImages} from './images.js';
 import { createActivity } from "./activity.js";
@@ -45,6 +45,7 @@ const outstandingPrompts=new WeakMap();
 const EXPLORER = "https://eth-sepolia.blockscout.com";
 const THEME_KEY = "squeekchain:theme";
 
+const profileCountText=count=>profileCountLabel(count).replace(/\bUnknown\b/g,'—');
 export function mount({ doc = document, win = window, adapterFactory, fetcher = globalThis.fetch, activityReader, profileBalanceReader } = {}) {
   const $ = (id) => doc.getElementById(id);
   let workspace,workspaceReady;
@@ -60,7 +61,6 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     panels: [...doc.querySelectorAll("[data-panel]")],
     net: {
       chain: $("net-chain"),
-      kind: $("net-kind"),
       round: $("net-round"),
       blocks: $("net-blocks"),
       lag: $("net-lag"),
@@ -165,12 +165,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const failure=rpcToolError(error,state.adapter?.rpcDiagnostics?.()??[]);
     state.lastReadFailure={scope,profile:state.profileKey,...failure};
     const availability=failure.diagnostics.availability;
-    const message=availability?'RPC unavailable. Verified reads need two independent Sepolia peers. Nothing was signed.':'Network or contract checks could not be completed. Actions are stopped. Nothing was signed.';
+    const message="Can't verify right now";
     el.verified.textContent=availability?'Unavailable':'Stopped';
     $('profile-status').textContent=availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Unverified';
     $('profile-status').className=`chip ${availability?'warn':'bad'}`;
     $('profile-status').title=el.verified.title='';
-    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent=UNKNOWN;$('trust-result').textContent=(availability?'Unavailable':failure.diagnostics.trust?'Stopped':'Unverified')+' — '+errorMessage(error);
+    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent=UNKNOWN;$('trust-result').textContent=message;$('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
     showBanner(message,availability?'warn':'bad');readBanner=true;
   }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
@@ -252,7 +252,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const displayCache=createDisplayCache(win.indexedDB),lastGood=new Map();let apiScope;
   const displaySources=new Map();
   function recordSource(panel,kind,reason){
-    displaySources.set(panel,{kind,reason});
+    displaySources.set(panel,{kind,reason:reason==='launch_unconfigured'?'Genesis not open':reason});
     $('display-sources').replaceChildren(...[...displaySources].map(([name,value])=>{const li=doc.createElement('li');li.textContent=`${name} — Source: ${value.kind==='api'?'API':'RPC'}${value.reason?` · ${value.reason}`:''}`;return li;}));
   }
   const networkView=createNetworkView({doc,source:recordSource,current:isCurrent,visible:()=>!$('panel-squeeks').classList.contains('hidden'),readContext:()=>{const load=captureLoad();return {load,api:displayApi(load)};}});
@@ -266,7 +266,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(state.lastReadFailure?.profile===state.profileKey)return;
     if(verifiedForGeneration){renderVerification(verifiedForGeneration);return;}
     renderTrust(null);$('trust-block').textContent=UNKNOWN;
-    $('trust-result').textContent='Checking… No contract verification has completed. API data is display only; fresh independent checks run before actions.';
+    $('trust-result').textContent=UNKNOWN;
     $('profile-status').textContent='Checking…';$('profile-status').className='chip';
     $('profile-status').title='Awaiting contract verification. Display data is not transaction authority. Open Info › Trust for details.';
     el.verified.textContent='Checking…';
@@ -289,18 +289,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       throw error;
     }
   }
-  let wheelEvents=[],wheelSettlements=[],feedLimit=5;
-  function feedRows(id,rows){const root=$(id);root.replaceChildren(...rows.map(row=>{const li=$('wheel-feed-item').content.firstElementChild.cloneNode(true),icon=li.querySelector('.feed-icon'),text=li.querySelector('.feed-text');icon.textContent={round:'◷',sqk:'↗',squeek:'◇'}[row.icon]??'◇';text.textContent=row.text;return li;}));root.removeAttribute('title');}
-  function renderWheelFeed(){const rows=wheelFeed(wheelEvents,wheelSettlements);feedRows('network-events',rows.slice(0,feedLimit));$('wheel-show-more').classList.toggle('hidden',rows.length<=feedLimit);$('wheel-show-more').setAttribute('aria-expanded',String(feedLimit>5));}
-  $('wheel-show-more').onclick=()=>{feedLimit+=5;renderWheelFeed();};
-  async function readWheelEvents(){const load=captureLoad(),api=displayApi(load);const result=await api.feed();assertCurrent(load);wheelEvents=result.data.events;renderWheelFeed();return result;}
-  async function displayFeeds(load){const api=displayApi(load);if(!api)return;
-    for(const [kind,read] of [['events',()=>api.feed()],['settlements',()=>api.settlements()],]){
-      try{const result=await read();assertCurrent(load);if(kind==='events')wheelEvents=result.data.events;else if(kind==='settlements')wheelSettlements=result.data.recentSettlements;else feedRows('account-activity',wheelFeed(result.data.events??result.data.activity));renderWheelFeed();}
-      catch(error){if(!isCurrent(load))return;if(error.name==='RpcTrustError'){clearWheelFeed();recordSource('Live wheel','api',error.message);return;}if(error.kind&&error.kind!=='transport'){if(kind==='events')wheelEvents=[];else if(kind==='settlements')wheelSettlements=[];else $('account-activity').replaceChildren();renderWheelFeed();}}
-    }
-  }
-  function clearWheelFeed(){wheelEvents=[];wheelSettlements=[];feedLimit=5;renderWheelFeed();for(const id of ['account-activity','provisional-blocks'])$(id).replaceChildren();$('provisional-blocks').classList.add('hidden');}
+  function clearWheelFeed(){for(const id of ['account-activity','provisional-blocks'])$(id).replaceChildren();$('provisional-blocks').classList.add('hidden');}
   function clearDisplayMismatch(error){lastGood.clear();state.net=null;state.holderReadState='unavailable';renderNetworkPlaceholder();renderHolder(null);networkStrip.offline();for(const id of ['wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;clearWheelFeed();recordSource('Display validation','api',error.message);showReadFailure(Object.assign(new Error('Display source does not match this network.'),{name:'RpcTrustError',kind:'mismatch'}),'Display validation');}
 
   let destroyed = false;
@@ -363,16 +352,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         const option = doc.createElement("option");
         option.value = p.key;
         const count = state.profileCounts[p.key];
-        option.textContent = p.label + (state.account && p.addresses ? ` · ${profileCountLabel(count)}` : "");
+        option.textContent = p.label + (state.account && p.addresses ? ` · ${profileCountText(count)}` : "");
         // Mainnet remains selectable as an honest launch-status view.
         return option;
       }),
     );
     el.profileSelect.value = state.profileKey;
     const badge = $('profile-status');
-    badge.setAttribute('aria-label', 'Live verification: open Info Trust');
+    badge.removeAttribute('aria-label');
     $('profile-choice').classList.toggle('hidden', !state.account || !(profileHeld(state.profileCounts['sepolia-v6']) && profileHeld(state.profileCounts['sepolia-v9'])));
-    $('profile-choice').textContent = `v6: ${profileCountLabel(state.profileCounts['sepolia-v6'])}. v9: ${profileCountLabel(state.profileCounts['sepolia-v9'])}. Choose either profile in the selector.`;
+    $('profile-choice').textContent = `v6: ${profileCountText(state.profileCounts['sepolia-v6'])}. v9: ${profileCountText(state.profileCounts['sepolia-v9'])}. Choose either profile in the selector.`;
   }
 
   async function switchProfile(profileKey, { preserveWallet = false, syncWallet = false } = {}) {
@@ -480,7 +469,6 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     renderContracts(profile);
     renderCapabilities(profile);
     el.net.chain.textContent = profile.chainId === CHAIN.id ? "Sepolia" : "Ethereum";
-    el.net.kind.textContent = profile.kind;
     el.net.release.textContent = profile.addresses?`${profile.short.toUpperCase()} · Sepolia`:"Not deployed";
     el.net.notice.textContent = profile.addresses?"Test network. Use test funds only.":"Not deployed on Ethereum.";
     el.net.notice.className = `notice ${profile.addresses ? "" : "warn"}`;
@@ -514,11 +502,15 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderTrust(v) {
     lastVerificationTime=v?Date.now():null;
     $('trust-block').textContent=valueText(v?.blockNumber ?? state.net?.snapshot?.blockNumber);
-    $('trust-result').textContent=v ? v.ok && v.trusted ? 'Verified' : capabilities().reasons.mismatch : UNKNOWN;
+    if(v?.ok||!v&&!state.lastReadFailure)$('rpc-diagnostics').textContent='';
+    $('trust-result').textContent=v?.ok&&v?.trusted?'Verified':v?"Can't verify right now":UNKNOWN;
+    for(const id of ['trust-block','trust-time'])$(id).parentElement.hidden=!(v?.ok&&v?.trusted);
+    $('trust-checklist').hidden=!(v?.ok&&v?.trusted);
     updateTrustAge();
     $('trust-checklist').dataset.state=v ? v.ok && v.trusted ? 'verified' : 'stopped' : 'unknown';
     doc.querySelectorAll('[data-trust-check]').forEach(node=>{node.textContent=v ? v.ok && v.trusted ? 'Checked' : 'Stopped' : UNKNOWN;});
     $('core-pause-note').classList.toggle('hidden',state.net?.core?.paused!==true);
+    $('info-reward-status').hidden=state.net?.core?.settledThroughRound==null;
     $('info-reward-status').textContent=el.net.settlement.textContent || (state.net?.core?.paused===true?capabilities().reasons.paused:state.net?.core?.settledThroughRound != null ? `Settled through round ${state.net.core.settledThroughRound}.` : UNKNOWN);
     const peers = [...(store.get('wheelhouse:rpc')?['Custom RPC']:[]),...PUBLIC_RPC_ENDPOINTS.map(peer=>new URL(peer.url).hostname)];
     const checked=state.net?.snapshot?.peers??[];
@@ -823,7 +815,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const inspected=status?.owner??state.inspected??state.account;
     el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);
     el.holder.refresh.disabled=!state.adapter||!inspected;
-    $('holder-copy-link').classList.toggle('hidden',!inspected);$('btn-planner').disabled=!(status?.squeeks?.length);
+    $('holder-copy-link').classList.toggle('hidden',!inspected);$('btn-planner').disabled=!(status?.squeeks?.length);$('btn-planner').hidden=!status?.squeeks?.some(token=>Number.isInteger(token.level)&&token.level>0&&token.level<state.net?.policy?.maximumLevel);
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
     if (!status) {
@@ -1292,6 +1284,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!['squeeks', 'art', 'explore', 'info'].includes(name)) name = 'squeeks';
     const deployed = Boolean(getProfile(state.profileKey).addresses);
     if(!deployed)name='info';
+    const sections=['how-it-works','trust','status','contracts','developers','about'];
+    if(name==='info'){if(!sections.includes(section))section='how-it-works';for(const node of doc.querySelectorAll('#panel-info .info-section'))node.hidden=node.id!==`info-${section}`;}
     doc.querySelectorAll('a[href^="#info/"], a[data-info-route]').forEach(link => { const route = link.dataset.infoRoute ?? link.getAttribute('href').slice(1); link.dataset.infoRoute = route; link.href = `#${state.profileKey}/${route}`; });
     el.tabs.forEach(t => { t.setAttribute('aria-selected', String(t.dataset.tab === name)); t.tabIndex = t.dataset.tab === name ? 0 : -1; });
     el.panels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== name || (!deployed && name !== 'info')));
@@ -1300,7 +1294,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     // replaceState avoids hashchange loops, while tab clicks below create history entries.
     if (win.location.hash !== hash) win.history.replaceState(null, '', hash);
     if(special&&String(route).startsWith('squeek/')){try{rememberWatch(holderRoute(hash),state.watchOnly?activeWatchRoute:null);}catch{/* Invalid routes are reported below. */}}
-    if (name === 'info' && section) $("info-" + section)?.scrollIntoView?.({ block: 'start' });
+    for(const link of doc.querySelectorAll('.info-links a')){if(name==='info'&&link.hash.endsWith('/'+section))link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
     $('holder-overview').hidden=special&&String(route).startsWith('squeek/');$('squeek-page').hidden=!$('holder-overview').hidden;
     if(name==='squeeks'&&state.adapter){holdings.refresh();if(!query)void refreshNetworkExtras();}
     if(name==='explore')void ensureExplore().then(e=>e.show()).catch(error=>recordSource('Explore','rpc',error.message));
@@ -1390,7 +1384,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const p=provider();wallet.disconnect();void p?.request({method:'wallet_revokePermissions',params:[{eth_accounts:{}}]}).catch(()=>{});
     $('account-activity').replaceChildren();closeWalletMenu();selectTab('squeeks');el.connect.focus();
   };
-  el.refresh.onclick = () => {void refreshTelemetry({reset:false});void displayFeeds(captureLoad());return viewTask(()=>refreshAll({force:true}));};
+  el.refresh.onclick = () => {void refreshTelemetry({reset:false});return viewTask(()=>refreshAll({force:true}));};
   el.cp.button.onclick = () => viewTask(requestCheckpoint);
   el.holder.claim.onclick = () => viewTask(() => {
     const raw = $("claim-ids").value.trim();
@@ -1493,11 +1487,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const poller=createWheelPoller({enabled:()=>state.profileKey==='sepolia-v9',doc,setTimer:win.setTimeout.bind(win),clearTimer:win.clearTimeout.bind(win),
     contextKey:()=>`${generation}:${state.profileKey}`,
     readStatus:async()=>{const load=captureLoad();if(load.profileKey!=='sepolia-v9')throw new Error('No v6 wheel poll');const api=displayApi(load);const result=api?await api.status():{data:await telemetry.read({signal:load.signal})};assertCurrent(load);return result;},
-    readEvents:adapterFactory?null:readWheelEvents,
     readBlocks:adapterFactory?null:async()=>displayApi(captureLoad()).blocks(),
     frontier:()=>({settled:state.net?.core?.settledThroughRound,processed:state.net?.mining?.processedThroughRound}),
     onStatus:async(data,result)=>{void explore?.tick();recordSource('Wheel','api',result.stale?'Cached response; live request unavailable':null);void refreshNetworkExtras();workspace?.updatePace(result.stale?null:data);liveMeasurement=result.stale?null:data.measurement;renderProvisional();wheelReading(captureLoad(),data,result);},
-    onFrontier:async()=>{const net=await refreshNetwork();if(!net||net.source?.stale)return false;await refreshAll();if(state.inspected&&!state.status)return false;if(provisionalResult)renderProvisional(provisionalResult);await displayFeeds(captureLoad());if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();return true;},
+    onFrontier:async()=>{const net=await refreshNetwork();if(!net||net.source?.stale)return false;await refreshAll();if(state.inspected&&!state.status)return false;if(provisionalResult)renderProvisional(provisionalResult);if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();return true;},
     onBlocks:renderProvisional,
     onError:(error,scope)=>{
       if(scope==='status')void explore?.tick();
@@ -1510,7 +1503,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(scope==='status'||error.name==='RpcTrustError'){liveMeasurement=null;renderProvisional();wheelFailure(captureLoad());}
     }
   });
-  if(adapterFactory)poller.start();else void poller.tick();void displayFeeds(captureLoad());
+  if(adapterFactory)poller.start();else void poller.tick();
 
   const unsubscribeWallet=wallet.subscribe(onWallet);
   void wallet.init();

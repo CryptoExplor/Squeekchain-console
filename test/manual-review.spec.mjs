@@ -2,8 +2,8 @@ import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
 import {installReviewFixture} from './review-fixture.mjs';
 import {installV9Fixture} from './v9-fixture.mjs';
-const availability='RPC unavailable. Verified reads need two independent Sepolia peers. Nothing was signed.';
-const trustFailure='Network or contract checks could not be completed. Actions are stopped. Nothing was signed.';
+const availability="Can't verify right now";
+const trustFailure="Can't verify right now";
 async function capture(page,info,name){await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({animations:'disabled'});await info.attach(name,{body:image,contentType:'image/png'});fs.mkdirSync('artifacts/screenshots',{recursive:true});fs.writeFileSync('artifacts/screenshots/'+name,image);}
 for(const theme of ['light','dark'])for(const width of [1280,390])test(`connected v9 diagnostics below header / ${theme} / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);if(theme==='dark')await page.getByTestId('btn-theme').click();await page.evaluate(()=>squeek.connect());
@@ -45,7 +45,7 @@ test('refreshes coalesce per generation, not across profile changes',async({page
 for(const width of [1280,390])test(`actual wallet log-range failure is availability, not a trust mismatch / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);await page.evaluate(()=>squeek.connect());
  await page.evaluate(async()=>{v9.walletError={name:'RpcRequestContextError',message:'JSON-RPC request failed',endpoint:'wallet',method:'eth_getLogs',cause:{message:'getLogs request exceeded max allowed range'}};await squeek.refresh();});
- await expect(page.getByTestId('banner')).toHaveText(availability);await expect(page.getByTestId('profile-status')).toHaveText('Unavailable');await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('trust-block')).toHaveText('Unknown');await expect(page.getByTestId('trust-time')).toHaveText('Unknown');
+ await expect(page.getByTestId('banner')).toHaveText(availability);await expect(page.getByTestId('profile-status')).toHaveText('Unavailable');await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('trust-block')).toHaveText('—');await expect(page.getByTestId('trust-time')).toHaveText('—');
  expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.reason)).toBe('Log range limit');expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.method)).toBe('eth_getLogs');expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.endpoint)).toBe('wallet');
  await capture(page,info,`staking-log-range-unavailable-light-${width}.png`);expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
@@ -74,7 +74,7 @@ test('minified dist scripts render and retain wallet safety with lazy Settings a
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  const scripts=await installReviewFixture(page,{built:true});await page.evaluate(()=>squeek.connect());await expect(page.getByTestId('holder-count')).toHaveText('3');
  await page.getByTestId('settings-open').click();await expect(page.getByTestId('settings-sheet')).toBeVisible();await page.keyboard.press('Escape');
- await page.getByTestId('tab-info').click();await page.getByTestId('info-link-developers').click();await page.getByTestId('btn-copy-manifest').click();
+ await page.getByTestId('tab-info').click();await page.getByTestId('info-link-developers').click();await page.locator('#agent-setup>summary').click();await page.getByTestId('btn-copy-manifest').click();
  for(const script of ['/app.js','/bundle.js','/activity.js','/components.js','/holdings.js','/images.js','/settings.js','/developers.js'])await expect.poll(()=>scripts.has(script),{message:script+' must load from dist'}).toBe(true);
  expect(errors).toEqual([]);expect(await page.evaluate(()=>reviewCounters.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
