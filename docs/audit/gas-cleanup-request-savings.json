@@ -1,0 +1,166 @@
+{
+  "baselineCodeHead": "becf982a97f03de9ca89e284a0257127abb549ae",
+  "scope": "Synthetic intercepted actual viem HTTP envelopes; same warmed SDK context/fixture/peer guards before and after. One successful preview per row; not a browser page load, wallet estimate or complete review/send flow. v6 claims use explicit owned IDs to isolate batch sizes.",
+  "rows": [
+    {
+      "profile": "v6",
+      "action": "checkpoint",
+      "beforeHttpRequests": 12,
+      "afterHttpRequests": 11,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v6",
+      "action": "claim-32",
+      "beforeHttpRequests": 44,
+      "afterHttpRequests": 43,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v6",
+      "action": "claim-33",
+      "beforeHttpRequests": 48,
+      "afterHttpRequests": 46,
+      "savedPerPreview": 2,
+      "beforeEstimateGas": 2,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 2
+    },
+    {
+      "profile": "v6",
+      "action": "merge",
+      "beforeHttpRequests": 13,
+      "afterHttpRequests": 12,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "approveNft",
+      "beforeHttpRequests": 13,
+      "afterHttpRequests": 12,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "approveAll",
+      "beforeHttpRequests": 12,
+      "afterHttpRequests": 11,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "approveSqk",
+      "beforeHttpRequests": 12,
+      "afterHttpRequests": 11,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "withdraw",
+      "beforeHttpRequests": 14,
+      "afterHttpRequests": 13,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "merge",
+      "beforeHttpRequests": 17,
+      "afterHttpRequests": 16,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "mergeDeposited",
+      "beforeHttpRequests": 19,
+      "afterHttpRequests": 18,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "claim",
+      "beforeHttpRequests": 14,
+      "afterHttpRequests": 13,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "claimAndStake",
+      "beforeHttpRequests": 13,
+      "afterHttpRequests": 12,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "checkpoint",
+      "beforeHttpRequests": 13,
+      "afterHttpRequests": 12,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "unstake",
+      "beforeHttpRequests": 14,
+      "afterHttpRequests": 13,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "deposit",
+      "beforeHttpRequests": 15,
+      "afterHttpRequests": 14,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    },
+    {
+      "profile": "v9",
+      "action": "stake",
+      "beforeHttpRequests": 13,
+      "afterHttpRequests": 12,
+      "savedPerPreview": 1,
+      "beforeEstimateGas": 1,
+      "afterEstimateGas": 0,
+      "snapshotSimulationsRetained": 1
+    }
+  ]
+}

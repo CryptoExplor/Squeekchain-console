@@ -1,5 +1,7 @@
 # Phase 4 — holder workspace
 
+> Subsequent PR #4 [gas cleanup](gas-cleanup.md) removes application gas estimates. Its report contains the latest request savings, 282-test qualification and bundle size; the Phase 4 results below retain their original code-head scope.
+
 Date: 2026-11-04. Draft PR: [#4](https://github.com/CryptoExplor/Squeekchain-console/pull/4), targeting `main` from `arena/285786f4-squeekchain-console`.
 
 Qualified code head: **`377b8e24a48218fbe27a108b78132f1c4de4b8e0`**. Base: merged PR3, **`8a629c606cd3179cb3dd2412aac63a78f28620a9`**. The final evidence-only head is recorded in the PR body; it changes documentation/screenshots/request measurements, not application code.
