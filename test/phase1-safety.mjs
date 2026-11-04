@@ -163,6 +163,7 @@ assert.equal(claim.total.base, String(10n ** 18n), 'amount is simulated payout, 
 assert.equal(claim.batches[0].estimate.base, String(2n * 10n ** 18n));
 await assert.rejects(sdk.claimPreview(owner, ['777']), /does not own/);
 assert.equal((await sdk.mergePreview(owner, '1', '2', { confirm: 'BURN-2' })).ok, true);
+assert.equal(client.requests.find(r=>r.name==='simulateContract'&&r.functionName==='merge')?.account?.toLowerCase(),owner.toLowerCase(),'merge simulation uses the owner as sender');
 await assert.rejects(sdk.mergePreview(owner, '1', '1', { confirm: 'BURN-1' }), /distinct/);
 assert.equal((await sdk.checkpointPreview(owner)).ok, true);
 assert.equal((await sdk.walletStatus(owner)).totals.count, 2);const detail=await sdk.squeekStatus('1');assert.equal(detail.token.tokenId,'1');assert.equal(detail.owner.toLowerCase(),owner.toLowerCase());assert.ok(detail.token.claimable.base!=null);
@@ -224,7 +225,7 @@ function fill(parameter, value) {
   if (parameter.type.startsWith('bytes')) return parameter.type === 'bytes' ? '0x' : `0x${'00'.repeat(Number(parameter.type.slice(5)))}`;
   return 0n;
 }
-async function callWire(address, data, at) {
+async function callWire(address, data, at, from) {
   if (same(address, '0xca11bde05977b3631167028862be2a173976ca11')) {
     const decoded = decodeFunctionData({ abi: multicall3Abi, data });
     if (decoded.functionName === 'getEthBalance') return encodeFunctionResult({ abi: multicall3Abi, functionName: 'getEthBalance', result: 10n ** 18n });
@@ -238,7 +239,8 @@ async function callWire(address, data, at) {
   const abi = abiFor(address);
   const { functionName, args = [] } = decodeFunctionData({ abi, data });
   const mutable=abi.find(item=>item.type==='function'&&item.name===functionName).stateMutability;
-  const result = ['nonpayable','payable'].includes(mutable)?(await wireClient.simulateContract({address,abi,functionName,args,blockNumber:at})).result:await wireClient.readContract({ address, abi, functionName, args, blockNumber: at });
+  if(functionName==='merge')assert.equal(from?.toLowerCase(),owner.toLowerCase(),'wire merge eth_call carries the owner sender');
+  const result = ['nonpayable','payable'].includes(mutable)?(await wireClient.simulateContract({address,abi,functionName,args,blockNumber:at,account:from})).result:await wireClient.readContract({ address, abi, functionName, args, blockNumber: at });
   const outputs = abi.find(item => item.type === 'function' && item.name === functionName).outputs;
   const values = outputs.map((output, index) => fill(output, outputs.length === 1 ? result : result[index]));
   return encodeFunctionResult({ abi, functionName, result: outputs.length === 1 ? values[0] : values });
@@ -255,7 +257,7 @@ globalThis.fetch = async (_url, init) => {
   else if (method === 'eth_getCode') result = await wireClient.getCode({ address: params[0], blockNumber: BigInt(params[1]) });
   else if (method === 'eth_getBalance') result = toHex(10n ** 18n);
   else if(method==='eth_estimateGas')throw new Error('Unexpected eth_estimateGas');
-  else if (method === 'eth_call') {assert.equal(params[1],toHex(blockNumber));result = await callWire(params[0].to, params[0].data, BigInt(params[1]));}
+  else if (method === 'eth_call') {assert.equal(params[1],toHex(blockNumber));result = await callWire(params[0].to, params[0].data, BigInt(params[1]), params[0].from);}
   else if (method === 'eth_getLogs') {
     result = params[0].topics[2] ? [1n, 2n].map((id, index) => ({
       address: DEPLOYMENT.nft, blockNumber: toHex(blockNumber), blockHash: hash,

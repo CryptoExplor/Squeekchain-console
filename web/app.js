@@ -1226,6 +1226,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const hash = special?`#/${state.profileKey}/${route}`:`#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers', 'about'].includes(section) ? '/' + section : ''}`;
     // replaceState avoids hashchange loops, while tab clicks below create history entries.
     if (win.location.hash !== hash) win.history.replaceState(null, '', hash);
+    if(special&&String(route).startsWith('squeek/')){try{rememberWatch(holderRoute(hash),state.watchOnly?activeWatchRoute:null);}catch{/* Invalid routes are reported below. */}}
     if (name === 'info' && section) $("info-" + section)?.scrollIntoView?.({ block: 'start' });
     $('holder-overview').hidden=special&&String(route).startsWith('squeek/');$('squeek-page').hidden=!$('holder-overview').hidden;
     if(name==='activity')void ensureWorkspace().then(w=>w.history());
@@ -1238,7 +1239,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function rememberWatch(route,address){if(route?.kind==='squeek')win.history.replaceState({holderWatch:{profile:route.profile,id:route.id,address}},'',win.location.hash);}
   const onHashChange = async () => {try{const key=profileFromHash(win.location.hash),route=holderRoute(win.location.hash),watched=watchScope(route);let leftWatch=false;$('holder-route-error').classList.add('hidden');rememberWatch(route,watched);
     if(watched){const changed=!state.watchOnly||state.inspected?.toLowerCase()!==watched.toLowerCase();state.watchOnly=true;activeWatchRoute=watched;state.inspected=watched;if(changed){resetLoad();state.net=state.status=state.plan=null;renderHolder(null);}}
-    else if(activeWatchRoute){leftWatch=true;activeWatchRoute=null;state.watchOnly=false;state.inspected=state.account;resetLoad();renderHolder(null);}
+    else if(activeWatchRoute||state.watchOnly){leftWatch=true;activeWatchRoute=null;state.watchOnly=false;state.inspected=state.account;resetLoad();renderHolder(null);}
     if(key&&key!==state.profileKey)await switchProfile(key);else selectTab(currentRoute());
     if(route?.kind==='address'||leftWatch)await refreshWallet();
   }catch(error){routeError(error);}};
