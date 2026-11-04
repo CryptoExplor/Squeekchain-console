@@ -8,8 +8,8 @@ import { nftAbi } from '../sdk/abi.js';
 import { IMPLEMENTATION_SLOT } from '../sdk/verify.js';
 import { probeEndpoint } from '../src/rpc-probe.mjs';
 
-const [first, second, third, fourth, fifth] = PUBLIC_RPCS;
-assert.deepEqual(PUBLIC_RPCS,['https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.drpc.org','https://0xrpc.io/sep','https://api.zan.top/eth-sepolia','https://rpc.sepolia.ethpandaops.io']);
+const [first, second, third] = PUBLIC_RPCS;
+assert.deepEqual(PUBLIC_RPCS,['https://sepolia.gateway.tenderly.co','https://ethereum-sepolia-rpc.publicnode.com','https://0xrpc.io/sep']);
 assert.deepEqual(PUBLIC_RPC_ENDPOINTS.filter(item=>item.roles.includes('logs')).map(item=>item.url),PUBLIC_RPCS);
 assert.deepEqual(PUBLIC_RPC_ENDPOINTS.filter(item=>item.roles.includes('state')).map(item=>item.url),PUBLIC_RPCS);
 const hash = `0x${'ab'.repeat(32)}`, word = `0x${'0'.repeat(24)}${DEPLOYMENT.implementations.mining.slice(2)}`;
@@ -55,31 +55,31 @@ try {
   }
   console.log('PASS RPC availability payloads: 4444/pruned history, historical state, range too large, free plan and forbidden; role-based state/log failover');
 
-  // EthPandaOps is last. Retry-After suppresses all endpoint requests, including
+  // 0xRPC is last. Retry-After suppresses all endpoint requests, including
   // identity re-probes, across contexts until the deadline (no sleeping/hot loop).
   const cooldowns = new Map();
   let clock = Date.parse('2026-11-03T00:00:00Z');
   calls = [];
   route = call => {
     if (call.method !== 'eth_getLogs') return null;
-    if ([first,second,third,fourth].includes(call.url)) return { error: payloads[0] };
-    if (call.url === fifth) return { httpStatus: 429, retryAfter: '7' };
+    if ([first,second].includes(call.url)) return { error: payloads[0] };
+    if (call.url === third) return { httpStatus: 429, retryAfter: '7' };
     return null;
   };
   const logRequest = client => client.getContractEvents({ address: DEPLOYMENT.nft, abi: nftAbi, eventName: 'Transfer', fromBlock: 1n, toBlock: 45_000n });
   const rateLimited = () => createRpcContext({ rpcCooldowns: cooldowns, now: () => clock }).client;
   await assert.rejects(logRequest(rateLimited()), /rate limited|429|Retry-After|cooldown/);
-  assert.deepEqual(calls.filter(call => call.method === 'eth_getLogs').map(call => call.url), [first,second,third,fourth,fifth]);
-  assert.equal(cooldowns.get(new URL(fifth).href), clock + 7_000);
+  assert.deepEqual(calls.filter(call => call.method === 'eth_getLogs').map(call => call.url), [first,second,third]);
+  assert.equal(cooldowns.get(new URL(third).href), clock + 7_000);
   await assert.rejects(logRequest(rateLimited()), error => isLogRangeError(error), 'terminal 429/cooldown preserves earlier range failure for discovery shrinking');
-  const initialFinality = calls.filter(call => call.url === fifth).length;
+  const initialFinality = calls.filter(call => call.url === third).length;
   await assert.rejects(logRequest(rateLimited()), /rate limited|429|Retry-After|cooldown/);
-  assert.equal(calls.filter(call => call.url === fifth).length, initialFinality, 'no requests during the shared cooldown');
+  assert.equal(calls.filter(call => call.url === third).length, initialFinality, 'no requests during the shared cooldown');
   clock += 7_000;
-  route = call => call.method === 'eth_getLogs' && [first,second,third,fourth].includes(call.url) ? { error: payloads[0] } : null;
+  route = call => call.method === 'eth_getLogs' && [first,second].includes(call.url) ? { error: payloads[0] } : null;
   await logRequest(rateLimited());
-  assert.ok(calls.filter(call => call.url === fifth).length > initialFinality);
-  console.log('PASS log order PublicNode → dRPC → 0xRPC → ZAN → EthPandaOps, shared Retry-After backoff and recovery');
+  assert.ok(calls.filter(call => call.url === third).length > initialFinality);
+  console.log('PASS log order Tenderly → PublicNode → 0xRPC, shared Retry-After backoff and recovery');
 
   // A supplied endpoint is both a preferred read transport and an independent peer.
   calls = [];
@@ -102,9 +102,9 @@ try {
   const allPeers = await createRpcContext().snapshot();
   assert.equal(allPeers.peers.length, 2, 'snapshot peers can skip an unavailable endpoint');
   calls = [];
-  route = call => [first, second, third].includes(call.url) ? { error: payloads[3] } : null;
+  route = call => call.url===first ? { error: payloads[3] } : null;
   assert.equal((await createRpcContext().snapshot()).peers.length, 2);
-  assert.deepEqual([...new Set(calls.filter(call => call.method === 'eth_getBlockByNumber').map(call => call.url))], [fourth, fifth], 'any two healthy endpoints can serve snapshot agreement');
+  assert.deepEqual([...new Set(calls.filter(call => call.method === 'eth_getBlockByNumber').map(call => call.url))], [second, third], 'any two healthy endpoints can serve snapshot agreement');
 
   // Sepolia wallet first, availability fallback only; off-chain wallets do not serve reads.
   calls = []; route = () => null;
@@ -164,10 +164,10 @@ try {
   assert.deepEqual(ids, [1n]);
   const scans = calls.filter(call => call.method === 'eth_getLogs');
   const firstSmall = scans.findIndex(call => BigInt(call.params[0].toBlock) - BigInt(call.params[0].fromBlock) + 1n <= 22_500n);
-  assert.equal(firstSmall, 10, 'two owner filters try all five log endpoints at 45k before shrinking');
-  assert.deepEqual(scans.slice(0, firstSmall).map(call => call.url).sort(), [first,first,second,second,third,third,fourth,fourth,fifth,fifth].sort());
+  assert.equal(firstSmall, 6, 'two owner filters try all three log endpoints at 45k before shrinking');
+  assert.deepEqual(scans.slice(0, firstSmall).map(call => call.url).sort(), [first,first,second,second,third,third].sort());
   assert.ok(scans.slice(firstSmall).every(call => call.url === first));
-  console.log('PASS discovery shrinks only after all five requested providers reject the original range');
+  console.log('PASS discovery shrinks only after all three requested providers reject the original range');
 } finally { globalThis.fetch = realFetch; }
 
 // Probe contract: exact head-12 storage/block and inclusive 10k NFT Transfer range.

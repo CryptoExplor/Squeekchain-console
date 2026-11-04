@@ -83,7 +83,7 @@ for(const action of ['merge','mergeDeposited'])assert.throws(()=>sdk.actionPrevi
 assert.equal(f.calls.length,0,'burn guard runs before any network/calldata');
 const verify=await sdk.verify();assert.equal(verify.trusted,true);assert.equal(verify.cacheHit,false);
 assert.equal((await sdk.verify()).cacheHit,true);
-const wallet=await sdk.walletStatus(owner);assert.deepEqual(wallet.squeeks.map(t=>[t.tokenId,t.custody]),[['1','Wallet'],['2','Wallet'],['3','Staked'],['4','Staked']]);assert.equal(wallet.totals.power,'2100');assert.equal(wallet.totals.deposited,2);
+const wallet=await sdk.walletStatus(owner);assert.deepEqual(wallet.squeeks.map(t=>[t.tokenId,t.custody]),[['1','Wallet'],['2','Wallet'],['3','Staked'],['4','Staked']]);assert.equal(wallet.totals.power,'2100');assert.equal(wallet.totals.deposited,2);assert.equal(wallet.staking.fresh.base,'50');assert.equal(wallet.staking.mature.base,'50');
 assert.equal(wallet.net.policy.levels[1].cooldownBlocks,'6');
 assert.equal(wallet.net.mining.issued.base,'100');assert.equal(wallet.net.mining.minted.base,'200');
 f.flags.coreRound=21n;const settledOnly=await sdk.networkStatus();assert.equal(settledOnly.core.settledThroughRound,'21');assert.equal(settledOnly.mining.issued.base,'100','settlement is not issuance');
@@ -224,7 +224,7 @@ try {
  assert.equal((await unsupported.verify()).trusted,true);assert.equal(rejectedPeers.size,2);
  assert.equal(unsupported.rpcDiagnostics().some(item=>item.trust),false);
  assert.equal(wire.filter(r=>r.method==='eth_getStorageAt').length,24);
- assert.ok(rejectedPeers.has('https://sepolia.drpc.org'),'reported dRPC endpoint is exercised');
+ assert.ok(rejectedPeers.has('https://sepolia.gateway.tenderly.co'),'default first endpoint is exercised');
  assert.equal(batchRejections,2,'one rejected array per independent peer');
  wire.length=0;
  const nextContext=createSqueek9({rpcContext:createRpcContext(),accountSource:null});
@@ -235,12 +235,12 @@ try {
  const fallbackFetch=globalThis.fetch;
  globalThis.fetch=async(url,init)=>{
    const request=JSON.parse(init.body);
-   if(new URL(url).origin==='https://sepolia.drpc.org'&&request.method==='eth_getStorageAt')return new Response(JSON.stringify({error:{code:-32602,message:'Invalid params'}}),{status:400});
+   if(new URL(url).origin==='https://sepolia.gateway.tenderly.co'&&request.method==='eth_getStorageAt')return new Response(JSON.stringify({error:{code:-32602,message:'Invalid params'}}),{status:400});
    return fallbackFetch(url,init);
  };
  const failedCache=new Map(),failed=createSqueek9({rpcContext:createRpcContext(),verificationCache:failedCache,accountSource:null});
  await assert.rejects(failed.verify(),error=>{const info=rpcErrorDiagnostics(error);return info.httpStatus===400&&info.rpcCode===-32602&&!isRpcAvailabilityError(error);},'invalid-params singles must stop, not be treated as transient availability');
  assert.equal(failedCache.size,0,'failed single reads cannot seed verification');
- assert.ok(failed.rpcDiagnostics().some(item=>item.endpoint==='https://sepolia.drpc.org'&&item.method==='eth_getStorageAt'&&item.httpStatus===400));
- console.log('PASS v9 dual-peer identity batches: corrupt peer stops; dRPC HTTP 400 arrays recover once with checked singles across contexts; single-read invalid-params HTTP 400 stops with no trust cache');
+ assert.ok(failed.rpcDiagnostics().some(item=>item.endpoint==='https://sepolia.gateway.tenderly.co'&&item.method==='eth_getStorageAt'&&item.httpStatus===400));
+ console.log('PASS v9 dual-peer identity batches: corrupt peer stops; HTTP 400 arrays recover once with checked singles across contexts; single-read invalid-params HTTP 400 stops with no trust cache');
 }finally{globalThis.fetch=realFetch;}

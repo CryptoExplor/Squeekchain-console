@@ -22,11 +22,11 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
       await page.evaluate(() => window.squeek.connect());
       await expect(page.getByTestId('panel-squeeks')).toBeVisible();
       await expect(page.getByTestId('holder-count')).toHaveText('3');
-      await expect(page.getByTestId('squeeks-tbody')).toContainText('Unknown');
+      await expect(page.getByTestId('squeek-cards')).toContainText('Unknown');
       if (width === 390) {
-        const cells = await page.getByTestId('squeeks-tbody').locator('tr').first().locator('td').evaluateAll(nodes => nodes.map(node => ({ label: node.dataset.label, left: node.getBoundingClientRect().left, right: node.getBoundingClientRect().right, display: getComputedStyle(node).display })));
-        expect(cells).toHaveLength(7);
-        for (const cell of cells) { expect(cell.left).toBeGreaterThanOrEqual(0); expect(cell.right).toBeLessThanOrEqual(width); expect(cell.display).toBe('flex'); }
+        const cells = await page.getByTestId('squeek-cards').locator('article').first().locator('dd').evaluateAll(nodes => nodes.map(node => ({ label: node.dataset.label, left: node.getBoundingClientRect().left, right: node.getBoundingClientRect().right, display: getComputedStyle(node).display })));
+        expect(cells).toHaveLength(4);
+        for (const cell of cells) { expect(cell.left).toBeGreaterThanOrEqual(0); expect(cell.right).toBeLessThanOrEqual(width); expect(cell.display).toBe('block'); }
       }
     }
     if (view === 'info') {
@@ -125,7 +125,7 @@ for (const width of [900, 1024]) test(`header: single desktop row at ${width}px,
   await page.getByTestId('profile-select').selectOption('sepolia-v9');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
-  await expect(page.getByTestId('verified-chip')).toHaveAttribute('title', /Pinned identities fully verified at block 12101025/);
+  await expect(page.getByTestId('verified-chip')).toHaveAttribute('title', /Network and contract checks passed at block 12101025; latest check at block 12101024/);
   await assertCompactHeader(page, width, true); await page.evaluate(() => window.squeek.destroy());
 });
 

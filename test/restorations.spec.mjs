@@ -56,7 +56,7 @@ test('watch mode keeps wallet identity, disables owner requests and exits to con
   await page.getByTestId('watch-input').fill((await page.evaluate(()=>squeek.state.account)).toLowerCase());await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();
   await page.getByTestId('wallet-button').click();await page.getByTestId('btn-disconnect').click();await page.getByTestId('tab-squeeks').click();
   await page.getByTestId('watch-input').fill(other);await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeVisible();
-  await page.getByTestId('btn-exit-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();await expect(page.getByTestId('holder-empty')).toBeVisible();await expect(page.getByTestId('holder-empty')).toHaveText('Connect a wallet, or inspect an address, to see positions.');await page.evaluate(()=>squeek.destroy());
+  await page.getByTestId('btn-exit-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();await expect(page.getByTestId('holder-empty')).toBeVisible();await expect(page.getByTestId('holder-empty')).toContainText('Connect your wallet to see your Squeeks and SQK.');await page.evaluate(()=>squeek.destroy());
 });
 
 async function seedPending(page) {
@@ -74,7 +74,7 @@ test('pending switch notice is conditional, persists across profiles and disappe
 test('Trust checklist tracks verified, stopped and unknown; Developers wallet permissions are accurate',async({page})=>{
   await installV9Fixture(page);await page.getByTestId('tab-info').click();
   await expect(page.getByTestId('trust-checklist').locator('li')).toHaveCount(7);await expect(page.getByTestId('trust-checklist')).toHaveAttribute('data-state','verified');
-  for(const text of ['Chain ID','Implementation and admin slots','Runtime code hashes','Versions','Layout digests','Wiring','Two RPC peers agreeing on the block hash'])await expect(page.getByTestId('trust-checklist')).toContainText(text);
+  for(const text of ['Network','Contract permissions','Contract software','Versions','Data compatibility','Connected contracts','Two RPC peers agreeing on the block hash'])await expect(page.getByTestId('trust-checklist')).toContainText(text);
   await page.evaluate(async()=>{v9.net.verification.trusted=false;await squeek.refresh();});await expect(page.getByTestId('trust-checklist')).toHaveAttribute('data-state','stopped');await expect(page.getByTestId('verified-chip')).toHaveText('Stopped');
   await page.getByTestId('profile-select').selectOption('mainnet');await expect(page.getByTestId('trust-checklist')).toHaveAttribute('data-state','unknown');
   await expect(page.getByTestId('developer-surfaces').locator('tbody tr').nth(1)).toContainText('Your wallet popup');

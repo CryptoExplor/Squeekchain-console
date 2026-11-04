@@ -42,7 +42,7 @@ assert.match($('wheel-rpm').textContent, /12.5/);
 win.document.querySelector('[data-testid="tab-squeeks"]').click();
 assert.equal(win.document.querySelector('[data-panel="squeeks"]').classList.contains('hidden'), false);
 await api.connect();
-assert.equal($('squeeks-tbody').children.length, 1);
+assert.equal($('squeek-cards').children.length, 1);
 assert.equal($('btn-claim').disabled, false);
 assert.ok(Object.hasOwn(api.tools(),'squeek_request_merge'));
 assert.match((await api.callTool('squeek_request_merge',{survivor:'1',donor:'2'})).error,/BURN-2/);

@@ -659,3 +659,34 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 #banner { position: sticky; top: calc(var(--header-bottom, 86px) + 8px); z-index: 25; overflow-wrap: anywhere; }
 #wallet-eth { margin: 0; padding: 8px; }
 #issuance-source { font-size: 11px; line-height: 1.5; margin-top: 8px; }
+
+/* Squeeks and SQK are sibling workspaces, never bordered cards inside cards. */
+.holder-workspace { padding-block: 24px; }
+.workspace-section { padding-block: 24px; border-top: 1px solid var(--border, #d8d2c4); }
+.squeek-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 16px; }
+.squeek-card { padding: 16px; border: 1px solid var(--border, #d8d2c4); border-radius: 12px; min-width: 0; }
+.squeek-image { aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--surface-alt, #eee8d9); }
+.squeek-image img { width: 100%; height: 100%; object-fit: contain; }
+.card-facts,.sqk-facts,.preview-facts { margin: 16px 0; display: grid; gap: 12px; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.card-facts dt,.sqk-facts dt,.preview-facts dt { font-size: 12px; opacity: .75; }
+.card-facts dd,.sqk-facts dd,.preview-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.sqk-facts { grid-template-columns: repeat(5,minmax(0,1fr)); }
+.card-actions,.selection-bar,.action-row { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-block: 16px; }
+.card-actions label { display: flex; align-items: center; min-height: 44px; gap: 8px; }
+.card-actions input { width: 20px; height: 20px; }
+.action-row label { display: flex; flex-direction: column; gap: 8px; flex: 1 1 130px; }
+.action-row input { width: 100%; min-width: 0; }
+.action-row button { min-height: 44px; }
+.out details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
+.wallet-wait { position: sticky; bottom: 8px; margin: 16px; padding: 16px; background: var(--bg, #faf8f1); border: 1px solid var(--border,#b9aa84); border-radius: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; z-index: 30; }
+@media(max-width:600px) { .squeek-grid { grid-template-columns: 1fr; } .sqk-facts { grid-template-columns: repeat(2,minmax(0,1fr)); } .action-row,.selection-bar,#sqk-v9-buttons { flex-direction: column; align-items: stretch; } .action-row label,.action-row .btn { width: 100%; flex-basis: auto; } #nft-v9-buttons { display: grid; gap: 8px; } }
+
+#nft-v9-buttons { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.squeek-image.is-skeleton img:not([src]) { visibility: hidden; }
+@media (max-width:600px) {
+  #panel-squeeks .row, #nft-v9-buttons { display:flex; flex-direction:column; align-items:stretch; }
+  #panel-squeeks .row > input, #panel-squeeks .row > button, .selection-bar > span { width:100%; }
+}
+
+#sqk-claim-host { display: contents; }
+.sqk-actions { gap: 8px; align-items: end; }

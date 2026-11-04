@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import {installReviewFixture} from './review-fixture.mjs';
 import {installV9Fixture} from './v9-fixture.mjs';
 const availability='RPC unavailable. Verified reads need two independent Sepolia peers. Nothing was signed.';
-const trustFailure='Wallet read failed: Snapshot block hash mismatch. Nothing was signed.';
+const trustFailure='Network or contract checks could not be completed. Actions are stopped. Nothing was signed.';
 async function capture(page,info,name){await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({animations:'disabled'});await info.attach(name,{body:image,contentType:'image/png'});if(process.env.UPDATE_SCREENSHOTS==='1')fs.writeFileSync('docs/screenshots/'+name,image);}
 for(const theme of ['light','dark'])for(const width of [1280,390])test(`connected v9 diagnostics below header / ${theme} / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);if(theme==='dark')await page.getByTestId('btn-theme').click();await page.evaluate(()=>squeek.connect());
@@ -28,12 +28,12 @@ for(const profile of ['sepolia-v6','sepolia-v9'])for(const width of [1280,390])t
 });
 test('live Squeeks, plain profile notes, plural rounds and checkpoint issuance source',async({page})=>{
  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.getByTestId('tab-network').click();
- await expect(page.getByTestId('net-issued-label')).toHaveText('Issued by v9 checkpoints');await expect(page.getByTestId('net-issued')).toContainText('12,500,000');await expect(page.getByTestId('net-issued')).not.toContainText('25,000,000');await expect(page.getByTestId('issuance-source')).toContainText('issuance.state().minted');
+ await expect(page.getByTestId('net-issued-label')).toHaveText('SQK issued');await expect(page.getByTestId('net-issued')).toContainText('12,500,000');await expect(page.getByTestId('net-issued')).not.toContainText('25,000,000');await expect(page.getByTestId('issuance-source')).toHaveCount(0);
  for(const [lag,text] of [['0','0 rounds'],['1','1 round'],['2','2 rounds']]){await page.evaluate(async lag=>{v9.net.mining.lagRounds=lag;await squeek.refresh();},lag);await expect(page.getByTestId('net-lag')).toHaveText(text);}
  await page.evaluate(async()=>{v9.net.core.settledThroughRound='2049';await squeek.refresh();});await expect(page.getByTestId('net-issued')).toContainText('12,500,000');
- await page.evaluate(async()=>{v9.net.mining.issued.sqk='12500001';v9.net.mining.processedThroughRound='2049';await squeek.refresh();});await expect(page.getByTestId('net-issued')).toContainText('12,500,001');await expect(page.getByTestId('issuance-source')).toContainText('processed round 2049');
- await page.evaluate(()=>squeek.switchProfile('sepolia-v6'));await page.getByTestId('tab-network').click();await expect(page.getByTestId('net-squeeks')).toHaveText('512');await expect(page.getByTestId('net-issued-label')).toHaveText('Minted by v6 mining');
- await expect(page.getByTestId('profile-notice')).toHaveText('Equal profile: every operation checks the published identity pins and same-block two-peer agreement. Mismatch stops actions.');await page.evaluate(()=>squeek.destroy());
+ await page.evaluate(async()=>{v9.net.mining.issued.sqk='12500001';v9.net.mining.processedThroughRound='2049';await squeek.refresh();});await expect(page.getByTestId('net-issued')).toContainText('12,500,001');await expect(page.getByTestId('issuance-source')).toHaveCount(0);
+ await page.evaluate(()=>squeek.switchProfile('sepolia-v6'));await page.getByTestId('tab-network').click();await expect(page.getByTestId('net-squeeks')).toHaveText('512');await expect(page.getByTestId('net-issued-label')).toHaveText('SQK issued');
+ await expect(page.getByTestId('profile-notice')).toHaveText('Test network. Use test funds only.');await page.evaluate(()=>squeek.destroy());
 });
 test('refreshes coalesce per generation, not across profile changes',async({page})=>{
  await installV9Fixture(page);
@@ -75,7 +75,7 @@ test('minified dist scripts render and retain wallet safety with lazy Settings a
  const scripts=await installReviewFixture(page,{built:true});await page.evaluate(()=>squeek.connect());await expect(page.getByTestId('holder-count')).toHaveText('3');
  await page.getByTestId('settings-open').click();await expect(page.getByTestId('settings-sheet')).toBeVisible();await page.keyboard.press('Escape');
  await page.getByTestId('tab-info').click();await page.getByTestId('info-link-developers').click();await page.getByTestId('btn-copy-manifest').click();
- for(const script of ['/app.js','/bundle.js','/activity.js','/components.js','/settings.js','/developers.js'])expect(scripts.has(script),script+' must load from dist').toBe(true);
+ for(const script of ['/app.js','/bundle.js','/activity.js','/components.js','/holdings.js','/images.js','/settings.js','/developers.js'])await expect.poll(()=>scripts.has(script),{message:script+' must load from dist'}).toBe(true);
  expect(errors).toEqual([]);expect(await page.evaluate(()=>reviewCounters.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
 for(const profile of ['sepolia-v6','sepolia-v9'])test(`saved custom RPC reaches production ${profile} adapter without a fixture factory`,async({page})=>{

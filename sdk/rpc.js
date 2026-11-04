@@ -9,11 +9,9 @@ const sessionCooldowns = new Map();
 
 // Roles are observed availability preferences, never deployment/trust pins.
 export const PUBLIC_RPC_ENDPOINTS = [
-  { url: 'https://ethereum-sepolia-rpc.publicnode.com', roles: ['snapshot', 'state', 'logs'], logOrder: 1 },
-  { url: 'https://sepolia.drpc.org', roles: ['snapshot', 'state', 'logs'], logOrder: 2 },
+  { url: 'https://sepolia.gateway.tenderly.co', roles: ['snapshot', 'state', 'logs'], logOrder: 1 },
+  { url: 'https://ethereum-sepolia-rpc.publicnode.com', roles: ['snapshot', 'state', 'logs'], logOrder: 2 },
   { url: 'https://0xrpc.io/sep', roles: ['snapshot', 'state', 'logs'], logOrder: 3 },
-  { url: 'https://api.zan.top/eth-sepolia', roles: ['snapshot', 'state', 'logs'], logOrder: 4 },
-  { url: 'https://rpc.sepolia.ethpandaops.io', roles: ['snapshot', 'state', 'logs'], logOrder: 5 },
 ];
 // The browser transport is HTTP JSON-RPC. WSS aliases are not fed to http(),
 // nor counted as independent peers alongside HTTPS from the same operator.

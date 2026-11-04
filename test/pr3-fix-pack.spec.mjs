@@ -8,7 +8,7 @@ const other='0x1111111111111111111111111111111111111111';
 for(const action of ['claim','claimAndStake'])for(const change of ['equal','increase','lower','recipient'])test(`v9 ${action} fresh ${change}: reviewed payout guard`,async({page})=>{
  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());
  if(action==='claim')await page.getByTestId('btn-claim').click();
- else{await page.getByTestId('v9-action').selectOption(action);await page.getByTestId('v9-review').click();}
+ else{await page.locator(`[data-action="${action}"]`).first().click();await page.getByTestId('v9-review').click();}
  await expect(page.getByTestId('modal')).toBeVisible();
  await page.evaluate(({change,other})=>{if(change==='increase'||change==='recipient')v9.claimAmount='3000000000000000000';if(change==='lower')v9.claimAmount='2000000000000000000';if(change==='recipient')v9.claimRecipient=other;},{change,other});
  await page.getByTestId('btn-modal-confirm').click();
@@ -33,7 +33,7 @@ for(const theme of ['light','dark'])for(const width of [1280,390])test(`non-owne
 });
 const expired=encodeErrorResult({abi:staking9Abi,errorName:'DeadlineExpired',args:[]});
 for(const source of ['simulation','wallet'])test(`DeadlineExpired from ${source}: Quote expired and explicit Re-quote`,async({page})=>{
- await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.getByTestId('v9-action').selectOption('unstake');await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeVisible();
+ await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.locator(`[data-action="${'unstake'}"]`).first().click();await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeVisible();
  await page.evaluate(({source,data})=>{if(source==='simulation')v9.simulationError={cause:{data}};else v9.sendError={code:-32000,data:{originalError:{data}}};},{source,data:expired});
  await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('quote-reason')).toHaveText('Quote expired');await expect(page.getByTestId('modal')).toBeHidden();
  await expect(page.getByRole('button',{name:'Re-quote',exact:true})).toHaveCount(1);await expect(page.getByTestId('fee-quote')).toContainText('SQK received');
@@ -46,7 +46,7 @@ for(const source of ['simulation','wallet'])test(`DeadlineExpired from ${source}
 test.describe('local quote deadline',()=>{
  test.use({timezoneId:'Asia/Kolkata'});
  test('unstake deadline is displayed in the browser local time zone',async({page})=>{
-  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.getByTestId('v9-action').selectOption('unstake');await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();
+  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.locator(`[data-action="${'unstake'}"]`).first().click();await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();
   const expected=await page.evaluate(()=>new Date(1900000000000).toLocaleString(undefined,{timeZoneName:'short'}));expect(expected).toContain('GMT+5:30');
   await expect(page.getByTestId('confirm-details').locator('dd').nth(3)).toHaveText(expected);await page.getByTestId('btn-modal-cancel').click();await page.evaluate(()=>squeek.destroy());
  });

@@ -38,3 +38,19 @@ console.log('PASS wheel scheduler: ACTIVE 5s, IDLE 60s, 10min virtual request co
 for(const name of fs.readdirSync('dist').filter(n=>/\.(js|html)$/.test(n))){const body=fs.readFileSync('dist/'+name,'utf8');assert.doesNotMatch(body,/Try a holder|hardhat_impersonate|anvil_impersonate|fork-test-peer|fork-watch\.js/);}
 for(const name of ['sdk/v9.js','sdk/squeekchain.js'])assert.match(fs.readFileSync(name,'utf8'),/namespace: [^\n]+:chain-only[^\n]+accountSource:null/);
 console.log('PASS action authority: canonical-only inventory namespace; production build excludes fork wallet/config/watch shortcuts');
+const headers=fs.readFileSync('web/_headers','utf8');const {PUBLIC_RPCS}=await import('../sdk/rpc.js');
+assert.deepEqual(PUBLIC_RPCS,['https://sepolia.gateway.tenderly.co','https://ethereum-sepolia-rpc.publicnode.com','https://0xrpc.io/sep']);
+for(const removed of ['sepolia.drpc.org','ethereum-sepolia-public.nodies.app','eth-sepolia.api.onfinality.io','api.zan.top','rpc.sepolia.ethpandaops.io']){assert.ok(!PUBLIC_RPCS.some(url=>url.includes(removed)));assert.ok(!headers.includes(removed));}
+console.log('PASS current default pool and CSP: Tenderly/PublicNode/0xRPC only; removed hosts stay absent');
+// Image/metadata cache survives a second visit, separates levels and expires at 24h.
+const {createImages}=await import('../web/images.js');let imageCalls=0,blobCalls=0;const imageCache=createDisplayCache(indexedDB),imageProfile=getProfile('sepolia-v9');
+const imageOptions={cache:imageCache,win:{URL:globalThis.URL},fetcher:async(_url,options)=>{blobCalls++;assert.equal(options.credentials,'omit');return {ok:true,blob:async()=>new Blob(['synthetic'],{type:'image/png'})};}};
+const imageApi={squeek:async(id,level)=>{imageCalls++;return {data:{metadata:{status:'available',name:'Synthetic',cardImageUrl:'https://cards.example.test/card.png',imageDataUri:fixtures.squeek.metadata.imageDataUri,attributes:[]}}};}};
+const firstImages=createImages(imageOptions),imageLoad={profile:imageProfile,token:{tokenId:'41',level:1},api:imageApi,fallback:()=>{throw new Error('No fallback expected');}};
+assert.match((await firstImages.load(imageLoad)).image,/^blob:/);assert.equal(imageCalls,1);assert.equal(blobCalls,1);firstImages.destroy();
+const secondImages=createImages(imageOptions);await secondImages.load(imageLoad);assert.equal(imageCalls,1,'second visit: zero metadata calls');assert.equal(blobCalls,1,'second visit: zero image calls');await secondImages.load({...imageLoad,token:{tokenId:'41',level:2}});assert.equal(imageCalls,2,'new level has a new image key');
+const clockNow=Date.now;Date.now=()=>clockNow()+DAY+1;try{await secondImages.load(imageLoad);assert.equal(imageCalls,3,'24h re-check');}finally{Date.now=clockNow;secondImages.destroy();}
+assert.doesNotMatch(fs.readFileSync('web/holdings.js','utf8'),/innerHTML|insertAdjacentHTML/);
+console.log('PASS automatic art cache: isolated blob images, omit credentials, durable second-visit zero calls, level changes and 24h expiry');
+
+const optionalAccount=structuredClone(account);assert.equal(apiWallet(optionalAccount,{},owner).staking.fresh,null);optionalAccount.data.stake.freshBaseUnits='7';optionalAccount.data.stake.matureBaseUnits='3';assert.equal(apiWallet(optionalAccount,{},owner).staking.fresh.base,'7');assert.equal(apiWallet(optionalAccount,{},owner).staking.mature.base,'3');optionalAccount.data.stake.freshBaseUnits='invalid';assert.throws(()=>apiWallet(optionalAccount,{},owner),/Invalid optional account amount/);

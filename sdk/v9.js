@@ -121,7 +121,7 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
     const positions=tokens.map(({id,deposited},i)=>({tokenId:String(id),holder:deposited?addr.staking:owner,deposited,custody:deposited?'Staked':'Wallet',level:Number(values[i*2]),nextMergeHeight:String(values[i*2+1]),activeWeight:null,claimable:null}));
     const value = { profile:profile.key, owner, chainId:11155111, ethBalance:{base:String(eth),eth:formatEther(eth)}, sqkBalance:sqkAmount(balance), squeeks:positions,
       totals:{count:positions.length,deposited:stakedIds.length,power:String(power[0]+power[1]),sharePercent:null,claimable:sqkAmount(claimable),estimatedSqkPerDay:null},
-      staking:{principal:sqkAmount(principal[0]),power:String(power[0]),sqkPower:String(power[1])}, net };
+      staking:{principal:sqkAmount(principal[0]),fresh:sqkAmount(principal[1]),mature:BigInt(principal[1])<=BigInt(principal[0])?sqkAmount(principal[0]-principal[1]):null,power:String(power[0]),sqkPower:String(power[1])}, net };
     return { ...value, mergePlan: plan(value) };
   }
   function plan(status) {

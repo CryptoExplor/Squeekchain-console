@@ -30,6 +30,8 @@ import {
 } from "./bundle.js";
 
 import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
+import {createHoldings} from './holdings.js';
+import {createImages} from './images.js';
 import { createActivity } from "./activity.js";
 import { createTelemetry, telemetryView } from "./telemetry.js";
 
@@ -148,7 +150,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const failure=rpcToolError(error,state.adapter?.rpcDiagnostics?.()??[]);
     state.lastReadFailure={scope,profile:state.profileKey,...failure};
     const availability=failure.diagnostics.availability;
-    const message=availability?'RPC unavailable. Verified reads need two independent Sepolia peers. Nothing was signed.':`${scope} failed: ${failure.error}. Nothing was signed.`;
+    const message=availability?'RPC unavailable. Verified reads need two independent Sepolia peers. Nothing was signed.':'Network or contract checks could not be completed. Actions are stopped. Nothing was signed.';
     el.verified.textContent=availability?'Unavailable':'Stopped';
     $('profile-status').textContent=availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Read failed';
     $('profile-status').className=`chip ${availability?'warn':'bad'}`;
@@ -161,11 +163,21 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const sqk = formatAmount;
   const setStat = (node, value, formatter = valueText) => Stat(node.closest('.stat')).set(value, formatter);
   const json = (v) => JSON.stringify(v, null, 2);
-  const showOut = (node, value) => {
-    node.textContent = typeof value === "string" ? value : json(value);
-    node.classList.remove("hidden");
+  const actionNames={merge:'Merge Squeeks',mergeDeposited:'Merge deposited',deposit:'Deposit',withdraw:'Withdraw',claim:'Claim',claimAndStake:'Claim and stake',stake:'Stake',unstake:'Unstake',approveNft:'Approve one Squeek',approveAll:'Approve all Squeeks',approveSqk:'Approve SQK'};
+  const technical=value=>JSON.stringify(value,(_key,v)=>typeof v==='string'&&v.includes(getProfile('sepolia-v9').identities?.release??'\u0000')?'[internal deployment]':v,2);
+  const showOut = (node,value) => {
+    if(node.id==='tool-result'){node.textContent=technical(value);node.classList.remove('hidden');return;}
+    node.replaceChildren();const title=doc.createElement('p');title.textContent=value.ok?'Simulation passed':value.reason?errorMessage({message:value.reason}):'Preview unavailable';node.append(title);
+    const facts=doc.createElement('dl');facts.className='preview-facts';
+    const labels={merge:'Merge Squeeks',mergeDeposited:'Merge deposited Squeeks',claim:'Claim SQK',claimAndStake:'Claim and stake',stake:'Stake SQK',unstake:'Unstake SQK',deposit:'Deposit Squeeks',withdraw:'Withdraw Squeeks',approveNft:'Approve one Squeek',approveAll:'Approve all Squeeks',approveSqk:'Approve SQK'};
+    for(const [label,raw] of [['Action',labels[value.action]??(value.nextRound?'Checkpoint':null)],['Amount',value.total??value.amount],['Keep',value.survivor],['Burn',value.donor],['Squeeks',value.tokenIds?.join(', ')],['Recipient',value.recipient],['Fee',value.fee],['You receive',value.net]]){if(raw==null)continue;const group=doc.createElement('div'),dt=doc.createElement('dt'),dd=doc.createElement('dd');dt.textContent=label;dd.textContent=raw?.sqk!=null?sqk(raw):label==='Amount'&&/^\d+$/.test(String(raw))?`${formatEther(BigInt(raw))} SQK`:String(raw);group.append(dt,dd);facts.append(group);}node.append(facts);
+    const details=doc.createElement('details'),summary=doc.createElement('summary'),raw=doc.createElement('pre'),copy=doc.createElement('button');summary.textContent='Technical details';raw.textContent=technical(value);copy.className='btn';copy.textContent='Copy';copy.onclick=async()=>{try{await win.navigator.clipboard.writeText(raw.textContent);}catch{toast('Copy unavailable','warn');}};details.append(summary,copy,raw);node.append(details);node.classList.remove('hidden');
   };
-  const errorMessage = (err) => `${err?.message ?? err}${err?.revert ? ` → ${err.revert.name}(${err.revert.args.join(", ")})` : ""}`;
+  const errorMessage = err => {
+    const message=String(err?.message??err);
+    return err?.revert||/\b(?:storage|slots?|digest|revision|release|runtime)\b|\w+\(/i.test(message)||message.includes(getProfile('sepolia-v9').identities.release)
+      ? 'The network or contract check failed. Actions are stopped. See Info › Developers for technical details.' : message;
+  };
   const provider = () => win.ethereum ?? null;
 
   // ── theme ──────────────────────────────────────────────────────────────────
@@ -243,7 +255,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
   }
   function feedRows(id,entries,label){const root=$(id);root.replaceChildren(...entries.slice(0,10).map(item=>{const li=doc.createElement('li');li.textContent=label(item);return li;}));root.title='API · 12 blocks behind';}
-  async function displayFeeds(load){const api=displayApi(load);if(!api)return;for(const [id,read,label] of [['network-events',()=>api.feed(),e=>String(e.type??'Event')],['network-settlements',()=>api.settlements(),e=>`Round ${e.settledThroughRound??UNKNOWN}`],...(state.inspected?[['account-activity',()=>api.feed(`/accounts/${state.inspected.toLowerCase()}/activity?limit=25`),e=>String(e.kind??'Activity')]]:[])]){try{const result=await read();assertCurrent(load);feedRows(id,result.data.events??result.data.activity??result.data.recentSettlements,label);}catch(error){if(!isCurrent(load))return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);return;}if(error.kind&&error.kind!=='transport')$(id).replaceChildren();}}}
+  const eventNames={'system.mining_checkpointed':'SQK issuance updated','system.settlement_completed':'Round completed','nft.deposited':'Squeek deposited','nft.withdrawn':'Squeek withdrawn'};
+  async function displayFeeds(load){const api=displayApi(load);if(!api)return;for(const [id,read,label] of [['network-events',()=>api.feed(),e=>eventNames[e.type]??'Network activity'],['network-settlements',()=>api.settlements(),e=>`Round ${e.settledThroughRound??UNKNOWN}`],...(state.inspected?[['account-activity',()=>api.feed(`/accounts/${state.inspected.toLowerCase()}/activity?limit=25`),e=>eventNames[e.kind]??'Account activity']]:[])]){try{const result=await read();assertCurrent(load);feedRows(id,result.data.events??result.data.activity??result.data.recentSettlements,label);}catch(error){if(!isCurrent(load))return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);return;}if(error.kind&&error.kind!=='transport')$(id).replaceChildren();}}}
   function clearDisplayMismatch(error){wheelGoodAt=0;lastGood.clear();state.net=null;renderNetworkPlaceholder();renderHolder(null);for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';for(const id of ['network-events','network-settlements','account-activity','provisional-blocks'])$(id).replaceChildren();showReadFailure(error,'API identity');}
 
   let destroyed = false;
@@ -397,8 +410,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.verified.textContent = profile.addresses ? "Checking…" : "Not deployed";
     el.verified.className = "sr-only";
     $('profile-status').title=el.verified.title='';
-    $('net-issued-label').textContent=profile.abiSet==='v9'?'Issued by v9 checkpoints':'Minted by v6 mining';
-    $('issuance-source').textContent='';
+    $('net-issued-label').textContent='SQK issued';
+
     $("profile-status").className = "chip";
     $("profile-status").textContent = profile.addresses ? "Checking…" : "Not deployed";
     renderTrust(null);
@@ -407,8 +420,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     renderCapabilities(profile);
     el.net.chain.textContent = profile.chainId === CHAIN.id ? "Sepolia" : "Ethereum";
     el.net.kind.textContent = profile.kind;
-    el.net.release.textContent = profile.identities?.release ?? (profile.addresses ? "published v6" : "no deployment");
-    el.net.notice.textContent = profile.notes ?? "";
+    el.net.release.textContent = profile.addresses?`${profile.short.toUpperCase()} · Sepolia`:"Not deployed";
+    el.net.notice.textContent = profile.addresses?"Test network. Use test funds only.":"Not deployed on Ethereum.";
     el.net.notice.className = `notice ${profile.addresses ? "" : "warn"}`;
   }
 
@@ -425,7 +438,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   function renderContracts(profile) {
-    $('contracts-release').textContent = profile.identities?.release ?? (profile.addresses ? 'squeeks-sepolia-core3-mining6-001' : 'Not deployed');
+    $('contracts-release').textContent = profile.addresses?`${profile.short.toUpperCase()} contracts`:'Not deployed';
     $('contracts-list').replaceChildren(...Object.entries(profile.addresses ?? {}).map(([name, address]) => {
       const row = doc.createElement('li'), link = doc.createElement('a');
       link.textContent = `${name}: ${address}`; link.href = `${EXPLORER}/address/${address}`;
@@ -580,15 +593,19 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.walletEth.textContent=state.account?`ETH balance: ${state.walletEth??UNKNOWN}${state.walletEth==null?'':' ETH'}`:'';
   }
 
+  let signingTicket;
+  function releaseSigning(ticket){if(signingTicket!==ticket)return;signingTicket=null;state.busy=false;$('wallet-wait').classList.add('hidden');if(state.net)renderNetwork(state.net);renderHolder(state.status,state.plan);}
+  $('wallet-cancel').onclick=()=>{const ticket=signingTicket;if(!ticket)return;ticket.cancelled=true;ticket.reject(Object.assign(new Error('Wallet request cancelled in this app'),{walletOutcome:true}));releaseSigning(ticket);};
   async function sendTransaction(tx, label, owner = state.account, load = captureLoad()) {
     assertCurrent(load);
     const p = provider();
     if (!p || !state.account) throw new Error("connect a wallet to sign");
-    if (state.busy) throw new Error("A wallet signing request is already pending");
-    state.busy = true;
-    if (state.net) renderNetwork(state.net);
+    if(state.busy)throw Object.assign(new Error('Waiting for your wallet…'),{walletOutcome:true});
+    const ticket={cancelled:false};signingTicket=ticket;const cancelled=new Promise((_,reject)=>ticket.reject=reject);cancelled.catch(()=>{});
+    state.busy = true;$('wallet-wait').classList.remove('hidden');
     let hash;
     try {
+      if (state.net) renderNetwork(state.net);
       if(state.chainId!=null&&state.chainId!==11155111)throw new Error('Wrong chain: Sepolia required. Start again.');
       await ensureChain(p, load.profileKey);
       assertCurrent(load);
@@ -596,17 +613,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       assertCurrent(load);
       if (!owner || state.account?.toLowerCase() !== owner.toLowerCase() || accounts?.[0]?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet changed; start again");
       // A profile switch cannot cancel this wallet popup or an already-broadcast transaction.
-      hash = await p.request({ method: "eth_sendTransaction", params: [{ from: owner, to: tx.to, data: tx.data, value: `0x${BigInt(tx.value ?? 0).toString(16)}` }] });
-      // Persist BEFORE checking profile generation. Even a late wallet response belongs in Activity.
-      activity.record(hash, label, CHAIN.id, load.profileKey);
-      void activity.refresh();
-    } finally {
-      state.busy = false;
-      if (isCurrent(load)) {
-        if (state.net) renderNetwork(state.net);
-        renderHolder(state.status, state.plan);
-      }
-    }
+      if(ticket.cancelled)throw Object.assign(new Error('Wallet request cancelled'),{walletOutcome:true});
+      const response=p.request({method:'eth_sendTransaction',params:[{from:owner,to:tx.to,data:tx.data,value:`0x${BigInt(tx.value??0).toString(16)}` }]}).then(result=>{activity.record(result,label,CHAIN.id,load.profileKey);void activity.refresh();return result;});
+      hash=await Promise.race([response,cancelled]);
+    } catch(error){if(error?.code===4001||/reject|closed|cancel/i.test(error?.message??''))error.walletOutcome=true;throw error;} finally { releaseSigning(ticket); }
+
     assertCurrent(load);
     toast(`${label} submitted ${hash.slice(0, 12)}…`);
     const receipt = await viewAwait(load, () => activity.wait(hash));
@@ -641,8 +652,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     setStat(el.net.lag, mining.lagRounds, value => num(value) === UNKNOWN ? UNKNOWN : `${num(value)} ${BigInt(value)===1n?'round':'rounds'}`);
     const v9=getProfile(state.profileKey).abiSet==='v9';
     setStat(el.net.issued,v9?mining.issued:mining.minted,sqk);
-    $('net-issued-label').textContent=v9?'Issued by v9 checkpoints':'Minted by v6 mining';
-    $('issuance-source').textContent=v9?`issuance.state().minted · processed round ${valueText(mining.processedThroughRound)}. Core settlement alone does not issue SQK.`:'mining.state().minted · on-chain';
+    $('net-issued-label').textContent='SQK issued';
     setStat(el.net.squeeks, net.nft?.totalSupply, num);
     setStat(el.net.paused, core.paused, value => value === true ? 'yes' : value === false ? 'no' : UNKNOWN);
     el.net.paused.parentElement.className = `stat ${core.paused === true ? 'bad' : core.paused === false ? 'ok' : ''}`;
@@ -704,6 +714,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
     if (!status) {
+      holdings.render(null);
       for (const node of [el.holder.count, el.holder.power, el.holder.share, el.holder.claimable]) setStat(node, null);
       el.holder.tbody.replaceChildren(); el.holder.head.replaceChildren(); el.holder.mergeList.replaceChildren();
       el.holder.claim.disabled = true; $("btn-custom-merge").disabled = true;$("v9-review").disabled=true; $("v9-actions").classList.add("hidden"); return;
@@ -729,32 +740,21 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $("btn-custom-merge").disabled = state.busy || !has || !signerOwns || !caps.merge;
     $("claim-ids").disabled = !caps.claim || isV9;
     $("claim-ids").classList.toggle("hidden", isV9);
-    $("v9-actions").classList.toggle("hidden", !isV9);
+    $("v9-actions").classList.toggle("hidden", !isV9);$("action-fields").classList.toggle("hidden",!isV9);
     $("v9-review").disabled = !signerOwns || state.busy;
 
 
-    Table({ head: el.holder.head, body: el.holder.tbody, columns: columnsForProfile(), rows: status.squeeks ?? [], cell: (s, c) => {
-      if (c.key === 'claimable') return s.claimable ? num(s.claimable.sqk, 4) : UNKNOWN;
-      if (c.key === 'deposited') return s.deposited == null ? UNKNOWN : s.deposited ? 'yes' : 'no';
-      if (c.key === 'pendingRound') return s.pendingRound == null ? UNKNOWN : String(s.pendingRound) === '0' ? 'None' : `r${s.pendingRound}`;
-      if (c.key === 'art') {
-        const btn = doc.createElement('button'); btn.className = 'btn btn-ghost'; btn.textContent = 'View';
-        btn.setAttribute('aria-label', `View art for Squeek #${s.tokenId}`);
-        btn.onclick = () => { selectTab('art'); viewTask(() => loadArt([s.tokenId])); };
-        return btn;
-      }
-      return s[c.key];
-    } });
+    holdings.render(status);
 
     // merge plan
     el.holder.mergeList.replaceChildren();
     el.holder.mergeNote.textContent = !caps.merge
       ? caps.reasons.unavailable
-      : "Merging burns the donor NFT permanently and raises the survivor one level.";
+      : "Merge permanently burns one Squeek and raises the one you keep by one level.";
     for (const pair of plan?.pairs ?? []) {
       const li = doc.createElement("li");
       const text = doc.createElement("span");
-      text.textContent = `keep #${pair.survivor} · burn #${pair.donor} · L${pair.level}→L${pair.nextLevel}${pair.deposited?" · Staked":""}${pair.powerBefore==null?"":` · power ${pair.powerBefore}→${pair.powerAfter} (+${pair.powerGainPercent}%)`}`;
+      text.textContent = `keep #${pair.survivor} · burn #${pair.donor} · L${pair.level}→L${pair.nextLevel}${pair.deposited?" · Deposited":""}${pair.powerBefore==null?"":` · power ${pair.powerBefore}→${pair.powerAfter} (+${pair.powerGainPercent}%)`}`;
       if (signerOwns && caps.merge) {
         const button = doc.createElement("button");
         button.className = "btn btn-danger";
@@ -777,7 +777,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       el.verified.textContent = v.ok && v.trusted ? "Verified" : "Stopped";
       el.verified.className = "sr-only"; $("profile-status").className = `chip ${v.ok && v.trusted ? "ok" : "bad"}`;
       $("profile-status").textContent = v.ok && v.trusted ? "Verified" : "Mismatch: stop";
-      el.verified.title = v.ok && v.trusted ? `Pinned identities fully verified at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; proxy slots checked at ${v.blockNumber ?? "unknown"}. Two public RPC block hashes agree for this snapshot.` : (v.problems ?? []).join("; ");
+      el.verified.title = v.ok && v.trusted ? `Network and contract checks passed at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; latest check at block ${v.blockNumber ?? "unknown"}. Two independent connections agree.` : "Network or contract checks did not match. Actions are stopped.";
       $("profile-status").title = el.verified.title;
   }
 
@@ -852,6 +852,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const load = captureLoad();
     try { return await viewAwait(load, fn); }
     catch (err) {
+      if(err.walletOutcome)return {ok:false,reason:err.message};
       if (!isCurrent(load) || err?.name === "AbortError") return { ok: false, reason: "profile-changed" };
       toast(errorMessage(err), "err");
       showBanner(errorMessage(err), "bad");
@@ -874,7 +875,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       showBanner("Simulation succeeded — connect a wallet to submit the checkpoint.");
       return { ok: false, reason: "no wallet" };
     }
-    const result = await sendTransaction(preview.tx, "checkpoint()", owner, load);
+    const result = await sendTransaction(preview.tx, "Checkpoint", owner, load);
     await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});
     return { ok: true, ...result, gas: preview.gas };
   }
@@ -917,7 +918,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       const v9=getProfile(load.profileKey).abiSet==='v9';
       if (!fresh.ok || fresh.batches.length!==1 || (v9?BigInt(fresh.batches[0].amount.base)<BigInt(batch.amount.base):fresh.batches[0].amount.base!==batch.amount.base) || recipientOf(fresh,owner)!==recipientOf(preview,owner))throw new Error('Claim outcome changed. Review a fresh preview; no automatic retry.');
       if(v9&&BigInt(fresh.batches[0].amount.base)>BigInt(batch.amount.base)){showClaimIncrease(batch.amount,fresh.batches[0].amount);showOut(el.holder.claimOut,fresh);}
-      receipts.push(await sendTransaction(fresh.batches[0].tx, `claim(${batch.tokenIds.length} ids)`, owner, load));
+      receipts.push(await sendTransaction(fresh.batches[0].tx, 'Claim SQK', owner, load));
     }
     await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});
     return { ok: true, total: preview.total, receipts };
@@ -946,7 +947,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const fresh = await readFor(load, "mergePreview", owner, pair.survivor, pair.donor, { confirm });
     if (!fresh.ok) return fresh;
     if(fresh.nextLevel!==preview.nextLevel)throw new Error("Outcome changed. Review a fresh preview.");
-    const result = await sendTransaction(fresh.tx, `merge(${pair.survivor} ← ${pair.donor})`, owner, load);
+    const result = await sendTransaction(fresh.tx, `Merge #${pair.survivor} and #${pair.donor}`, owner, load);
     await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});
     return { ok: true, ...result };
   }
@@ -987,20 +988,21 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     showOut($('v9-result'),preview);
     if (!preview.ok) {if(['feeRose','quoteExpired'].includes(preview.reasonCode))return showFeeRose(action,input,load,preview.reason); showBanner(preview.reason,'warn'); return preview; }
     const mergeLabel=action==='mergeDeposited'?`Keep #${input.survivor} · burn #${input.donor}`:null;
-    const body=mergeLabel?`${mergeLabel}. #${input.donor} is BURNED permanently and cannot be restored. #${input.survivor} survives at level ${preview.nextLevel}.`:action==='unstake'?'The quoted exit fee is burned.':`${preview.warning??action}. ${preview.amount?.sqk?'Rewards: '+preview.amount.sqk+' SQK.':''}`;
-    const details=action==='unstake'?[['Amount',`${formatEther(BigInt(preview.amount))} SQK`],['Fee / maxFee',`${preview.fee.sqk} SQK`],['You receive',`${preview.net.sqk} SQK`],['Deadline',new Date(Number(preview.deadline)*1000).toLocaleString(undefined,{timeZoneName:'short'})],['Gas estimate',preview.gas]]:[['Gas estimate',preview.gas],...recipientDetails(preview,owner)];
-    if (!await confirmModal({title:mergeLabel??(action==='unstake'?'Review unstake fee':`Review ${action}`),body,details,confirmLabel:'Review in wallet'})) return {ok:false,reason:'cancelled'};
+    const body=mergeLabel?`${mergeLabel}. #${input.donor} is BURNED permanently and cannot be restored. #${input.survivor} survives at level ${preview.nextLevel}.`:action==='unstake'?'The quoted exit fee is burned.':`${actionNames[action]??'Review action'}. ${preview.amount?.sqk?'Rewards: '+preview.amount.sqk+' SQK.':''}`;
+    const details=action==='unstake'?[['Amount',`${formatEther(BigInt(preview.amount))} SQK`],['Maximum fee',`${preview.fee.sqk} SQK`],['You receive',`${preview.net.sqk} SQK`],['Deadline',new Date(Number(preview.deadline)*1000).toLocaleString(undefined,{timeZoneName:'short'})],['Gas estimate',preview.gas]]:[['Gas estimate',preview.gas],...recipientDetails(preview,owner)];
+    if (!await confirmModal({title:mergeLabel??(action==='unstake'?'Review unstake fee':`Review ${actionNames[action]??'action'}`),body,details,confirmLabel:'Review in wallet'})) return {ok:false,reason:'cancelled'};
     assertCurrent(load);
     if (state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error('Wallet changed');
     const fresh = await readFor(load,'actionPreview',owner,action,{...input,...(action==='unstake'?{maxFee:preview.maxFee,deadline:preview.deadline}:{})});
     if(action==='unstake'&&['feeRose','quoteExpired'].includes(fresh.reasonCode))return showFeeRose(action,input,load,fresh.reason);
     if (!fresh.ok || (action==='mergeDeposited' && fresh.nextLevel!==preview.nextLevel) || (preview.amount?.base!=null && (action==='claimAndStake'?BigInt(fresh.amount?.base)<BigInt(preview.amount.base):fresh.amount?.base!==preview.amount.base)) || (action==='claimAndStake'&&recipientOf(fresh,owner)!==recipientOf(preview,owner)) || (action==='unstake' && (fresh.maxFee!==preview.maxFee || fresh.net.base!==preview.net.base))) throw new Error('Outcome or fee changed. Review a fresh preview; no automatic retry.');
     if(action==='claimAndStake'&&BigInt(fresh.amount.base)>BigInt(preview.amount.base)){showClaimIncrease(preview.amount,fresh.amount);showOut($('v9-result'),fresh);}
-    const result=await sendTransaction(fresh.tx,action,owner,load);await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});return result;
+    const result=await sendTransaction(fresh.tx,actionNames[action]??'Action',owner,load);await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});return result;
   }
   function renderActionFields() {
     $('fee-rose').classList.add('hidden');
     const action=$('v9-action').value;
+    const host=['claimAndStake','stake','unstake','approveSqk'].includes(action)?$('sqk-action-host'):$('nft-action-host');host.append($('action-fields'));
     for(const [id,visible] of [['v9-ids',['deposit','withdraw'].includes(action)],['v9-token',action==='approveNft'],['v9-amount',['stake','unstake','approveSqk'].includes(action)],['v9-survivor',action==='mergeDeposited'],['v9-donor',action==='mergeDeposited']]) {
       $(id).closest('label').classList.toggle('hidden',!visible); if(!visible)$(id).value='';
     }
@@ -1311,6 +1313,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     settingsReady ??= import('./settings.js').then(module => module.initSettings({$,state,store,fetcher,captureLoad,assertCurrent,isCurrent,getProfile,switchProfile,discoveryCache,buildAdapter,refreshAll,resetLoad:()=>{loadController.abort();generation++;loadController=new AbortController();},closeSheet,confirmModal,activity,destroyed:()=>destroyed,openSheet,showBanner,errorMessage,applyTheme}));
     await settingsReady; if (!destroyed) openSheet('settings-sheet');
   }
+  const images=createImages({cache:displayCache,fetcher,win});
+  const holdings=createHoldings({doc,win,state,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();$('v9-review').focus();},loadImage:async token=>{const load=captureLoad();let item;try{item=await images.load({profile:getProfile(load.profileKey),token,api:displayApi(load),fallback:()=>readFor(load,'art',token.tokenId),signal:load.signal});}catch(error){if(isCurrent(load)&&error.name==='RpcTrustError')clearDisplayMismatch(error);throw error;}assertCurrent(load);state.art.set(String(token.tokenId),item);return item;}});
+  $('sqk-claim-host').append($('btn-claim'),$('claim-ids'));
   // ── boot ──────────────────────────────────────────────────────────────────
   store.set("squeekchain:profile", state.profileKey);
   applyTheme(store.get(THEME_KEY) ?? "light");
@@ -1360,7 +1365,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
+    destroy: () => { holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
   };
 }
 
