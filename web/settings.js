@@ -1,3 +1,4 @@
+import {anySignal} from './bundle.js';
 export function initSettings({$,state,store,fetcher,captureLoad,assertCurrent,isCurrent,getProfile,switchProfile,discoveryCache,buildAdapter,refreshAll,resetLoad,closeSheet,confirmModal,activity,destroyed,openSheet,showBanner,errorMessage,applyTheme}) {
   // Custom RPC is browser-local; never sent to our server. Public peers still cross-check every snapshot.
   $("rpc-url").value = store.get("wheelhouse:rpc") ?? "";
@@ -19,12 +20,14 @@ export function initSettings({$,state,store,fetcher,captureLoad,assertCurrent,is
       const url = customRpcValue(); if (!url) throw new Error('Enter a custom RPC to test');
       output.textContent = 'Testing…';
       const rpc = async (method, id) => {
-        const timeout = AbortSignal.timeout(15000);
-        const response = await fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id, method, params: [] }), signal: AbortSignal.any([load.signal, timeout]) });
+        const deadline=anySignal([load.signal],15000);
+        try {
+        const response = await fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id, method, params: [] }), signal:deadline.signal });
         assertCurrent(load); if (!response.ok) throw new Error('RPC test unavailable');
         const value = await response.json(); assertCurrent(load);
         if (value.error || !/^0x[0-9a-f]+$/i.test(value.result ?? '')) throw new Error('RPC returned an invalid response');
         return BigInt(value.result);
+        } finally { deadline.dispose(); }
       };
       const chain = await rpc('eth_chainId', 1), block = await rpc('eth_blockNumber', 2);
       output.textContent = `chainId ${chain} · block ${block}${chain !== 11155111n ? ' · Wrong chain: Sepolia required' : ''}. Diagnostic only; not two-peer verification.`;

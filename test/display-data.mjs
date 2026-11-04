@@ -45,7 +45,7 @@ console.log('PASS current default pool and CSP: Tenderly/PublicNode/0xRPC only; 
 // Image/metadata cache survives a second visit, separates levels and expires at 24h.
 const {createImages}=await import('../web/images.js');let imageCalls=0,blobCalls=0;const imageCache=createDisplayCache(indexedDB),imageProfile=getProfile('sepolia-v9');
 const imageOptions={cache:imageCache,win:{URL:globalThis.URL},fetcher:async(_url,options)=>{blobCalls++;assert.equal(options.credentials,'omit');return {ok:true,blob:async()=>new Blob(['synthetic'],{type:'image/png'})};}};
-const imageApi={squeek:async(id,level)=>{imageCalls++;return {data:{metadata:{status:'available',name:'Synthetic',cardImageUrl:'https://cards.example.test/card.png',imageDataUri:fixtures.squeek.metadata.imageDataUri,attributes:[]}}};}};
+const imageApi={squeek:async(id,level)=>{imageCalls++;return {data:{metadata:{status:'available',name:'Synthetic',cardImageUrl:'https://api.squeekchain.com/cards/card.png',imageDataUri:fixtures.squeek.metadata.imageDataUri,attributes:[]}}};}};
 const firstImages=createImages(imageOptions),imageLoad={profile:imageProfile,token:{tokenId:'41',level:1},api:imageApi,fallback:()=>{throw new Error('No fallback expected');}};
 assert.match((await firstImages.load(imageLoad)).image,/^blob:/);assert.equal(imageCalls,1);assert.equal(blobCalls,1);firstImages.destroy();
 const secondImages=createImages(imageOptions);await secondImages.load(imageLoad);assert.equal(imageCalls,1,'second visit: zero metadata calls');assert.equal(blobCalls,1,'second visit: zero image calls');await secondImages.load({...imageLoad,token:{tokenId:'41',level:2}});assert.equal(imageCalls,2,'new level has a new image key');

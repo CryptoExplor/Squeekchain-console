@@ -4,7 +4,7 @@ export function createHoldings({doc,win,state,loadImage,onAction,onMerge,onConne
  const $=id=>doc.getElementById(id),selected=new Set();let observer,version=0,current;
  function pick(action,ids){$('v9-ids').value=ids.join(', ');$('v9-token').value=ids[0]??'';if(ids.length===2){$('v9-survivor').value=ids[0];$('v9-donor').value=ids[1];$('merge-survivor').value=ids[0];$('merge-donor').value=ids[1];}onAction(action);}
  function pairValid(tokens){return tokens.length===2&&String(tokens[0].tokenId)!==String(tokens[1].tokenId)&&Number.isInteger(tokens[0].level)&&tokens[0].level>0&&tokens[0].level===tokens[1].level&&tokens[0].level<(current?.net?.policy?.maximumLevel??10)&&Boolean(tokens[0].deposited)===Boolean(tokens[1].deposited)&&current?.net?.policy?.mergesOpen!==false;}
- function canSign(){return Boolean(current&&!state.busy&&state.account?.toLowerCase()===current.owner?.toLowerCase()&&state.chainId===11155111&&current.totals?.count!=null);}
+ function canSign(){return Boolean(current&&!state.busy&&!state.walletPromptPending&&state.account?.toLowerCase()===current.owner?.toLowerCase()&&state.chainId===11155111&&current.totals?.count!=null);}
  function renderPair(){const rows=current?.squeeks??[],a=rows.find(t=>String(t.tokenId)===$('merge-survivor').value),b=rows.find(t=>String(t.tokenId)===$('merge-donor').value),valid=a&&b&&pairValid([a,b]);
   $('merge-selection').textContent=valid?`Keep #${a.tokenId} · burn #${b.tokenId}`:'Choose two same-level Squeeks';
   $('merge-level').textContent=valid?`Result: level ${a.level+1}`:'';
@@ -20,7 +20,7 @@ export function createHoldings({doc,win,state,loadImage,onAction,onMerge,onConne
   renderPair();onSelection();
  }
  function render(status){current=status;const epoch=++version;observer?.disconnect();selected.clear();const root=$('squeek-cards');root.replaceChildren();$('nft-empty').classList.toggle('hidden',!status||status.squeeks?.length>0);$('squeek-controls').classList.toggle('hidden',!status||!(status.squeeks?.length>0));for(const button of doc.querySelectorAll('[data-action]'))button.disabled=true;selectionChanged();if(!status)return;
- const signer=!state.busy&&state.account?.toLowerCase()===status.owner?.toLowerCase()&&state.chainId===11155111, v9=state.profileKey==='sepolia-v9';
+ const signer=!state.busy&&!state.walletPromptPending&&state.account?.toLowerCase()===status.owner?.toLowerCase()&&state.chainId===11155111, v9=state.profileKey==='sepolia-v9';
  for(const button of doc.querySelectorAll('[data-action]'))button.disabled=!signer;
  const rows=status.squeeks??[];for(const token of rows){const card=doc.createElement('article');card.className='squeek-card';card.dataset.testid='squeek-card';card.dataset.token=token.tokenId;
  const frame=doc.createElement('div');frame.className='squeek-image is-skeleton';const img=doc.createElement('img');img.loading='lazy';img.decoding='async';img.alt=`Squeek #${token.tokenId}`;img.width=320;img.height=320;frame.append(img);

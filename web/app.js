@@ -37,6 +37,8 @@ import {createImages} from './images.js';
 import { createActivity } from "./activity.js";
 import { createTelemetry, telemetryView } from "./telemetry.js";
 
+// EIP-1193 prompts outlive view cancellation and even remounts in this page.
+const outstandingPrompts=new WeakMap();
 const EXPLORER = "https://eth-sepolia.blockscout.com";
 const THEME_KEY = "squeekchain:theme";
 
@@ -128,6 +130,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     status: null,
     plan: null,
     art: new Map(),
+    get walletPromptPending(){return outstandingPrompts.has(wallet.provider());},
     busy: false, // transaction signing ONLY; never used to gate reads or navigation
     receipts: [],
     artifactsLoaded: false,
@@ -603,13 +606,17 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   let signingTicket;
   function releaseSigning(ticket){if(signingTicket!==ticket)return;signingTicket=null;state.busy=false;$('wallet-wait').classList.add('hidden');if(state.net)renderNetwork(state.net);renderHolder(state.status,state.plan);}
-  $('wallet-cancel').onclick=()=>{const ticket=signingTicket;if(!ticket)return;ticket.cancelled=true;ticket.reject(Object.assign(new Error('Wallet request cancelled in this app'),{walletOutcome:true}));releaseSigning(ticket);};
+  $('wallet-cancel').onclick=()=>{const ticket=signingTicket;if(!ticket)return;ticket.cancelled=true;if(state.walletPromptPending)ticket.notice=toast('Wallet prompt may still be open. Close or reject it in your wallet before starting another transaction.','warn',{timeout:0});ticket.reject(Object.assign(new Error('Wallet request cancelled in this app'),{walletOutcome:true}));releaseSigning(ticket);};
+  async function followLateHash(hash,profileKey,owner){
+    try{await activity.wait(hash);if(!destroyed&&state.profileKey===profileKey&&state.account?.toLowerCase()===owner.toLowerCase())await refreshAll({force:true});}
+    catch(error){if(!destroyed)toast('Receipt outcome unclear. Saved in Activity; check your wallet before retrying.','warn',{action:'View',onAction:()=>openSheet('activity-drawer')});}
+  }
   async function sendTransaction(tx, label, owner = state.account, load = captureLoad()) {
     assertCurrent(load);
     const p = provider();
     if (!p || !state.account) throw new Error("connect a wallet to sign");
-    if(state.busy)throw Object.assign(new Error('Waiting for your wallet…'),{walletOutcome:true});
-    const ticket={cancelled:false};signingTicket=ticket;const cancelled=new Promise((_,reject)=>ticket.reject=reject);cancelled.catch(()=>{});
+    if(state.busy||state.walletPromptPending)throw Object.assign(new Error('A wallet request is still outstanding. Close or reject it in your wallet before starting another transaction.'),{walletOutcome:true});
+    const ticket={cancelled:false,rpcPending:false};signingTicket=ticket;outstandingPrompts.set(p,ticket);const cancelled=new Promise((_,reject)=>ticket.reject=reject);cancelled.catch(()=>{});
     state.busy = true;$('wallet-wait').classList.remove('hidden');
     let hash;
     try {
@@ -622,9 +629,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (!owner || state.account?.toLowerCase() !== owner.toLowerCase() || accounts?.[0]?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet changed; start again");
       // A profile switch cannot cancel this wallet popup or an already-broadcast transaction.
       if(ticket.cancelled)throw Object.assign(new Error('Wallet request cancelled'),{walletOutcome:true});
-      const response=p.request({method:'eth_sendTransaction',params:[{from:owner,to:tx.to,data:tx.data,value:`0x${BigInt(tx.value??0).toString(16)}` }]}).then(result=>{activity.record(result,label,CHAIN.id,load.profileKey);void activity.refresh();return result;});
+      ticket.rpcPending=true;
+      const response=Promise.resolve().then(()=>p.request({method:'eth_sendTransaction',params:[{from:owner,to:tx.to,data:tx.data,value:`0x${BigInt(tx.value??0).toString(16)}` }]})).then(result=>{
+        activity.record(result,label,CHAIN.id,load.profileKey);void activity.refresh();
+        if(ticket.cancelled||!isCurrent(load))void followLateHash(result,load.profileKey,owner);
+        return result;
+      }).finally(()=>{if(outstandingPrompts.get(p)===ticket)outstandingPrompts.delete(p);ticket.notice?.remove();if(!destroyed){renderCheckpointGate();renderHolder(state.status,state.plan);}});
       hash=await Promise.race([response,cancelled]);
-    } catch(error){if(error?.code===4001||/reject|closed|cancel/i.test(error?.message??''))error.walletOutcome=true;throw error;} finally { releaseSigning(ticket); }
+    } catch(error){if(error?.code===4001||/reject|closed|cancel/i.test(error?.message??''))error.walletOutcome=true;throw error;} finally { if(!ticket.rpcPending&&outstandingPrompts.get(p)===ticket){outstandingPrompts.delete(p);ticket.notice?.remove();}releaseSigning(ticket); }
 
     assertCurrent(load);
 
@@ -641,7 +653,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const observedRounds = new Map();
   function renderCheckpointGate() {
     const unknownHoldings=Boolean(state.inspected) && (state.status?.owner?.toLowerCase()!==state.inspected.toLowerCase() || num(state.status?.totals?.count)===UNKNOWN);
-    el.cp.button.disabled=state.busy || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
+    el.cp.button.disabled=state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
   }
   function renderNetwork(net) {
     const previous = observedRounds.get(state.profileKey);
@@ -738,12 +750,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     setStat(el.holder.power, isV9 ? totals.deposited : totals.power, num);
     setStat(el.holder.share, totals.sharePercent, value => num(value, 4) === UNKNOWN ? UNKNOWN : `${num(value, 4)}%`);
     setStat(el.holder.claimable, totals.claimable, sqk);
-    el.holder.claim.disabled = state.busy || num(totals.count) === UNKNOWN || (!has && !isV9) || !signerOwns || !caps.claim;
-    $("btn-custom-merge").disabled = state.busy || !has || !signerOwns || !caps.merge;
+    el.holder.claim.disabled = state.busy || state.walletPromptPending || num(totals.count) === UNKNOWN || (!has && !isV9) || !signerOwns || !caps.claim;
+    $("btn-custom-merge").disabled = state.busy || state.walletPromptPending || !has || !signerOwns || !caps.merge;
     $("claim-ids").disabled = !caps.claim || isV9;
     $("claim-ids").classList.toggle("hidden", isV9);
     $("v9-actions").classList.toggle("hidden", !isV9);$("action-fields").classList.remove("hidden");
-    $("v9-review").disabled = !signerOwns || state.busy;
+    $("v9-review").disabled = !signerOwns || state.busy || state.walletPromptPending;
 
 
     holdings.render(status);
@@ -995,18 +1007,21 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!preview.ok) {if(['feeRose','quoteExpired'].includes(preview.reasonCode))return showFeeRose(action,input,load,preview.reason); showBanner(preview.reason,'warn'); return preview; }
     const mergeLabel=action==='mergeDeposited'?`Keep #${input.survivor} · burn #${input.donor}`:null;
     const body=mergeLabel?`${mergeLabel}. #${input.donor} is BURNED permanently and cannot be restored. #${input.survivor} survives at level ${preview.nextLevel}.`:action==='unstake'?'The quoted exit fee is burned.':`${actionNames[action]??'Review action'}. ${preview.amount?.sqk?'Rewards: '+preview.amount.sqk+' SQK.':''}`;
-    const details=action==='unstake'?[['Amount',`${formatEther(BigInt(preview.amount))} SQK`],['Maximum fee',`${preview.fee.sqk} SQK`],['You receive',`${preview.net.sqk} SQK`],['Deadline',new Date(Number(preview.deadline)*1000).toLocaleString(undefined,{timeZoneName:'short'})],['Gas estimate',preview.gas]]:[['Gas estimate',preview.gas],...recipientDetails(preview,owner)];
-    if (!await confirmModal({title:mergeLabel??(action==='unstake'?'Review unstake fee':`Review ${actionNames[action]??'action'}`),body,details,confirmLabel:'Review in wallet'})) return {ok:false,reason:'cancelled'};
+    const amountText=preview.amount?.sqk!=null?`${preview.amount.sqk} SQK`:typeof preview.amount==='string'?`${formatEther(BigInt(preview.amount))} SQK`:null;
+    const scopeText=preview.scope==='collection'?'ALL current and future Squeeks':preview.scope==='token'?`Only Squeek #${preview.tokenId??input.tokenId}`:preview.scope;
+    const details=action==='unstake'?[['Amount',`${formatEther(BigInt(preview.amount))} SQK`],['Maximum fee',`${preview.fee.sqk} SQK`],['You receive',`${preview.net.sqk} SQK`],['Deadline',new Date(Number(preview.deadline)*1000).toLocaleString(undefined,{timeZoneName:'short'})],['Gas estimate',preview.gas]]:[['Spender',preview.spender],['Amount',amountText],['Scope',scopeText],['Squeeks',preview.tokenIds?.map(id=>`#${id}`).join(', ')],['Contract',preview.tx?.to],['Gas estimate',preview.gas],...recipientDetails(preview,owner)].filter(([,value])=>value!=null);
+    if (!await confirmModal({title:mergeLabel??(action==='unstake'?'Review unstake fee':`Review ${actionNames[action]??'action'}`),body:body+(preview.warning?` ${preview.warning}`:''),details,confirmLabel:'Review in wallet'})) return {ok:false,reason:'cancelled'};
     assertCurrent(load);
     if (state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error('Wallet changed');
     const fresh = await readFor(load,'actionPreview',owner,action,{...input,...(action==='unstake'?{maxFee:preview.maxFee,deadline:preview.deadline}:{})});
     if(action==='unstake'&&['feeRose','quoteExpired'].includes(fresh.reasonCode))return showFeeRose(action,input,load,fresh.reason);
-    if (!fresh.ok || (action==='mergeDeposited' && fresh.nextLevel!==preview.nextLevel) || (preview.amount?.base!=null && (action==='claimAndStake'?BigInt(fresh.amount?.base)<BigInt(preview.amount.base):fresh.amount?.base!==preview.amount.base)) || (action==='claimAndStake'&&recipientOf(fresh,owner)!==recipientOf(preview,owner)) || (action==='unstake' && (fresh.maxFee!==preview.maxFee || fresh.net.base!==preview.net.base))) throw new Error('Outcome or fee changed. Review a fresh preview; no automatic retry.');
+    const terms=p=>JSON.stringify({spender:p.spender?.toLowerCase(),scope:p.scope,tokenId:p.tokenId,tokenIds:p.tokenIds,amount:typeof p.amount==='string'&&action!=='unstake'?p.amount:undefined,to:p.tx?.to?.toLowerCase()});
+    if (!fresh.ok || terms(fresh)!==terms(preview) || (action==='mergeDeposited' && fresh.nextLevel!==preview.nextLevel) || (preview.amount?.base!=null && (action==='claimAndStake'?BigInt(fresh.amount?.base)<BigInt(preview.amount.base):fresh.amount?.base!==preview.amount.base)) || (action==='claimAndStake'&&recipientOf(fresh,owner)!==recipientOf(preview,owner)) || (action==='unstake' && (fresh.maxFee!==preview.maxFee || fresh.net.base!==preview.net.base))) throw new Error('Outcome or fee changed. Review a fresh preview; no automatic retry.');
     if(action==='claimAndStake'&&BigInt(fresh.amount.base)>BigInt(preview.amount.base)){showClaimIncrease(preview.amount,fresh.amount);showOut($('v9-result'),fresh);}
     const result=await sendTransaction(fresh.tx,actionNames[action]??'Action',owner,load);await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});return result;
   }
   function updatePreviewGate(){
-    const owner=state.status?.owner,signer=Boolean(!state.busy&&state.account&&owner?.toLowerCase()===state.account.toLowerCase()&&state.chainId===11155111&&state.status?.totals?.count!=null),action=$('v9-action').value;
+    const owner=state.status?.owner,signer=Boolean(!state.busy&&!state.walletPromptPending&&state.account&&owner?.toLowerCase()===state.account.toLowerCase()&&state.chainId===11155111&&state.status?.totals?.count!=null),action=$('v9-action').value;
     const rows=state.status?.squeeks??[],ids=$('v9-ids').value.split(/[\s,]+/).filter(Boolean),find=id=>rows.find(t=>String(t.tokenId)===id),validIds=ids.length>0&&new Set(ids).size===ids.length&&ids.every(id=>/^\d+$/.test(id)&&find(id));
     let valid=true;
     if(['deposit','withdraw'].includes(action))valid=validIds&&ids.every(id=>Boolean(find(id).deposited)===(action==='withdraw'));

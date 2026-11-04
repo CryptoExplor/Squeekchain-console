@@ -242,6 +242,7 @@ async function callWire(address, data, at) {
 }
 globalThis.fetch = async (_url, init) => {
   const request = JSON.parse(init.body); wire.push(request);
+  const respond=async request=>{
   const { method, params = [] } = request;
   let result;
   if (method === 'eth_chainId') result = '0xaa36a7';
@@ -258,7 +259,8 @@ globalThis.fetch = async (_url, init) => {
       topics: encodeEventTopics({ abi: nftAbi, eventName: 'Transfer', args: { from: other, to: owner, tokenId: id } }),
     })) : [];
   } else throw new Error(`Unmocked wire RPC ${method}`);
-  return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }), { headers: { 'content-type': 'application/json' } });
+  return {jsonrpc:'2.0',id:request.id,result};};
+  return new Response(JSON.stringify(Array.isArray(request)?await Promise.all(request.map(respond)):await respond(request)), { headers: { 'content-type': 'application/json' } });
 };
 try {
   const context = createRpcContext();
@@ -272,9 +274,9 @@ try {
   const warm = await wireSdk.networkStatus();
   assert.equal(warm.verification.cacheHit, true);
   assert.ok(wire.length <= 25, `Warm v6 page load exceeded RPC budget: ${wire.length}`);
-  assert.equal(wire.filter(request => request.method === 'eth_getStorageAt').length, 4);
-  assert.equal(wire.filter(request => request.method === 'eth_getCode').length, 0);
-  assert.equal(wire.filter(request => request.method === 'eth_chainId').length, 0);
+  assert.equal(wire.flatMap(request=>Array.isArray(request)?request:[request]).filter(request => request.method === 'eth_getStorageAt').length, 8);
+  assert.equal(wire.flatMap(request=>Array.isArray(request)?request:[request]).filter(request => request.method === 'eth_getCode').length, 0);
+  assert.equal(wire.flatMap(request=>Array.isArray(request)?request:[request]).filter(request => request.method === 'eth_chainId').length, 0);
   const warmCount = wire.length;
   wire.length = 0;
   const batch = await wireSdk.artBatch(['1', '2', '3']);

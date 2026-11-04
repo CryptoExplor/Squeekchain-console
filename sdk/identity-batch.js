@@ -1,5 +1,5 @@
 import { RpcTrustError, RpcAvailabilityError } from './rpc-errors.js';
-import { throwIfAborted } from './cancellation.js';
+import { throwIfAborted, anySignal } from './cancellation.js';
 // Capability only, never chain data. A rejected batch is not an identity mismatch.
 const support = new Map();
 let nextId = 0;
@@ -10,10 +10,12 @@ export async function readIdentityBatch(peer, requests, { signal, fetcher = glob
   if (!url || capabilities.get(url) === false) return single();
   throwIfAborted(signal);
   const payload = requests.map(request => ({ jsonrpc:'2.0', id:++nextId, ...request }));
-  const response = await fetcher(url, { method:'POST', headers:{'content-type':'application/json'}, credentials:'omit', cache:'no-store', body:JSON.stringify(payload), signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000) });
+  const deadline=anySignal([signal],12000);
+  try {
+  const response = await fetcher(url, { method:'POST', headers:{'content-type':'application/json'}, credentials:'omit', cache:'no-store', body:JSON.stringify(payload), signal:deadline.signal });
   onResponse?.(response,url);
   let body; try { body = await response.json(); } catch { body = null; }
-  throwIfAborted(signal);
+  throwIfAborted(deadline.signal);
   const httpError=()=>new RpcAvailabilityError(Object.assign(new Error('Identity batch HTTP failure'),{status:response.status}),{endpoint:url,method:requests[0].method,status:response.status,kind:'http'});
   if(!response.ok&&[429,503,401].includes(response.status))throw httpError();
   const rejectedEntries=Array.isArray(body)&&body.length>0&&body.every(item=>[-32600,-32601].includes(item?.error?.code));
@@ -41,4 +43,5 @@ export async function readIdentityBatch(peer, requests, { signal, fetcher = glob
     if (typeof item?.result !== 'string' || !/^0x(?:[\da-f]{2})*$/i.test(item.result)) throw new RpcTrustError('Missing identity batch result');
     return item.result;
   });
+  } finally { deadline.dispose(); }
 }

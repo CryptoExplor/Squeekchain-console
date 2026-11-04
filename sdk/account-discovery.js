@@ -1,4 +1,4 @@
-import { throwIfAborted } from './cancellation.js';
+import { throwIfAborted, anySignal } from './cancellation.js';
 import { retryAfterMs } from './retry-after.js';
 
 const ACCOUNT_API = 'https://api.squeekchain.com/v1/accounts/';
@@ -21,9 +21,11 @@ export function createAccountTokenSource({ fetcher = (...args) => globalThis.fet
         throwIfAborted(signal);
         if (now() < retryAt) throw new Error('Official account API rate limited; waiting for Retry-After');
         const query = new URLSearchParams({ limit: '100', ...(cursor ? { cursor } : {}) });
+        const deadline=anySignal([signal],10000);
+        try {
         const response = await fetcher(`${ACCOUNT_API}${owner.toLowerCase()}?${query}`, {
           headers: { accept: 'application/json' }, cache: 'no-store', credentials: 'omit',
-          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
+          signal:deadline.signal,
         });
         throwIfAborted(signal);
         if (response.status === 429 || response.status === 503) {
@@ -63,6 +65,7 @@ export function createAccountTokenSource({ fetcher = (...args) => globalThis.fet
         if (cursor === null) return [...ids].map(BigInt);
         if (seen.has(cursor)) throw new Error('Official account cursor repeated');
         seen.add(cursor);
+        } finally { deadline.dispose(); }
         if (pageIndex === 99) throw new Error('Official account pagination limit exceeded');
       }
       if (restart === 1) throw new Error('Official account pagination unavailable');

@@ -4,7 +4,7 @@ export { TOOL_SPECS, buildManifest } from "./tools.js";
 export { createSqueek9, parseSqueekMetadata } from "./v9.js";
 export { PROFILES, DEFAULT_PROFILE, getProfile, listProfiles } from "./deployments.js";
 
-export { abortable } from "./cancellation.js";
+export { abortable, anySignal, throwIfAborted } from "./cancellation.js";
 
 export { createDiscoveryStore } from "./discovery.js";
 
@@ -29,5 +29,5 @@ export { feeLimitExceeded, unstakeQuoteError } from './fee-error.js';
 
 export { runPublicReadTool } from './public-tools.js';
 export { createDisplayCache, displayKey, DAY, DISPLAY_TTL } from './display-cache.js';
-export { createDisplayApi, apiNetwork, apiWallet } from './display-api.js';
+export { createDisplayApi, apiNetwork, apiWallet, artworkUrl } from './display-api.js';
 export { createWheelPoller } from './display-poller.js';

@@ -179,13 +179,13 @@ export function createSqueek9({ profileKey = 'sepolia-v9', rpcUrl, provider, rpc
         const approvals=[]; for(const id of ids) if(!same(await read('nft',nft9Abi,'getApproved',[id]),addr.staking)) approvals.push(String(id));
         if(approvals.length) return {ok:false,approvalRequired:true,tokenIds:approvals,reason:'NFT approval required as a separate step. Per-token approval allows this staking contract to transfer only that NFT; collection approval allows every NFT, including future ones. Choose explicitly, then retry deposit.'};
       }
-      return simulate(owner,'staking',staking9Abi,action,[addr.nft,ids],{tokenIds:ids.map(String)});
+      return simulate(owner,'staking',staking9Abi,action,[addr.nft,ids],{tokenIds:ids.map(String),collection:addr.nft});
     }
     if(['approveNft','approveAll'].includes(action)) {
       const id=action==='approveNft'?positive(tokenId):null; if(id) await custody(owner,id,false);
-      return simulate(owner,'nft',nft9Abi,id?'approve':'setApprovalForAll',id?[addr.staking,id]:[addr.staking,true],{warning:id?`Allow staking to transfer NFT #${id}`:'Allow staking to transfer ALL current and future NFTs. Broad approval can be revoked in your wallet.',scope:id?'token':'collection'});
+      return simulate(owner,'nft',nft9Abi,id?'approve':'setApprovalForAll',id?[addr.staking,id]:[addr.staking,true],{warning:id?`Allow staking to transfer NFT #${id}`:'Allow staking to transfer ALL current and future NFTs. Broad approval can be revoked in your wallet.',scope:id?'token':'collection',spender:addr.staking,...(id?{tokenId:String(id)}:{})});
     }
-    if(action==='approveSqk') return simulate(owner,'token',token9Abi,'approve',[addr.staking,positive(amount)],{warning:'Allow staking to spend exactly this SQK amount',amount:String(positive(amount))});
+    if(action==='approveSqk') return simulate(owner,'token',token9Abi,'approve',[addr.staking,positive(amount)],{warning:'Allow staking to spend exactly this SQK amount',scope:'exact amount',spender:addr.staking,amount:String(positive(amount))});
     if(['claim','claimAndStake'].includes(action)) {
       const quote=await read('staking',staking9Abi,'claimable',[owner]);
       const recipient=action==='claim'?await read('staking',staking9Abi,'claimRecipient',[owner]):owner;

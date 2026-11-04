@@ -1,3 +1,4 @@
+import {anySignal,throwIfAborted} from './cancellation.js';
 import { DAY,DISPLAY_TTL,displayKey,createDisplayCache } from './display-cache.js';
 import { retryAfterMs } from './retry-after.js';
 const BASE='https://api.squeekchain.com/v1';
@@ -7,6 +8,18 @@ const hash=v=>/^0x[\da-f]{64}$/i.test(v??'');
 export class DisplayError extends Error{constructor(kind,message){super(message);this.kind=kind;if(kind==='mismatch')this.name='RpcTrustError';}}
 const requireData=(ok,message)=>{if(!ok)throw new DisplayError('schema',message);};
 const requirePin=(ok,message)=>{if(!ok)throw new DisplayError('mismatch',message);};
+// No implicit CDN expansion. URL policy is checked on fresh and cached metadata,
+// and again at the image fetch boundary (including callers with a stub API).
+export function artworkUrl(value){
+ requireData(typeof value==='string'&&value.length>0&&value.length<=2048,'Invalid artwork URL');
+ let url;try{url=new URL(value,'https://api.squeekchain.com');}catch{throw new DisplayError('schema','Invalid artwork URL');}
+ requireData(url.origin==='https://api.squeekchain.com'&&!url.username&&!url.password,'Untrusted artwork origin');return url.href;
+}
+function metadataImage(metadata){if(metadata?.status!=='available')return;
+ if(metadata.cardImageUrl!=null)artworkUrl(metadata.cardImageUrl);
+ requireData(typeof metadata.cardImageUrl==='string'||(typeof metadata.imageDataUri==='string'&&metadata.imageDataUri.length<=262144&&/^data:image\/svg\+xml;base64,/.test(metadata.imageDataUri)),'Invalid metadata image');
+}
+
 export function validateEconomyEnvelope(data,profile,version){
  requireData(data?.schemaVersion===version,'Unsupported display schema');
  if(data.status!=='available')throw new DisplayError('unavailable','API source unavailable');
@@ -23,7 +36,7 @@ export function validateEconomyEnvelope(data,profile,version){
 const limits={publicFast:[30,60],publicHeavy:[5,20],metadata:[20,40],observations:[2,4]}, buckets=new Map();
 export function createDisplayApi({profile,fetcher=globalThis.fetch,cache=createDisplayCache(),now=Date.now,signal,rateBuckets=buckets}={}){
  let context=null;const pending=new Map(),memory=new Map(),counts={api:0,rpc:0,cache:0};
- const check=()=>signal?.throwIfAborted();
+ const check=()=>throwIfAborted(signal);
  const classFor=path=>path.startsWith('/measurement/')?'observations':path.startsWith('/squeeks/')?'metadata':/^\/(accounts|events|settlements)/.test(path)?'publicHeavy':'publicFast';
  function budget(path){const kind=classFor(path),[rate,burst]=limits[kind],at=now(),b=rateBuckets.get(kind)??{at,tokens:burst,retryAt:0};b.tokens=Math.min(burst,b.tokens+Math.max(0,at-b.at)*rate/1000);b.at=at;rateBuckets.set(kind,b);if(at<b.retryAt||b.tokens<1)throw new DisplayError('transport','Display API cooldown');b.tokens--;return b;}
  async function request(path,{validator,store=true}={}){
@@ -31,7 +44,8 @@ export function createDisplayApi({profile,fetcher=globalThis.fetch,cache=createD
   if(pending.has(key))return pending.get(key);
   const operation=(async()=>{let saved=noStore?null:memory.get(key)??await cache.get(key);check();
    if(saved&&now()-saved.at>DISPLAY_TTL)saved=null;
-   let received=false;try{const b=budget(path);counts.api++;const response=await fetcher(BASE+path,{method:'GET',credentials:'omit',cache:noStore?'no-store':'no-cache',headers:{accept:'application/json',...(!noStore&&saved?.etag?{'If-None-Match':saved.etag}:{})},signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000)});check();
+   const deadline=anySignal([signal],10000);
+   let received=false;try{const b=budget(path);counts.api++;const response=await fetcher(BASE+path,{method:'GET',credentials:'omit',cache:noStore?'no-store':'no-cache',headers:{accept:'application/json',...(!noStore&&saved?.etag?{'If-None-Match':saved.etag}:{})},signal:deadline.signal});check();
     if([429,503].includes(response.status))b.retryAt=now()+retryAfterMs(response.headers.get('Retry-After'),now());
     if(!response.ok&&response.status!==304)throw new DisplayError('transport',`Display API HTTP ${response.status}`);
     requireData(response.status!==304||Boolean(saved),'304 without a validated body');
@@ -42,7 +56,7 @@ export function createDisplayApi({profile,fetcher=globalThis.fetch,cache=createD
    }catch(error){check();if(error instanceof DisplayError&&error.kind!=='transport'){memory.delete(key);await cache.delete(key);throw error;}
     if(received&&!(error instanceof DisplayError))throw error;
     if(saved){try{validator?.(saved.data);counts.cache++;return {...saved,stale:true};}catch{memory.delete(key);await cache.delete(key);}}
-    if(error instanceof DisplayError)throw error;throw new DisplayError('transport','Display API transport unavailable');}
+    if(error instanceof DisplayError)throw error;throw new DisplayError('transport','Display API transport unavailable');}finally{deadline.dispose();}
   })().finally(()=>pending.delete(key));pending.set(key,operation);return operation;
  }
  function bind(data){validateEconomyEnvelope(data,profile,2);if(context)requirePin(context.installationId===data.installationId,'Economy installation changed');requireData(uint(data.supply?.liveSupplyBaseUnits)&&uint(data.supply?.capBaseUnits)&&uint(data.nft?.live)&&typeof data.nft.mergesOpen==='boolean'&&uint(data.mining?.processedThroughRound)&&uint(data.schedule?.issuedBaseUnits)&&Number.isInteger(data.nft?.maximumLevel)&&data.nft.maximumLevel>=1&&data.nft.maximumLevel<=100&&data.nft.basePower?.length===data.nft.maximumLevel&&data.nft.cooldownBlocks?.length===data.nft.maximumLevel&&data.nft.basePower.every(uint)&&data.nft.cooldownBlocks.every(uint),'Invalid economy display');context={installationId:data.installationId};}
@@ -59,8 +73,8 @@ export function createDisplayApi({profile,fetcher=globalThis.fetch,cache=createD
   for(const token of d.tokens){requireData(uint(token.tokenId)&&BigInt(token.tokenId)>0n&&['wallet','staking'].includes(token.custody)&&Number.isInteger(token.level)&&token.level>0&&uint(token.nextMergeHeight),'Invalid account token');if(seen.has(token.tokenId))throw new DisplayError('schema','Duplicate account token');seen.add(token.tokenId);tokens.push(token);}
   cursor=d.nextCursor;if(cursor===null){requireData(uint(d.tokenCounts?.wallet)&&uint(d.tokenCounts?.staking)&&BigInt(d.tokenCounts.wallet)+BigInt(d.tokenCounts.staking)===BigInt(tokens.length),'Incomplete display account');return {...first,data:{...first.data,tokens}};}
  }throw new DisplayError('unavailable','Account pagination limit');}
- async function squeek(id,level){await ensureContext();const artKey=displayKey(profile,`art:${id}:${level}`),saved=await cache.get(artKey);check();if(level!=null&&saved&&now()-saved.at<DAY){validateEconomyEnvelope(saved.data,profile,2);installation(saved.data);requirePin(saved.data.tokenId===String(id)&&saved.data.level===level,'Cached artwork identity mismatch');counts.cache++;return saved;}
-  const result=await request(`/squeeks/${id}`,{validator:data=>{validateEconomyEnvelope(data,profile,2);installation(data);requirePin(data.tokenId===String(id),'Squeek ID mismatch');requireData(Number.isInteger(data.level)&&data.level>0&&data.level<=100,'Invalid Squeek level');if(data.metadata?.status==='available')requireData(typeof data.metadata.cardImageUrl==='string'||(typeof data.metadata.imageDataUri==='string'&&data.metadata.imageDataUri.length<=262144&&/^data:image\/svg\+xml;base64,/.test(data.metadata.imageDataUri)),'Invalid metadata image');}});
+ async function squeek(id,level){await ensureContext();const artKey=displayKey(profile,`art:${id}:${level}`),saved=await cache.get(artKey);check();if(level!=null&&saved&&now()-saved.at<DAY){validateEconomyEnvelope(saved.data,profile,2);installation(saved.data);requirePin(saved.data.tokenId===String(id)&&saved.data.level===level,'Cached artwork identity mismatch');try{metadataImage(saved.data.metadata);}catch(error){await cache.delete(artKey);throw error;}counts.cache++;return saved;}
+  const result=await request(`/squeeks/${id}`,{validator:data=>{validateEconomyEnvelope(data,profile,2);installation(data);requirePin(data.tokenId===String(id),'Squeek ID mismatch');requireData(Number.isInteger(data.level)&&data.level>0&&data.level<=100,'Invalid Squeek level');metadataImage(data.metadata);}});
   if(level!=null&&result.data.level!==level)throw new DisplayError('unavailable','Squeek changed level; refresh account');
   const metadata=result.data.metadata;if(metadata?.status==='available'&&typeof metadata.imageDataUri==='string'&&/^data:image\/svg\+xml;base64,/.test(metadata.imageDataUri)&&metadata.imageDataUri.length<=262144)await cache.set(displayKey(profile,`art:${id}:${result.data.level}`),result);
   return result;

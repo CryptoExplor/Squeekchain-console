@@ -93,7 +93,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
       throwIfAborted(signal);
       activeSnapshot = await context.snapshot();
       try {
-        const prepared = await verifier.prepare(client, activeSnapshot);
+        const prepared = await verifier.prepare(client, activeSnapshot, context.readIdentity);
         verification = prepared.value;
         throwIfAborted(signal);
         const result = await operation();
