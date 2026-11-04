@@ -765,3 +765,6 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 #history-more[hidden],#squeek-page button[hidden]{display:none}
 
 @media(max-width:600px){#watch-row input{flex:initial;width:100%;min-width:0}}
+
+/* The detail view has its own owner-gated Path action. */
+#panel-squeeks:has(#squeek-page:not([hidden])) #btn-planner{display:none}
