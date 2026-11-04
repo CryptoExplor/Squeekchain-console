@@ -4,7 +4,7 @@ History and review evidence live in the linked merged PRs. This list records dur
 
 ## Unreleased — Squeek browsing and Explore
 
-Replaced the Network dashboard with shared filterable cards, bounded lazy image loading and a read-only Explore index/leaderboard. Projections resume locally, replay reorgs and suppress aggregates on supply mismatch. Preserved fresh on-chain action checks, typed burn review and display-only Genesis. Network details and exact source diagnostics remain in Developers.
+Replaced the Network dashboard with shared filterable cards, bounded lazy image loading and a read-only Explore index/leaderboard. Projections resume locally, replay reorgs and suppress aggregates on supply mismatch. Preserved fresh on-chain action checks, typed burn review and display-only Genesis. The compact strip preserves mobile block height and labels last-good/offline wheel readings. Activity lives in the wallet drawer; browser RPC destinations are explicitly CSP-listed. Network details and exact source diagnostics remain in Developers.
 
 ## [PR #4 — Holder workspace and wallet flows](https://github.com/CryptoExplor/Squeekchain-console/pull/4)
 

@@ -84,7 +84,7 @@ assert.equal($('btn-checkpoint').disabled, true);
 assert.equal($('holder-body').classList.contains('hidden'), true);
 assert.equal($('tool-call').options.length, 0);
 assert.ok((await api.callTool('squeek_network_status')).error);
-assert.equal($('wheel-rpm').textContent, 'Unknown');
+assert.equal($('wheel-rpm').textContent, '');assert.equal($('wheel-line').hidden,true);
 // An in-flight testnet read must never repopulate the mainnet page.
 let release;
 pending = new Promise(resolve => { release = resolve; });

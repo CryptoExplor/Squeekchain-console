@@ -76,11 +76,11 @@ try {
   assert.equal($('net-round').textContent, '1000', 'API failure leaves chain panels alone');
   fetchHook=async()=>{throw Object.assign(new Error('Identity mismatch'),{name:'RpcTrustError',kind:'mismatch'});};
   await api.pollDisplay();
-  for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])assert.equal($(id).textContent,'Unknown','mismatch clears retained values');
-  assert.equal($('net-round').textContent,'Unknown','mismatch stops and clears chain display');
+  assert.equal($('wheel-rpm').textContent,'20.0','retain only historical device reading after API mismatch');assert.match($('wheel-asof').textContent,/as of/);
+  await tick();assert.equal($('net-round').textContent,'1000','independently guarded RPC fallback after API mismatch');assert.equal(api.state.net.source.kind,'rpc');
   fetchHook=async()=>response(measurement(20000));await api.pollDisplay();await api.refresh();
   const realNow=Date.now;Date.now=()=>realNow()+900001;
-  try{fetchHook=async()=>{throw new Error('Offline');};await api.pollDisplay();assert.equal($('wheel-rpm').textContent,'Unknown','expired 15-minute tier is Unknown');}finally{Date.now=realNow;}
+  try{fetchHook=async()=>{throw new Error('Offline');};await api.pollDisplay();assert.equal($('wheel-rpm').textContent,'20.0','historical device reading stays explicitly aged, never a fresh measurement');assert.match($('wheel-asof').textContent,/as of 15 min/);}finally{Date.now=realNow;}
   fetchHook=()=>new Promise(resolve=>{release=resolve;});
 
 
@@ -91,12 +91,12 @@ try {
   release(response(measurement(30000))); await tick();
   await $('btn-refresh').onclick(); void api.pollDisplay(); await tick(); await tick();
   assert.deepEqual(reading(), unavailable);
-  assert.equal($('wheel-state').textContent, 'Unavailable');
+  assert.equal($('wheel-line').hidden,true);
   assert.equal(requests, previousRequests, 'non-Sepolia refreshes never fetch device telemetry');
 
   const switchingBack = api.switchProfile('sepolia-v9');
-  assert.equal($('wheel-state').textContent, 'Loading', 'profile change resets rather than reusing old readings');
-  assert.equal($('wheel-rpm').textContent, 'Unknown');
+  assert.equal($('wheel-state').textContent, '—', 'profile change resets rather than reusing old readings');
+  assert.equal($('wheel-rpm').textContent, '');
   await switchingBack; release(response(measurement(5000))); await tick();
   assert.equal($('wheel-rpm').textContent, '5.0');
   fetchHook = async () => response(measurement(5000));

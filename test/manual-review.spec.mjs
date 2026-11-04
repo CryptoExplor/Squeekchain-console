@@ -81,12 +81,12 @@ test('minified dist scripts render and retain wallet safety with lazy Settings a
 for(const profile of ['sepolia-v6','sepolia-v9'])test(`saved custom RPC reaches production ${profile} adapter without a fixture factory`,async({page})=>{
  const custom=[];await page.route('**/*',route=>{
   const url=new URL(route.request().url());if(url.hostname==='127.0.0.1')return route.continue();
-  if(url.origin==='https://saved-rpc.test'){const request=route.request().postDataJSON();custom.push(request);return route.fulfill({json:{jsonrpc:'2.0',id:request.id,result:request.method==='eth_chainId'?'0xaa36a7':'0xb7c6a0'}});}
+  if(url.href==='https://0xrpc.io/saved-rpc-test'){const request=route.request().postDataJSON();custom.push(request);return route.fulfill({json:{jsonrpc:'2.0',id:request.id,result:request.method==='eth_chainId'?'0xaa36a7':'0xb7c6a0'}});}
   return route.abort();
  });
  await page.addInitScript(profile=>{window.__squeekMounted=true;localStorage.setItem('squeekchain:profile',profile);},profile);await page.goto('/');
  await page.evaluate(async()=>{const {mount}=await import('/app.js');window.squeek=mount({fetcher:async()=>{throw new Error('Offline API');}});await squeek.refresh();});
- await page.getByTestId('settings-open').click();await page.getByTestId('rpc-url').fill('https://saved-rpc.test');await page.getByTestId('btn-save-rpc').click();
- await expect.poll(()=>custom.filter(request=>request.method==='eth_chainId').length).toBeGreaterThan(0);expect(await page.evaluate(()=>localStorage.getItem('wheelhouse:rpc'))).toBe('https://saved-rpc.test');
+ await page.getByTestId('settings-open').click();await page.getByTestId('rpc-url').fill('https://0xrpc.io/saved-rpc-test');await page.getByTestId('btn-save-rpc').click();
+ await expect.poll(()=>custom.filter(request=>request.method==='eth_chainId').length).toBeGreaterThan(0);expect(await page.evaluate(()=>localStorage.getItem('wheelhouse:rpc'))).toBe('https://0xrpc.io/saved-rpc-test');
  await expect(page.getByTestId('profile-status')).not.toHaveText('Verified');await page.evaluate(()=>squeek.destroy());
 });

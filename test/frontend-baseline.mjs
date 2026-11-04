@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { JSDOM } from 'jsdom';
+import {parse,walk,generate} from 'css-tree';
 const evidence=JSON.parse(fs.readFileSync('test/fixtures/frontend-b705683.json'));
 const sha=value=>createHash('sha256').update(value).digest('hex');
 const html=fs.readFileSync('web/index.html','utf8'),doc=new JSDOM(html).window.document;
@@ -22,12 +23,16 @@ function normalize(node) {
   return node.outerHTML;
 }
 // DATA DIET explicitly replaces the old fixed-loop label; all other baseline DOM remains exact.
-for(const [selector,expected] of Object.entries(evidence.nodes).filter(([selector])=>!['#holder-empty','#btn-plan','#panel-network .section-heading'].includes(selector)))assert.equal(normalize(doc.querySelector(selector)),normalize(new JSDOM(expected.replace('ONCHAIN READS · AUTO-REFRESH 45s','DISPLAY READS · FOLLOWS THE WHEEL').replace('rendered by the DotGrid renderer · shown as an isolated image','Your Squeek collection')).window.document.body.firstElementChild),`${selector}: preserve deployed b705683 layout/copy`);
+for(const [selector,expected] of Object.entries(evidence.nodes).filter(([selector])=>!['#holder-empty','#btn-plan','#panel-network .section-heading','#activity-panel > p'].includes(selector)))assert.equal(normalize(doc.querySelector(selector)),normalize(new JSDOM(expected.replace('ONCHAIN READS · AUTO-REFRESH 45s','DISPLAY READS · FOLLOWS THE WHEEL').replace('rendered by the DotGrid renderer · shown as an isolated image','Your Squeek collection')).window.document.body.firstElementChild),`${selector}: preserve deployed b705683 layout/copy`);
+assert.equal(doc.querySelector('#activity-panel > p'),null,'approved removal of drawer-wide help');
 assert.equal(doc.querySelector('#panel-network'),null,'v3 removes the Network dashboard');assert.ok(doc.querySelector('#panel-explore'));assert.ok(doc.querySelector('.network-strip'));assert.ok(doc.querySelector('#info-about').textContent.includes('Also see'));
 assert.equal(doc.querySelector('#btn-plan'),null,'text plan refresh removed');assert.equal(doc.querySelector('#btn-holder-refresh').getAttribute('aria-label'),'Refresh Squeeks');
 assert.match(doc.querySelector('#holder-empty').textContent,/Connect your wallet/);assert.ok(doc.querySelector('#holder-connect'));
 const styles=fs.readFileSync('web/styles.css','utf8');
-assert.equal(sha(styles.slice(0,evidence.stylesPrefixCharacters)),evidence.stylesSha256,'all original styles remain unchanged; new rules are additive');
+// The approved strip cleanup may remove its old base/mobile rules, not rewrite other baseline styles.
+const end=evidence.stylesPrefixEndAnchor,index=styles.indexOf(end);assert.ok(index>=0,'preserve original prefix boundary');assert.equal(styles.indexOf(end,index+1),-1);
+const withoutStrip=css=>{const ast=parse(css);walk(ast,{visit:'Rule',enter(node,item,list){if(/^\.network-strip(?:$|[ .>:#\[])/.test(generate(node.prelude)))list.remove(item);}});return generate(ast);};
+assert.equal(sha(withoutStrip(styles.slice(0,index+end.length))),evidence.stylesExceptNetworkStripSha256,'all baseline styles except the explicitly replaced network strip remain unchanged');
 const components=fs.readFileSync('web/components.js','utf8').replace(/export function Toast[\s\S]*?(?=export function ConfirmDialog)/,fs.readFileSync('test/fixtures/frontend-toast-b705683.txt','utf8')).replace(', details = []','').replace(/\n      if\(details.length\) \{.*?\n      \}/s,'');
 assert.equal(sha(components),evidence.componentsSha256,'original components plus structured unstake details only');
 const app=fs.readFileSync('web/app.js','utf8');
@@ -41,4 +46,4 @@ assert.match(app,/import\('\.\/developers\.js'\)/);assert.match(app,/import\('\.
 const forbidden='Read-only.*unverified|all transactions disabled|read-only here|checkpoint is read-only|claims are read-only|read-only for owner actions|v9.*read-only|read-only.*v9|undocumented|no v9 transactions|Merges are not supported on this profile';
 const grep=spawnSync('git',['grep','-nEi',forbidden,'--','web/app.js','web/index.html'],{encoding:'utf8'});
 assert.equal(grep.status,1,`obsolete v9 restriction copy must not return:\n${grep.stdout}\n${grep.stderr}`);
-console.log(`PASS frontend restoration from ${evidence.sourceCommit}: original CSS/components/layout/copy plus functional surfaces; lazy modules; git grep confirms no obsolete v9 restriction strings`);
+console.log(`PASS frontend restoration from ${evidence.sourceCommit}: baseline CSS except approved strip cleanup, components/layout/copy plus functional surfaces; lazy modules; git grep confirms no obsolete v9 restriction strings`);

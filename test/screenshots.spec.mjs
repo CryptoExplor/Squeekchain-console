@@ -213,20 +213,20 @@ test('structure: wallet menu copy, pending dot, Activity drawer and confirmed cl
 test('structure: RPC test is diagnostic only, save/remove and log cache clear', async ({ page }) => {
   await installReviewFixture(page);
   const methods = [];
-  await page.route('https://custom-rpc.test/**', route => {
+  await page.route('https://0xrpc.io/custom-test/**', route => {
     const request = route.request().postDataJSON(); methods.push(request.method);
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ jsonrpc: '2.0', id: request.id, result: request.method === 'eth_chainId' ? '0xaa36a7' : '0x64' }) });
   });
   await page.evaluate(() => { window.reviewRpcTest = true; });
   await page.getByTestId('settings-open').click();
-  await page.getByTestId('rpc-url').fill('https://custom-rpc.test/');
+  await page.getByTestId('rpc-url').fill('https://0xrpc.io/custom-test/');
   await page.getByTestId('btn-test-rpc').click();
   await expect(page.getByTestId('rpc-test-result')).toContainText('chainId 11155111 · block 100');
   expect(methods).toEqual(['eth_chainId', 'eth_blockNumber']);
   expect(await page.evaluate(() => localStorage.getItem('wheelhouse:rpc'))).toBeNull();
   await page.getByTestId('btn-save-rpc').click();
   await expect(page.getByTestId('settings-sheet')).toBeHidden();
-  expect(await page.evaluate(() => localStorage.getItem('wheelhouse:rpc'))).toBe('https://custom-rpc.test/');
+  expect(await page.evaluate(() => localStorage.getItem('wheelhouse:rpc'))).toBe('https://0xrpc.io/custom-test/');
   await page.getByTestId('settings-open').click();
   await page.getByTestId('btn-remove-rpc').click();
   expect(await page.evaluate(() => localStorage.getItem('wheelhouse:rpc'))).toBe('');

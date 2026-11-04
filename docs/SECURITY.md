@@ -38,7 +38,7 @@ Wallet identity is owned by one EIP-1193 session store; watch scope is separate.
 
 ## CSP and agent access
 
-`web/_headers` restricts scripts/styles/fonts to self, images to self/data/blob, framing to none, and disables objects and unsafe base/form destinations. **`connect-src https:` is intentionally broad for custom RPC support: it is not a destination allowlist or exfiltration boundary.** Artwork origin enforcement is in code. Do not weaken CSP with inline-script/style exceptions.
+`web/_headers` restricts scripts/styles/fonts to self, images to self/data/blob, framing to none, and disables objects and unsafe base/form destinations. `connect-src` permits only self, the exact API origin and the three listed public RPC origins (Tenderly, PublicNode and 0xRPC); no bare schemes or wildcard hosts. Browser Settings accepts custom RPC URLs only on those listed hosts. A meta policy cannot widen the HTTP header policy. Artwork origin enforcement is in code. Do not weaken CSP with inline-script/style exceptions.
 
 Local stdio MCP provides public reads and unsigned preparation, not wallet access or submission. Browser same-origin human requests may open the wallet only after the normal review/simulation gates. Cross-origin postMessage permits only five public reads with an explicit owner, isolated public-RPC adapters and no session/custom-RPC/inspected-address defaults. Opaque origins and cross-origin prepare/request tools are refused. Agents never receive keys.
 

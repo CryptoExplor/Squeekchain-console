@@ -10,7 +10,7 @@ export function initSettings({$,state,store,fetcher,captureLoad,assertCurrent,is
   $('rpc-url').oninput=warnSecrets;warnSecrets();
   function customRpcValue() {
     const value = $('rpc-url').value.trim();warnSecrets();
-    if (value) { const url = new URL(value); if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Use an HTTPS RPC URL without embedded credentials'); }
+    if (value) { const url = new URL(value); if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Use an HTTPS RPC URL without embedded credentials'); if (!['https://sepolia.gateway.tenderly.co','https://ethereum-sepolia-rpc.publicnode.com','https://0xrpc.io'].includes(url.origin)) throw new Error('Custom RPC must use a CSP-listed host: sepolia.gateway.tenderly.co, ethereum-sepolia-rpc.publicnode.com, or 0xrpc.io.'); }
     return value;
   }
   $('btn-test-rpc').onclick = async () => {
@@ -59,7 +59,7 @@ export function initSettings({$,state,store,fetcher,captureLoad,assertCurrent,is
     const value = customRpcValue();
     store.set("wheelhouse:rpc", value);
     await switchProfile(state.profileKey);
-    } catch (err) { $("rpc-test-result").textContent = "Use an HTTPS RPC URL without embedded credentials."; showBanner(errorMessage(err), "bad"); }
+    } catch (err) { $("rpc-test-result").textContent = errorMessage(err); showBanner(errorMessage(err), "bad"); }
   };
 
 

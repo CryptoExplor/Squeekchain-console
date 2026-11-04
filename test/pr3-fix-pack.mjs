@@ -76,8 +76,9 @@ try {
 const build=spawnSync(process.execPath,['build.mjs'],{encoding:'utf8'});assert.equal(build.status,0,build.stdout+build.stderr);
 assert.ok(fs.existsSync('dist/_headers'));
 const headers=fs.readFileSync('dist/_headers','utf8');assert.equal(headers,fs.readFileSync('web/_headers','utf8'));
-for(const policy of ["default-src 'self'","script-src 'self'","connect-src 'self' https://api.squeekchain.com","https:;","img-src 'self' data: blob:","style-src 'self'","font-src 'self'","frame-ancestors 'none'","base-uri 'none'","form-action 'none'","object-src 'none'",'X-Content-Type-Options: nosniff','Referrer-Policy: strict-origin-when-cross-origin','Permissions-Policy: camera=(), microphone=(), geolocation=()'])assert.ok(headers.includes(policy),policy);
+for(const policy of ["default-src 'self'","script-src 'self'","connect-src 'self' https://api.squeekchain.com","img-src 'self' data: blob:","style-src 'self'","font-src 'self'","frame-ancestors 'none'","base-uri 'none'","form-action 'none'","object-src 'none'",'X-Content-Type-Options: nosniff','Referrer-Policy: strict-origin-when-cross-origin','Permissions-Policy: camera=(), microphone=(), geolocation=()'])assert.ok(headers.includes(policy),policy);
 assert.doesNotMatch(headers,/unsafe-inline|unsafe-eval/);
+const connect=headers.match(/connect-src ([^;]+)/)[1].trim().split(/\s+/);assert.deepEqual(connect,["'self'",'https://api.squeekchain.com','https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.gateway.tenderly.co','https://0xrpc.io']);assert.ok(connect.every(origin=>origin!=="https:"&&!origin.includes('*')));
 assert.doesNotMatch(fs.readFileSync('dist/index.html','utf8'),/\sstyle\s*=/i,'strict style CSP cannot silently break historical layout');
 assert.doesNotMatch(fs.readFileSync('dist/index.html','utf8'),/<script(?![^>]*\bsrc=)[^>]*>/i,'no inline script bootstrap exception');
 assert.equal(fs.existsSync('vercel.json'),false,'Cloudflare Pages is the only deployment configuration');
