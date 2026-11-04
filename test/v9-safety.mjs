@@ -9,7 +9,7 @@ import { IMPLEMENTATION_SLOT, ADMIN_SLOT } from '../sdk/verify.js';
 import { createRpcContext } from '../sdk/rpc.js';
 import { core9Abi, issuance9Abi, nft9Abi, staking9Abi, token9Abi } from '../sdk/abi-v9.js';
 import { createDiscoveryStore } from '../sdk/discovery.js';
-import { isRpcAvailabilityError } from '../sdk/rpc-errors.js';
+import { isRpcAvailabilityError, rpcErrorDiagnostics } from '../sdk/rpc-errors.js';
 import { runReadTool, STAKING_ACTIONS } from '../sdk/tool-runtime.js';
 const profile=structuredClone(PROFILES['sepolia-v9']);
 const codes=new Map();let next=1;
@@ -212,16 +212,35 @@ try {
  const rejectedCache=new Map();
  const corrupt=createSqueek9({rpcContext:createRpcContext(),verificationCache:rejectedCache,accountSource:null});
  await assert.rejects(corrupt.verify(),/mismatch/i);assert.equal(rejectedCache.size,0);
- // Both peers rejecting JSON-RPC arrays must transparently use checked singles.
- const rejectedPeers=new Set();wire.length=0;
+ // HTTP 400 on identity arrays (including dRPC) must use checked singles.
+ // The browser's failed POST is visible even though the verified read recovers.
+ const rejectedPeers=new Set();let batchRejections=0;wire.length=0;
  globalThis.fetch=async(url,init)=>{
    const payload=JSON.parse(init.body);
-   if(Array.isArray(payload)){rejectedPeers.add(new URL(url).origin);return new Response(JSON.stringify({jsonrpc:'2.0',id:null,error:{code:-32600,message:'Batch unsupported'}}));}
+   if(Array.isArray(payload)){batchRejections++;rejectedPeers.add(new URL(url).origin);return new Response('Bad Request: batch unsupported',{status:400});}
    return healthyFetch(url,init);
  };
  const unsupported=createSqueek9({rpcContext:createRpcContext(),accountSource:null});
  assert.equal((await unsupported.verify()).trusted,true);assert.equal(rejectedPeers.size,2);
  assert.equal(unsupported.rpcDiagnostics().some(item=>item.trust),false);
  assert.equal(wire.filter(r=>r.method==='eth_getStorageAt').length,24);
- console.log('PASS v9 integrated dual-peer identity batches: corrupt peer cannot seed trust; unsupported arrays fall back to singles without trust failure');
+ assert.ok(rejectedPeers.has('https://sepolia.drpc.org'),'reported dRPC endpoint is exercised');
+ assert.equal(batchRejections,2,'one rejected array per independent peer');
+ wire.length=0;
+ const nextContext=createSqueek9({rpcContext:createRpcContext(),accountSource:null});
+ assert.equal((await nextContext.verify()).trusted,true,'new adapter retains session batch capability fallback, not cached trust');
+ assert.equal(batchRejections,2,'unsupported arrays are not retried after context/profile recreation');
+ assert.equal(wire.filter(r=>r.method==='eth_getStorageAt').length,24,'both peers still independently check all slots');
+ // A 400 on single reads is NOT a successful fallback or a verified snapshot.
+ const fallbackFetch=globalThis.fetch;
+ globalThis.fetch=async(url,init)=>{
+   const request=JSON.parse(init.body);
+   if(new URL(url).origin==='https://sepolia.drpc.org'&&request.method==='eth_getStorageAt')return new Response(JSON.stringify({error:{code:-32602,message:'Invalid params'}}),{status:400});
+   return fallbackFetch(url,init);
+ };
+ const failedCache=new Map(),failed=createSqueek9({rpcContext:createRpcContext(),verificationCache:failedCache,accountSource:null});
+ await assert.rejects(failed.verify(),error=>{const info=rpcErrorDiagnostics(error);return info.httpStatus===400&&info.rpcCode===-32602&&!isRpcAvailabilityError(error);},'invalid-params singles must stop, not be treated as transient availability');
+ assert.equal(failedCache.size,0,'failed single reads cannot seed verification');
+ assert.ok(failed.rpcDiagnostics().some(item=>item.endpoint==='https://sepolia.drpc.org'&&item.method==='eth_getStorageAt'&&item.httpStatus===400));
+ console.log('PASS v9 dual-peer identity batches: corrupt peer stops; dRPC HTTP 400 arrays recover once with checked singles across contexts; single-read invalid-params HTTP 400 stops with no trust cache');
 }finally{globalThis.fetch=realFetch;}

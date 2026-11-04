@@ -83,7 +83,7 @@ let singles=0,batches=0;
 const peer={identityUrl:'https://rpc.example/',request:async request=>{singles++;return results[requests.findIndex(item=>item.method===request.method)];}};
 const good=async(_url,init)=>{batches++;const body=JSON.parse(init.body);assert.deepEqual(body.map(({method,params})=>({method,params})),requests);return response(body.map((r,i)=>({jsonrpc:'2.0',id:r.id,result:results[i]})).reverse());};
 assert.deepEqual(await readIdentityBatch(peer,requests,{fetcher:good,capabilities:new Map()}),results);assert.equal(batches,1);assert.equal(singles,0);
-for(const reject of [()=>response({jsonrpc:'2.0',error:{code:-32600,message:'Batch unsupported'}}),... [403,405,415].map(status=>()=>new Response('',{status})),body=>response(body.map(r=>({jsonrpc:'2.0',id:r.id,error:{code:-32600,message:'Batch disabled'}})))]) {
+for(const reject of [()=>response({jsonrpc:'2.0',error:{code:-32600,message:'Batch unsupported'}}),... [400,403,405,415].map(status=>()=>new Response('',{status})),body=>response(body.map(r=>({jsonrpc:'2.0',id:r.id,error:{code:-32600,message:'Batch disabled'}})))]) {
   const capabilities=new Map();singles=0;batches=0;
   const fetcher=async(_url,init)=>{batches++;return reject(JSON.parse(init.body));};
   assert.deepEqual(await readIdentityBatch(peer,requests,{fetcher,capabilities}),results);
