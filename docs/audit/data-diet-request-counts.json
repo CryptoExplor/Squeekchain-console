@@ -1,0 +1,37 @@
+{
+  "fixture": "Production v9 app/default dual-profile chooser; synthetic API/RPC responses; extracted passively from second-run trace before failed chainChanged assertion. HTTP only: EIP-1193 reads excluded. Refresh is explicit, NOT a cache-only reload.",
+  "v9": {
+    "cold": {
+      "apiHttp": 6,
+      "rpcHttp": 0,
+      "apiHttpSharePercent": 100.0
+    },
+    "explicitRefresh": {
+      "apiHttp": 2,
+      "rpcHttp": 0,
+      "apiHttpSharePercent": 100.0
+    },
+    "walletConnect": {
+      "apiHttp": 1,
+      "rpcHttp": 6,
+      "apiHttpSharePercent": 14.29
+    }
+  },
+  "polling": {
+    "ACTIVE": {
+      "bootstrapApi": 4,
+      "statusPolls": 120,
+      "eventPolls": 120,
+      "tenMinuteApiReads": 240,
+      "rpcReads": 0
+    },
+    "IDLE": {
+      "bootstrapApi": 4,
+      "statusPolls": 10,
+      "eventPolls": 10,
+      "tenMinuteApiReads": 20,
+      "rpcReads": 0
+    }
+  },
+  "v6After": "Not measured end-to-end; blocked by second browser regression failure. Existing SDK baselines are not relabeled as new display-path measurements."
+}

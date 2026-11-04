@@ -115,7 +115,8 @@ await assert.rejects(telemetry.read(), /Rate limited/);
 assert.equal(calls, 3);
 assert.equal(telemetryView(payload, timestamp).state, 'Running');
 assert.equal(telemetryView({ ...payload, measurement: { ...payload.measurement, rpmMilli: 0 } }, timestamp).state, 'Resting');
-assert.equal(telemetryView(payload, timestamp + 121000).rpm, 'Unknown');
+assert.equal(telemetryView(payload, timestamp + 121000).rpm, '12.5','stale but unexpired reading retains its number');
+assert.equal(telemetryView(payload,timestamp+900001).rpm,'Unknown','expired dynamic tier clears');
 assert.equal(telemetryView({ measurement: null }).state, 'Unknown');
 for (const bad of [{ schemaVersion: 99 }, { schemaVersion: 1, status: 'unavailable', reason: 'offline' }, { schemaVersion: 1, measurement: {} }]) {
   await assert.rejects(createTelemetry({ fetcher: async () => response(bad) }).read());

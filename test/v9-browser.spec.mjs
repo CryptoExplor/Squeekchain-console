@@ -51,7 +51,7 @@ test('restored frontend: active policy, one footer, baseline copy, conditional w
  await page.getByTestId('settings-open').click();await expect(page.getByTestId('settings-sheet')).toBeVisible();expect(loaded).toContain('/settings.js');await page.getByTestId('rpc-url').fill('https://rpc.example/');await expect(page.getByTestId('rpc-secret-warning')).toBeHidden();await page.getByTestId('rpc-url').fill('https://rpc.example/?apiKey=private');await expect(page.getByTestId('rpc-secret-warning')).toBeVisible();await page.keyboard.press('Escape');
  await page.getByTestId('info-link-developers').click();await page.getByTestId('btn-copy-manifest').click();expect(loaded).toContain('/developers.js');
  const body=await page.locator('body').textContent();expect(body.match(/not affiliated with Squeekchain/g)).toHaveLength(1);expect(body).toMatch(/Powered by a hamster/);expect(body).toMatch(/Build with Squeekchain/);expect(body).toMatch(/Network at a glance/);expect(body).not.toMatch(/undocumented|no v9 transactions|read-only and unverified|all transactions disabled/);
- await page.getByTestId('tab-network').click();await expect(page.locator('.telemetry-source')).toHaveText('OFFICIAL API · DISPLAY ONLY');await expect(page.getByTestId('panel-network')).toContainText('ONCHAIN READS · AUTO-REFRESH 45s');await page.evaluate(()=>squeek.destroy());
+ await page.getByTestId('tab-network').click();await expect(page.locator('.telemetry-source')).toHaveCount(0);await expect(page.getByTestId('panel-network')).toContainText('DISPLAY READS · FOLLOWS THE WHEEL');await page.evaluate(()=>squeek.destroy());
 });
 
 for(const [name,v6,v9,expected] of [

@@ -1,0 +1,16 @@
+{
+  "ACTIVE": {
+    "bootstrapApi": 4,
+    "statusPolls": 120,
+    "eventPolls": 120,
+    "tenMinuteApiReads": 240,
+    "rpcReads": 0
+  },
+  "IDLE": {
+    "bootstrapApi": 4,
+    "statusPolls": 10,
+    "eventPolls": 10,
+    "tenMinuteApiReads": 20,
+    "rpcReads": 0
+  }
+}

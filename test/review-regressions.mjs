@@ -20,9 +20,7 @@ const { window: win } = dom;
 const doc = win.document;
 const $ = id => doc.getElementById(id);
 const style = doc.createElement('style'); style.textContent = css; doc.head.append(style);
-const intervals = new Map();
-win.setInterval = (callback, ms) => { intervals.set(ms, callback); return ms; };
-win.clearInterval = ms => intervals.delete(ms);
+Object.defineProperty(doc,'hidden',{value:false,configurable:true});
 let fetchHook = async () => response(measurement(12500));
 let requests = 0, verifyFails = false, sends = 0;
 const net = {
@@ -67,19 +65,31 @@ try {
   assert.equal($('wheel-rpm').textContent, '20.0');
 
   const beforePoll = reading();
-  intervals.get(15_000)(); await tick();
+  void api.pollDisplay(); await tick();
   assert.deepEqual(reading(), beforePoll, 'polling keeps the complete reading while fetching');
   release(response(null, 403)); await tick();
-  assert.equal($('wheel-state').textContent, 'Unknown');
-  for (const id of ['wheel-rpm', 'wheel-speed', 'wheel-distance']) assert.equal($(id).textContent, 'Unknown');
+  assert.equal($('wheel-state').textContent, 'Running');
+  assert.deepEqual(reading().slice(0,4),beforePoll.slice(0,4),'transient poll retains last-good numbers');
+  assert.match($('wheel-note').textContent,/as of/);
+  void api.pollDisplay();await tick();release(response(null,403));await tick();
+  assert.deepEqual(reading().slice(0,4),beforePoll.slice(0,4),'two failed polls retain last-good numbers');
   assert.equal($('net-round').textContent, '1000', 'API failure leaves chain panels alone');
+  fetchHook=async()=>{throw Object.assign(new Error('Identity mismatch'),{name:'RpcTrustError',kind:'mismatch'});};
+  await api.pollDisplay();
+  for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])assert.equal($(id).textContent,'Unknown','mismatch clears retained values');
+  assert.equal($('net-round').textContent,'Unknown','mismatch stops and clears chain display');
+  fetchHook=async()=>response(measurement(20000));await api.pollDisplay();await api.refresh();
+  const realNow=Date.now;Date.now=()=>realNow()+900001;
+  try{fetchHook=async()=>{throw new Error('Offline');};await api.pollDisplay();assert.equal($('wheel-rpm').textContent,'Unknown','expired 15-minute tier is Unknown');}finally{Date.now=realNow;}
+  fetchHook=()=>new Promise(resolve=>{release=resolve;});
+
 
   // An in-flight reading may not repaint a different profile.
-  intervals.get(15_000)(); await tick();
+  void api.pollDisplay(); await tick();
   await api.switchProfile('mainnet');
   const unavailable = reading(), previousRequests = requests;
   release(response(measurement(30000))); await tick();
-  await $('btn-refresh').onclick(); intervals.get(15_000)(); await tick(); await tick();
+  await $('btn-refresh').onclick(); void api.pollDisplay(); await tick(); await tick();
   assert.deepEqual(reading(), unavailable);
   assert.equal($('wheel-state').textContent, 'Unavailable');
   assert.equal(requests, previousRequests, 'non-Sepolia refreshes never fetch device telemetry');
@@ -90,7 +100,7 @@ try {
   await switchingBack; release(response(measurement(5000))); await tick();
   assert.equal($('wheel-rpm').textContent, '5.0');
   fetchHook = async () => response(measurement(5000));
-  console.log('PASS review: retain telemetry during manual/poll fetches, clear failures, isolate profiles');
+  console.log('PASS review: retain telemetry through two failed polls, age last-good readings, isolate profiles');
 
   await api.connect();
   assert.equal($('wallet-chip'),null);assert.match($('btn-connect').textContent,/0x5989/);
