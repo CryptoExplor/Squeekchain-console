@@ -30,6 +30,7 @@ import {
 } from "./bundle.js";
 
 import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
+import {holderRoute,watchAddress,watchHash} from './holder-routes.js';
 import {createHoldings} from './holdings.js';
 import {wheelFeed,formingBlock} from './wheel-feed.js';
 import {createWallet} from './wallet.js';
@@ -44,6 +45,7 @@ const THEME_KEY = "squeekchain:theme";
 
 export function mount({ doc = document, win = window, adapterFactory, fetcher = globalThis.fetch, activityReader, profileBalanceReader } = {}) {
   const $ = (id) => doc.getElementById(id);
+  let workspace,workspaceReady;
   const el = {
     profileSelect: $("profile-select"),
     verified: $("verified-chip"),
@@ -127,6 +129,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     get walletEth(){const value=wallet.get().ethBalance;return value==null?null:Number(value).toFixed(3);},
     inspected: null,
     net: null,
+    watchOnly: false,
+    claimQuote: null,
     status: null,
     plan: null,
     art: new Map(),
@@ -240,7 +244,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const verification=method==='verify'?value:value?.verification;if(verification)renderVerification(verification);
     return value;
   });
-  function resetLoad(){verifiedForGeneration=null;loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
+  function resetLoad(){workspace?.clear();state.claimQuote=null;verifiedForGeneration=null;loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
   const displayCache=createDisplayCache(win.indexedDB),lastGood=new Map();let apiScope;
   function displayApi(load){if(adapterFactory||load.profileKey!=='sepolia-v9')return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
   function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000)),text=`${source.kind==='api'?'API · 12 blocks behind':'RPC display snapshot'}${age?` · as of ${age} min`:''}`;for(const node of doc.querySelectorAll('.stat'))node.title=text;$('display-age').textContent=age?`as of ${age} min`:'';}
@@ -278,7 +282,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   $('wheel-show-more').onclick=()=>{feedLimit+=5;renderWheelFeed();};
   async function readWheelEvents(){const load=captureLoad(),api=displayApi(load);const result=await api.feed();assertCurrent(load);wheelEvents=result.data.events;renderWheelFeed();return result;}
   async function displayFeeds(load){const api=displayApi(load);if(!api)return;
-    for(const [kind,read] of [['events',()=>api.feed()],['settlements',()=>api.settlements()],...(state.inspected?[['account',()=>api.feed(`/accounts/${state.inspected.toLowerCase()}/activity?limit=25`)]]:[])]){
+    for(const [kind,read] of [['events',()=>api.feed()],['settlements',()=>api.settlements()],]){
       try{const result=await read();assertCurrent(load);if(kind==='events')wheelEvents=result.data.events;else if(kind==='settlements')wheelSettlements=result.data.recentSettlements;else feedRows('account-activity',wheelFeed(result.data.events??result.data.activity));renderWheelFeed();}
       catch(error){if(!isCurrent(load))return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);return;}if(error.kind&&error.kind!=='transport'){if(kind==='events')wheelEvents=[];else if(kind==='settlements')wheelSettlements=[];else $('account-activity').replaceChildren();renderWheelFeed();}}
     }
@@ -313,7 +317,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('activity-empty').classList.toggle('hidden', items.length !== 0);
     const pending = items.filter(item => !['confirmed', 'reverted'].includes(item.status)).length;
     for(const item of items){const key=item.hash.toLowerCase(),before=activityNotices.get(key);if(activityReady&&before!==item.status){if(!before)toast(`${item.label} submitted.`, '', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='confirmed')toast(`${item.label} confirmed.`, 'ok', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='reverted')toast(`${item.label} failed.`, 'err', {action:'View',onAction:()=>openSheet('activity-drawer')});}activityNotices.set(key,item.status);}
-    activityReady=true;
+    activityReady=true;workspace?.localChanged();
     $('pending-count').textContent = String(pending);
     $('pending-count').classList.toggle('hidden', !pending);
     $('btn-open-activity').setAttribute('aria-label', `Activity, ${pending} pending`);
@@ -365,7 +369,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     // The signer belongs to the wallet store, never to a deployment profile.
 
     // Navigation ALWAYS wins, including while a simulation or wallet prompt is pending.
-    loadController.abort();
+    workspace?.clear();state.claimQuote=null;loadController.abort();
     generation++;verifiedForGeneration=null;
     loadController = new AbortController();
     dialog.close();
@@ -555,11 +559,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
   }
 
-  function watching(){return Boolean(state.inspected&&state.inspected.toLowerCase()!==state.account?.toLowerCase());}
+  function watching(){return Boolean(state.watchOnly||state.inspected&&state.inspected.toLowerCase()!==state.account?.toLowerCase());}
   let walletWork=Promise.resolve();
   async function connect(){
     if(!getProfile(state.profileKey).addresses){showBanner('Mainnet is not deployed. Select Sepolia to connect and inspect.','warn');return null;}
-    try{await wallet.connect();await walletWork;selectTab('squeeks');return state.account;}catch(error){showBanner(errorMessage(error),'bad');return null;}
+    try{await wallet.connect();await walletWork;selectTab(holderRoute(win.location.hash)?currentRoute():'squeeks');return state.account;}catch(error){showBanner(errorMessage(error),'bad');return null;}
   }
   async function loadWalletSession(){
     const load=captureLoad(),account=state.account;
@@ -567,7 +571,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     try{
       const counts=await viewAwait(load,()=>profileBalanceReader?profileBalanceReader(account):profileBalances(account,{rpcUrl:store.get('wheelhouse:rpc')||undefined,provider,chainCache,discoveryCache,signal:load.signal}));
       assertCurrent(load);state.profileCounts=counts;renderProfileOptions();
-      const chosen=chooseProfile(state.profileKey,counts);
+      const chosen=state.watchOnly||/\/squeek\//.test(win.location.hash)?state.profileKey:chooseProfile(state.profileKey,counts);
       if(chosen!==state.profileKey){await switchProfile(chosen,{preserveWallet:true});return;}
     }catch(error){if(!isCurrent(load))return;state.profileCounts={};renderProfileOptions();}
     await refreshAll();
@@ -577,7 +581,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     renderWalletChip();
     const changed=next.account?.toLowerCase()!==previous.account?.toLowerCase()||next.chainId!==previous.chainId||next.providerInfo?.rdns!==previous.providerInfo?.rdns;
     if(!changed||(!next.account&&!previous.account&&next.chainId===previous.chainId))return;
-    const wasWatch=state.inspected&&state.inspected.toLowerCase()!==previous.account?.toLowerCase();
+    const wasWatch=state.watchOnly||state.inspected&&state.inspected.toLowerCase()!==previous.account?.toLowerCase();
     resetLoad();chainCache.clear();dialog.close();state.lastReadFailure=null;closeWalletMenu();state.profileCounts={};
     if(previous.account&&next.account?.toLowerCase()!==previous.account.toLowerCase())pendingSwitchNotice();
     if(!wasWatch)state.inspected=next.account;
@@ -613,6 +617,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
   async function sendTransaction(tx, label, owner = state.account, load = captureLoad()) {
     assertCurrent(load);
+    if(watching())throw new Error('Viewing only');
     const p = provider();
     if (!p || !state.account) throw new Error("connect a wallet to sign");
     if(state.busy||state.walletPromptPending)throw Object.assign(new Error('A wallet request is still outstanding. Close or reject it in your wallet before starting another transaction.'),{walletOutcome:true});
@@ -631,7 +636,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(ticket.cancelled)throw Object.assign(new Error('Wallet request cancelled'),{walletOutcome:true});
       ticket.rpcPending=true;
       const response=Promise.resolve().then(()=>p.request({method:'eth_sendTransaction',params:[{from:owner,to:tx.to,data:tx.data,value:`0x${BigInt(tx.value??0).toString(16)}` }]})).then(result=>{
-        activity.record(result,label,CHAIN.id,load.profileKey);void activity.refresh();
+        activity.record(result,label,CHAIN.id,load.profileKey,owner);void activity.refresh();
         if(ticket.cancelled||!isCurrent(load))void followLateHash(result,load.profileKey,owner);
         return result;
       }).finally(()=>{if(outstandingPrompts.get(p)===ticket)outstandingPrompts.delete(p);ticket.notice?.remove();if(!destroyed){renderCheckpointGate();renderHolder(state.status,state.plan);}});
@@ -653,7 +658,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const observedRounds = new Map();
   function renderCheckpointGate() {
     const unknownHoldings=Boolean(state.inspected) && (state.status?.owner?.toLowerCase()!==state.inspected.toLowerCase() || num(state.status?.totals?.count)===UNKNOWN);
-    el.cp.button.disabled=state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
+    el.cp.button.disabled=state.watchOnly || state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
   }
   function renderNetwork(net) {
     const previous = observedRounds.get(state.profileKey);
@@ -717,7 +722,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   function renderWatchMode() {
-    const viewing=Boolean(state.inspected && state.inspected.toLowerCase()!==state.account?.toLowerCase());
+    const viewing=watching();
     $('watch-mode').classList.toggle('hidden',!viewing);
     $('watch-chip').textContent=viewing?`Viewing ${short(state.inspected)}`:'';
     $('watch-chip').title=viewing?state.inspected:'';
@@ -725,8 +730,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
   function renderHolder(status, plan = null) {
     renderWatchMode();
+    if(state.status!==status)state.claimQuote=null;
     state.status = status;
     state.plan = plan;
+    workspace?.sync(status);if(status&&!workspace)void ensureWorkspace().then(w=>{if(state.status===status)w.sync(status);});
     renderCheckpointGate();
     const caps = capabilities();
     const isV9 = getProfile(state.profileKey).abiSet === 'v9';
@@ -734,6 +741,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const inspected=status?.owner??state.inspected??state.account;
     el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);
     el.holder.refresh.disabled=!state.adapter||!inspected;
+    $('holder-copy-link').classList.toggle('hidden',!inspected);$('btn-planner').disabled=!(status?.squeeks?.length);$('holder-history-link').href=state.watchOnly&&state.inspected?`${watchHash(state.profileKey,state.inspected)}/activity`:`#${state.profileKey}/activity`;
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
     if (!status) {
@@ -745,7 +753,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const totals = status.totals ?? {};
 
     const has = num(totals.count) !== UNKNOWN && Number(totals.count) > 0;
-    const signerOwns = Boolean((state.chainId==null||state.chainId===11155111) && state.account && status.owner?.toLowerCase() === state.account.toLowerCase());
+    const signerOwns = Boolean(!watching()&&(state.chainId==null||state.chainId===11155111) && state.account && status.owner?.toLowerCase() === state.account.toLowerCase());
     setStat(el.holder.count, totals.count, num);
     setStat(el.holder.power, isV9 ? totals.deposited : totals.power, num);
     setStat(el.holder.share, totals.sharePercent, value => num(value, 4) === UNKNOWN ? UNKNOWN : `${num(value, 4)}%`);
@@ -758,7 +766,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $("v9-review").disabled = !signerOwns || state.busy || state.walletPromptPending;
 
 
-    holdings.render(status);
+    holdings.render(status);if(state.claimQuote)workspace?.claim(state.claimQuote,status.owner);
     if(!isV9&&$('v9-action').value!=='merge'){$('v9-action').value='merge';renderActionFields();}
     else if(isV9&&$('v9-action').value==='merge'){$('v9-action').value='deposit';renderActionFields();}
     updatePreviewGate();
@@ -880,6 +888,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── actions ───────────────────────────────────────────────────────────────
   async function requestCheckpoint() {
+    if(watching())return {ok:false,reason:'Viewing only'};
     const load = captureLoad(), owner = state.account;
     const caps = capabilities();
     if (!caps.checkpoint) throw new Error(capabilities().reasons.unavailable);
@@ -905,6 +914,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('claim-update').classList.remove('hidden');
   }
   async function requestClaim(tokenIds) {
+    if(watching())return {ok:false,reason:'Viewing only'};
     $('claim-update').classList.add('hidden');
     if(state.account&&state.chainId!==11155111)throw new Error('Wrong chain: Sepolia required');
     const load = captureLoad();
@@ -912,7 +922,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!caps.claim) throw new Error(capabilities().reasons.unavailable);
     const owner = state.inspected ?? state.account;
     const preview = await readFor(load, "claimPreview", owner, tokenIds);
-    showOut(el.holder.claimOut, preview);
+    showOut(el.holder.claimOut, preview);workspace?.claim(preview,owner);
     if (!preview.ok) {
       toast(preview.batches?.[0]?.error ?? "claim simulation failed", "err");
       return { ok: false, ...preview };
@@ -943,6 +953,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   async function requestMerge(pair) {
+    if(watching())return {ok:false,reason:'Viewing only'};
     if (!capabilities().merge) throw new Error(capabilities().reasons.unavailable);
     const owner = state.account ?? state.inspected;
     const load = captureLoad();
@@ -1021,7 +1032,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const result=await sendTransaction(fresh.tx,actionNames[action]??'Action',owner,load);await displayApi(load)?.invalidateArt(state.status?.squeeks?.map(t=>t.tokenId)??[]);state.art.clear();await refreshAll({force:true});return result;
   }
   function updatePreviewGate(){
-    const owner=state.status?.owner,signer=Boolean(!state.busy&&!state.walletPromptPending&&state.account&&owner?.toLowerCase()===state.account.toLowerCase()&&state.chainId===11155111&&state.status?.totals?.count!=null),action=$('v9-action').value;
+    const owner=state.status?.owner,signer=Boolean(!watching()&&!state.busy&&!state.walletPromptPending&&state.account&&owner?.toLowerCase()===state.account.toLowerCase()&&state.chainId===11155111&&state.status?.totals?.count!=null),action=$('v9-action').value;
     const rows=state.status?.squeeks??[],ids=$('v9-ids').value.split(/[\s,]+/).filter(Boolean),find=id=>rows.find(t=>String(t.tokenId)===id),validIds=ids.length>0&&new Set(ids).size===ids.length&&ids.every(id=>/^\d+$/.test(id)&&find(id));
     let valid=true;
     if(['deposit','withdraw'].includes(action))valid=validIds&&ids.every(id=>Boolean(find(id).deposited)===(action==='withdraw'));
@@ -1179,30 +1190,44 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // Routes are display-only; legacy API tab names remain aliases for integrations.
   function currentRoute() {
-    const parts = win.location.hash.slice(1).split('/');
+    const parts = win.location.hash.replace(/^#\/?/,'').split('/');
     if (profileFromHash(win.location.hash)) parts.shift();
     const hash = parts.join('/');
-    return /^(squeeks|art|network|info)(\/|$)/.test(hash) ? hash : (state.account || state.inspected ? 'squeeks' : 'network');
+    return /^(squeeks|squeek|address|activity|art|network|info)(\/|$)/.test(hash) ? hash : (state.account || state.inspected ? 'squeeks' : 'network');
   }
   function selectTab(route) {
     const aliases = { overview: 'network', holdings: 'squeeks', agent: 'info/developers' };
     route = aliases[route] ?? route;
-    let [name, section] = String(route).split('/');
-    if (!['squeeks', 'art', 'network', 'info'].includes(name)) name = state.account || state.inspected ? 'squeeks' : 'network';
+    const special=/^(address|squeek)\//.test(route);
+    let [name, section] = String(route).split('/');if(special)name=String(route).startsWith('address/')?(String(route).split('/')[2]??'squeeks'):'squeeks';
+    if (!['squeeks', 'activity', 'art', 'network', 'info'].includes(name)) name = state.account || state.inspected ? 'squeeks' : 'network';
     const deployed = Boolean(getProfile(state.profileKey).addresses);
     if(!deployed)name='info';
     doc.querySelectorAll('a[href^="#info/"], a[data-info-route]').forEach(link => { const route = link.dataset.infoRoute ?? link.getAttribute('href').slice(1); link.dataset.infoRoute = route; link.href = `#${state.profileKey}/${route}`; });
     el.tabs.forEach(t => { t.setAttribute('aria-selected', String(t.dataset.tab === name)); t.tabIndex = t.dataset.tab === name ? 0 : -1; });
     el.panels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== name || (!deployed && name !== 'info')));
-    const hash = `#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers', 'about'].includes(section) ? '/' + section : ''}`;
+    const hash = special?`#/${state.profileKey}/${route}`:`#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers', 'about'].includes(section) ? '/' + section : ''}`;
     // replaceState avoids hashchange loops, while tab clicks below create history entries.
     if (win.location.hash !== hash) win.history.replaceState(null, '', hash);
     if (name === 'info' && section) $("info-" + section)?.scrollIntoView?.({ block: 'start' });
+    $('holder-overview').hidden=special&&String(route).startsWith('squeek/');$('squeek-page').hidden=!$('holder-overview').hidden;
+    if(name==='activity')void ensureWorkspace().then(w=>w.history());
+    if(special&&String(route).startsWith('squeek/')){try{const parsed=holderRoute(hash);void ensureWorkspace().then(w=>w.detail(parsed));}catch(error){routeError(error);}}else workspace?.detail(null);
   }
-  const onHashChange = () => { const key = profileFromHash(win.location.hash); if (key && key !== state.profileKey) void switchProfile(key); else selectTab(currentRoute()); };
+  function routeError(error){state.watchOnly=true;resetLoad();state.inspected=null;renderHolder(null);$('holder-route-error').textContent=error.message;$('holder-route-error').classList.remove('hidden');}
+  let activeWatchRoute=null;
+  // Session-history display scope only; never an account or transaction authority.
+  function watchScope(route){if(route?.kind==='address')return route.address;if(route?.kind!=='squeek')return null;const saved=win.history.state?.holderWatch;if(saved?.profile===route.profile&&saved?.id===route.id)return saved.address==null?null:watchAddress(saved.address);return state.watchOnly?activeWatchRoute:null;}
+  function rememberWatch(route,address){if(route?.kind==='squeek')win.history.replaceState({holderWatch:{profile:route.profile,id:route.id,address}},'',win.location.hash);}
+  const onHashChange = async () => {try{const key=profileFromHash(win.location.hash),route=holderRoute(win.location.hash),watched=watchScope(route);let leftWatch=false;$('holder-route-error').classList.add('hidden');rememberWatch(route,watched);
+    if(watched){const changed=!state.watchOnly||state.inspected?.toLowerCase()!==watched.toLowerCase();state.watchOnly=true;activeWatchRoute=watched;state.inspected=watched;if(changed){resetLoad();state.net=state.status=state.plan=null;renderHolder(null);}}
+    else if(activeWatchRoute){leftWatch=true;activeWatchRoute=null;state.watchOnly=false;state.inspected=state.account;resetLoad();renderHolder(null);}
+    if(key&&key!==state.profileKey)await switchProfile(key);else selectTab(currentRoute());
+    if(route?.kind==='address'||leftWatch)await refreshWallet();
+  }catch(error){routeError(error);}};
   win.addEventListener('hashchange', onHashChange);
   for (const tab of el.tabs) {
-    tab.onclick = () => { win.location.hash = `${state.profileKey}/${tab.dataset.tab}`; selectTab(tab.dataset.tab); };
+    tab.onclick = () => {if(state.watchOnly&&state.inspected){win.location.hash=`${watchHash(state.profileKey,state.inspected)}/${tab.dataset.tab}`;void onHashChange();}else{win.location.hash = `${state.profileKey}/${tab.dataset.tab}`;selectTab(tab.dataset.tab);} };
     tab.onkeydown = event => {
       const index = el.tabs.indexOf(tab);
       const next = event.key === 'ArrowRight' ? (index + 1) % el.tabs.length : event.key === 'ArrowLeft' ? (index + el.tabs.length - 1) % el.tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? el.tabs.length - 1 : -1;
@@ -1290,17 +1315,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   el.holder.refresh.onclick = () => viewTask(()=>refreshWallet({force:true}));
   el.holder.owner.onclick=async()=>{const address=el.holder.owner.title;if(!address)return;try{await win.navigator.clipboard.writeText(address);toast('Address copied','ok');}catch{toast('Clipboard unavailable','warn');}};
   $('btn-exit-watch').onclick = () => viewTask(async()=>{
-    state.inspected=state.account;el.holder.watchInput.value='';renderHolder(null);
+    state.watchOnly=false;activeWatchRoute=null;state.inspected=state.account;resetLoad();el.holder.watchInput.value='';renderHolder(null);win.history.pushState(null,'',`#${state.profileKey}/squeeks`);selectTab('squeeks');
     await refreshWallet();
   });
   el.holder.watch.onclick = async () => {
     const value = el.holder.watchInput.value.trim();
-    if (!/^0x[0-9a-fA-F]{40}$/.test(value)) return toast("enter a valid 0x address", "err");
-    state.inspected = value;
-    renderHolder(null);
-    selectTab('squeeks');
-    await viewTask(refreshWallet);
+    try{const address=watchAddress(value);win.location.hash=watchHash(state.profileKey,address);await onHashChange();}catch(error){toast(error.message,'err');}
   };
+  $('holder-copy-link').onclick=async()=>{try{await win.navigator.clipboard.writeText(new URL(watchHash(state.profileKey,state.inspected??state.account),win.location.href).href);toast('Link copied','ok');}catch{toast('Clipboard unavailable','warn');}};
   el.art.one.onclick = () => {
     const id = el.art.token.value.trim();
     if (!/^\d+$/.test(id)) return toast("enter a token id", "err");
@@ -1348,13 +1370,19 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     await settingsReady; if (!destroyed) openSheet('settings-sheet');
   }
   const images=createImages({cache:displayCache,fetcher,win});
-  const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();$('v9-review').focus();},loadImage:async token=>{const load=captureLoad();let item;try{item=await images.load({profile:getProfile(load.profileKey),token,api:displayApi(load),fallback:()=>readFor(load,'art',token.tokenId),signal:load.signal});}catch(error){if(isCurrent(load)&&error.name==='RpcTrustError')clearDisplayMismatch(error);throw error;}assertCurrent(load);state.art.set(String(token.tokenId),item);return item;}});
+  async function loadHolderImage(token,load=captureLoad()){let item;try{item=await images.load({profile:getProfile(load.profileKey),token,api:displayApi(load)??state.adapter?.holderApi,fallback:()=>readFor(load,'art',token.tokenId),signal:load.signal});}catch(error){if(isCurrent(load)&&error.name==='RpcTrustError')clearDisplayMismatch(error);throw error;}assertCurrent(load);state.art.set(String(token.tokenId),item);return item;}
+  const canUseHolder=()=>Boolean(!watching()&&!state.busy&&!state.walletPromptPending&&state.account&&state.chainId===11155111);
+  async function selectPlannerStep(step,load){try{assertCurrent(load);if(!canUseHolder())return;const fresh=await readFor(load,'walletStatus',state.account);assertCurrent(load);if(step.kind==='custody'){const token=fresh.squeeks.find(t=>String(t.tokenId)===step.tokenId);if(!token||Boolean(token.deposited)!==(step.action==='withdraw'))throw new Error('Pair changed');renderHolder(fresh,fresh.mergePlan);holdings.selectAction(step.action,[token.tokenId]);return;}const a=fresh.squeeks.find(t=>String(t.tokenId)===step.survivor),b=fresh.squeeks.find(t=>String(t.tokenId)===step.donor);if(!a||!b||a.level!==b.level||Boolean(a.deposited)!==Boolean(b.deposited))throw new Error('Pair changed');renderHolder(fresh,fresh.mergePlan);holdings.selectPair(a.tokenId,b.tokenId);if(a.deposited){$('v9-action').value='mergeDeposited';renderActionFields();}else{$('v9-action').value='merge';renderActionFields();}$('merge-selection').scrollIntoView?.({block:'center'});}catch(error){toast(errorMessage(error),'err');}}
+  async function ensureWorkspace(){workspaceReady??=import('./holder-workspace.js').then(({initHolderWorkspace})=>workspace=initHolderWorkspace({doc,win,state,captureLoad,isCurrent,read:readFor,getApi:load=>displayApi(load)??state.adapter?.holderApi,loadImage:loadHolderImage,canAct:canUseHolder,onPair:selectPlannerStep,onAction:async(action,id)=>{if(!canUseHolder())return;selectTab('squeeks');if(action==='claim')return viewTask(()=>requestClaim([id]));const load=captureLoad(),fresh=await readFor(load,'walletStatus',state.account);if(!fresh.squeeks.some(t=>String(t.tokenId)===id))return;renderHolder(fresh,fresh.mergePlan);holdings.selectAction(action,[id]);},onOverview:()=>{win.location.hash=`${state.profileKey}/squeeks`;selectTab('squeeks');},onError:error=>{if(error.name==='RpcTrustError')clearDisplayMismatch(error);},local:()=>activity.list(),quote:!adapterFactory?(load,owner)=>readFor(load,'claimPreview',owner):state.adapter?.holderClaimPreview?(load,owner)=>viewAwait(load,()=>load.adapter.holderClaimPreview(owner)):null}));return workspaceReady;}
+  const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();$('v9-review').focus();},loadImage:loadHolderImage});
+  $('btn-planner').onclick=()=>ensureWorkspace().then(w=>w.planner());
   $('sqk-claim-host').append($('btn-claim'),$('claim-ids'),$('holder-rewards-notice'));
   // ── boot ──────────────────────────────────────────────────────────────────
   store.set("squeekchain:profile", state.profileKey);
   applyTheme(store.get(THEME_KEY) ?? "light");
   renderProfileOptions();
   renderWalletChip();
+  try{const initial=holderRoute(win.location.hash),watched=watchScope(initial);rememberWatch(initial,watched);if(watched){state.watchOnly=true;activeWatchRoute=watched;state.inspected=watched;}}catch(error){routeError(error);}
   state.adapter = buildAdapter(state.profileKey);
   renderNetworkPlaceholder();
   renderDeploymentVisibility();
@@ -1370,7 +1398,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     readEvents:adapterFactory?null:readWheelEvents,
     readBlocks:adapterFactory?null:async()=>displayApi(captureLoad()).blocks(),
     frontier:()=>({settled:state.net?.core?.settledThroughRound,processed:state.net?.mining?.processedThroughRound}),
-    onStatus:async(data,result)=>{liveMeasurement=result.stale?null:data.measurement;renderProvisional();const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
+    onStatus:async(data,result)=>{workspace?.updatePace(result.stale?null:data);liveMeasurement=result.stale?null:data.measurement;renderProvisional();const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
     onFrontier:async()=>{const net=await refreshNetwork();if(!net||net.source?.stale)return false;await refreshAll();if(state.inspected&&!state.status)return false;if(provisionalResult)renderProvisional(provisionalResult);await displayFeeds(captureLoad());if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();return true;},
     onBlocks:renderProvisional,
     onError:(error,scope)=>{if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);}else if(scope==='status'&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL&&errorIsTransient(error))$('wheel-note').textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;else if(scope==='status'){liveMeasurement=null;renderProvisional();for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}}
@@ -1397,12 +1425,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     pollDisplay:()=>poller.tick(),
     switchProfile,
     loadArt,
-    requestAction: (action,input) => viewTask(()=>requestAction(action,input)),
+    requestAction: (action,input) => watching()?Promise.resolve({ok:false,reason:'Viewing only'}):viewTask(()=>requestAction(action,input)),
     requestCheckpoint: () => viewTask(requestCheckpoint),
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
+    destroy: () => { workspace?.destroy();unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
   };
 }
 

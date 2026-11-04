@@ -163,7 +163,7 @@ await assert.rejects(sdk.claimPreview(owner, ['777']), /does not own/);
 assert.equal((await sdk.mergePreview(owner, '1', '2', { confirm: 'BURN-2' })).ok, true);
 await assert.rejects(sdk.mergePreview(owner, '1', '1', { confirm: 'BURN-1' }), /distinct/);
 assert.equal((await sdk.checkpointPreview(owner)).ok, true);
-assert.equal((await sdk.walletStatus(owner)).totals.count, 2);
+assert.equal((await sdk.walletStatus(owner)).totals.count, 2);const detail=await sdk.squeekStatus('1');assert.equal(detail.token.tokenId,'1');assert.equal(detail.owner.toLowerCase(),owner.toLowerCase());assert.ok(detail.token.claimable.base!=null);
 assert.match((await sdk.art('1')).artworkIntegrity, /Unknown/);
 const many = await sdk.claimPreview(owner, Array.from({ length: 33 }, (_, i) => String(i + 1)));
 assert.deepEqual(many.batches.map(batch => batch.tokenIds.length), [32, 1]);
@@ -287,6 +287,8 @@ try {
   assert.ok(wire.length <= 25, `Warm wallet page load exceeded RPC budget: ${wire.length}`);
   fs.writeFileSync('docs/audit/v6-request-budget.json',JSON.stringify({profile:'sepolia-v6',coldNetwork:cold,warmNetwork:warmCount,wallet:wire.length,limit:25},null,2)+'\n');
   console.log(`PASS actual wire budget: cold network ${cold}; warm network ${warmCount}; wallet ${wire.length} requests; art batch one eth_call`);
+  // Feature-isolated SDK fallback: cold detail + art; warm detail reuses cached art.
+  const pageSdk=createFixtureSdk({rpcContext:createRpcContext()});wire.length=0;await pageSdk.squeekStatus('1');await pageSdk.art('1');const pageCold=wire.length;wire.length=0;await pageSdk.squeekStatus('1');const pageWarm=wire.length;assert.ok(pageWarm<=25);fs.writeFileSync('docs/audit/v6-squeek-page-budget.json',JSON.stringify({profile:'sepolia-v6',scope:'Synthetic actual-HTTP SDK detail+art cold; detail-only with cached art warm. Excludes app shell.',cold:pageCold,warm:pageWarm},null,2)+'\n');console.log(`PASS v6 Squeek page SDK HTTP: cold ${pageCold}, warm ${pageWarm}`);
   const wireFetch = globalThis.fetch, contacted = [];
   globalThis.fetch = async (url, init) => {
     contacted.push(url);

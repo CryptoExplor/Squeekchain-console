@@ -32,12 +32,12 @@ export function createActivity({ storage, receiptReader, onChange = () => {}, no
     try { const raw=JSON.stringify(items);storage?.set(KEY, raw);lastStored=raw; } catch { /* current-tab activity still works */ }
     if (!controller.signal.aborted) onChange(list());
   }
-  function record(hash, label, chainId = 11155111, profile = DEFAULT_PROFILE) {
+  function record(hash, label, chainId = 11155111, profile = DEFAULT_PROFILE, owner) {
     sync();
     if(getProfile(profile).chainId!==chainId)throw new Error('Activity profile/chain mismatch');
     if (!validHash(hash) || chainId !== 11155111) throw new Error('Invalid Sepolia transaction hash');
     if (!items.some(item => item.hash.toLowerCase() === hash.toLowerCase())) {
-      items.unshift({ hash, profile, label: String(label).slice(0, 200), chain: 'Sepolia', chainId, time: new Date(now()).toISOString(), status: 'pending' });
+      items.unshift({ hash, profile, owner, label: String(label).slice(0, 200), chain: 'Sepolia', chainId, time: new Date(now()).toISOString(), status: 'pending' });
       save(items[0]);
     }
     return items.find(item => item.hash.toLowerCase() === hash.toLowerCase());

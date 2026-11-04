@@ -750,3 +750,18 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 /* The retained non-visual plan is not a second bordered merge panel. */
 #merge-list[hidden] { display: none; }
 #watch-row input { flex: 0 1 340px; max-width: 100%; }
+
+/* Phase 4 holder views */
+#holder-planner[hidden],#squeek-page[hidden],#holder-overview[hidden],#earnings[hidden],#sqk-recipient[hidden]{display:none}
+.squeek-detail-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;margin-top:16px}
+.squeek-portrait{width:100%;height:auto;aspect-ratio:1;object-fit:contain;background:var(--sqk-bg);border-radius:var(--sqk-radius)}
+.squeek-detail-facts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:8px 16px}
+.squeek-detail-facts dd{margin:0;overflow-wrap:anywhere}.squeek-detail-facts dt{color:var(--sqk-gray)}
+#holder-planner ol,#account-activity,#squeek-page ol{padding-left:20px}#holder-planner li,#account-activity li,#squeek-page li{padding:8px 0;overflow-wrap:anywhere}
+#holder-planner select{min-height:44px;max-width:100%}.earnings-chart svg{width:100%;height:auto;fill:var(--sqk-gold)}.earnings-chart text{fill:var(--sqk-gray);font-size:12px}
+.earnings-labels{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}.earnings-labels dd{margin:0;font-size:12px;overflow-wrap:anywhere}.wallet-heading-actions{flex-wrap:wrap}
+.squeek-card h3 a{color:inherit;text-decoration:none}.squeek-card h3 a:hover{text-decoration:underline}
+@media(max-width:600px){.squeek-detail-grid{grid-template-columns:minmax(0,1fr)}.earnings-labels{gap:4px}.earnings-labels dt,.earnings-labels dd{font-size:10px}.squeeks-heading{align-items:flex-start;flex-wrap:wrap}.tabs{flex-wrap:wrap}}
+#history-more[hidden],#squeek-page button[hidden]{display:none}
+
+@media(max-width:600px){#watch-row input{flex:initial;width:100%;min-width:0}}

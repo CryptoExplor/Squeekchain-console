@@ -15,7 +15,7 @@ export { rpcToolError } from './rpc-errors.js';
 export { SQUEEKS_POLICY } from './record.js';
 export { PUBLIC_RPC_ENDPOINTS } from './rpc.js';
 export { profileBalances, chooseProfile, profileFromHash, profileHeld, profileCountLabel } from './profile-selection.js';
-export { parseEther, formatEther } from 'viem';
+export { parseEther, formatEther, getAddress, isAddress } from 'viem';
 
 export { runReadTool, readToolResult, toolProfile } from "./tool-runtime.js";
 

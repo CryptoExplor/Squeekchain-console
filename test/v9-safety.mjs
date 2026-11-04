@@ -84,7 +84,7 @@ assert.equal(f.calls.length,0,'burn guard runs before any network/calldata');
 const verify=await sdk.verify();assert.equal(verify.trusted,true);assert.equal(verify.cacheHit,false);
 assert.equal((await sdk.verify()).cacheHit,true);
 const wallet=await sdk.walletStatus(owner);assert.deepEqual(wallet.squeeks.map(t=>[t.tokenId,t.custody]),[['1','Wallet'],['2','Wallet'],['3','Staked'],['4','Staked']]);assert.equal(wallet.totals.power,'2100');assert.equal(wallet.totals.deposited,2);assert.equal(wallet.staking.fresh.base,'50');assert.equal(wallet.staking.mature.base,'50');
-assert.equal(wallet.net.policy.levels[1].cooldownBlocks,'6');
+assert.equal(wallet.net.policy.levels[1].cooldownBlocks,'6');const detail=await sdk.squeekStatus('3');assert.equal(detail.owner.toLowerCase(),owner.toLowerCase());assert.equal(detail.token.deposited,true);assert.equal(detail.token.claimable,null);
 assert.equal(wallet.net.mining.issued.base,'100');assert.equal(wallet.net.mining.minted.base,'200');
 f.flags.coreRound=21n;const settledOnly=await sdk.networkStatus();assert.equal(settledOnly.core.settledThroughRound,'21');assert.equal(settledOnly.mining.issued.base,'100','settlement is not issuance');
 f.flags.issued=101n;assert.equal((await sdk.networkStatus()).mining.issued.base,'101','issuance state is reread, not frozen to identity export');f.flags.coreRound=20n;f.flags.issued=100n;
@@ -200,6 +200,7 @@ try {
  const v6Budget=JSON.parse(fs.readFileSync('docs/audit/v6-request-budget.json'));assert.ok(coldNetwork<=v6Budget.coldNetwork+8);assert.ok(coldWallet<=v6Budget.wallet+8);
  const budget={profile:'sepolia-v9',fixture:'2 wallet + 2 staked NFTs',coldNetwork,warmNetwork,coldWallet,warmWallet,limit:25};
  fs.writeFileSync('docs/audit/v9-request-budget.json',JSON.stringify(budget,null,2)+'\n');console.log('PASS v9 actual wire budget: '+JSON.stringify(budget));
+ wire.length=0;const pageSdk=createSqueek9({rpcContext:createRpcContext()});await pageSdk.squeekStatus('1');await pageSdk.art('1');const pageCold=wire.length;wire.length=0;await pageSdk.squeekStatus('1');const pageWarm=wire.length;assert.ok(pageWarm<=25);fs.writeFileSync('docs/audit/v9-squeek-page-budget.json',JSON.stringify({profile:'sepolia-v9',scope:'Synthetic actual-HTTP SDK fallback detail+art cold; detail-only with cached art warm. Excludes API and app shell.',cold:pageCold,warm:pageWarm},null,2)+'\n');console.log(`PASS v9 Squeek page fallback SDK HTTP: cold ${pageCold}, warm ${pageWarm}`);
  // Corruption from either peer is a trust stop and cannot seed the shared cache.
  const healthyFetch=globalThis.fetch;let batchIndex=0;
  globalThis.fetch=async(url,init)=>{

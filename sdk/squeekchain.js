@@ -411,6 +411,7 @@ export function createSqueekchain({ rpcUrl, addresses = {}, cache = null, provid
       requireBurn(donor, options.confirm);
       return run(() => mergePreview(owner, survivor, donor, options));
     },
+    squeekStatus: id => run(async()=>{const tokenId=BigInt(id);if(tokenId<=0n)throw new Error('Invalid Squeek');const [positions,net,rewards]=await Promise.all([positionsFor([tokenId]),readNetworkStatus(),claimableFor([tokenId])]);if(!positions.length)throw new Error('Unknown');const token=positions[0];return {token:{...token,claimable:sqkAmount(rewards.perToken.get(tokenId)),deposited:false},owner:token.holder,net};}),
     art: id => run(() => art(id)),
     artBatch: ids => run(async () => {
       const tokenIds = ids.slice(0, 24).map(BigInt);

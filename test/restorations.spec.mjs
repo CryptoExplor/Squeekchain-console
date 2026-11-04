@@ -53,7 +53,7 @@ test('watch mode keeps wallet identity, disables owner requests and exits to con
   await expect(page.getByTestId('wallet-button')).toContainText('0x5989');await expect(page.getByTestId('btn-claim')).toBeDisabled();
   expect((await page.evaluate(()=>squeek.callTool('squeek_request_claim'))).error).toContain('view-only');
   await page.getByTestId('btn-exit-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();await expect(page.getByTestId('btn-claim')).toBeEnabled();
-  await page.getByTestId('watch-input').fill((await page.evaluate(()=>squeek.state.account)).toLowerCase());await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();
+  await page.getByTestId('watch-input').fill((await page.evaluate(()=>squeek.state.account)).toLowerCase());await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeVisible();await expect(page.getByTestId('btn-claim')).toBeDisabled();await page.getByTestId('btn-exit-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();
   await page.getByTestId('wallet-button').click();await page.getByTestId('btn-disconnect').click();await page.getByTestId('tab-squeeks').click();
   await page.getByTestId('watch-input').fill(other);await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeVisible();
   await page.getByTestId('btn-exit-watch').click();await expect(page.getByTestId('watch-mode')).toBeHidden();await expect(page.getByTestId('holder-empty')).toBeVisible();await expect(page.getByTestId('holder-empty')).toContainText('Connect your wallet to see your Squeeks and SQK.');await page.evaluate(()=>squeek.destroy());
