@@ -39,7 +39,7 @@ for(const name of fs.readdirSync('dist').filter(n=>/\.(js|html)$/.test(n))){cons
 for(const name of ['sdk/v9.js','sdk/squeekchain.js'])assert.match(fs.readFileSync(name,'utf8'),/namespace: [^\n]+:chain-only[^\n]+accountSource:null/);
 console.log('PASS action authority: canonical-only inventory namespace; production build excludes fork wallet/config/watch shortcuts');
 const headers=fs.readFileSync('web/_headers','utf8');const {PUBLIC_RPCS}=await import('../sdk/rpc.js');
-assert.deepEqual(PUBLIC_RPCS,['https://sepolia.gateway.tenderly.co','https://ethereum-sepolia-rpc.publicnode.com','https://0xrpc.io/sep']);
+assert.deepEqual(PUBLIC_RPCS,['https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.gateway.tenderly.co','https://0xrpc.io/sep']);
 for(const removed of ['sepolia.drpc.org','ethereum-sepolia-public.nodies.app','eth-sepolia.api.onfinality.io','api.zan.top','rpc.sepolia.ethpandaops.io']){assert.ok(!PUBLIC_RPCS.some(url=>url.includes(removed)));assert.ok(!headers.includes(removed));}
 console.log('PASS current default pool and CSP: Tenderly/PublicNode/0xRPC only; removed hosts stay absent');
 // Image/metadata cache survives a second visit, separates levels and expires at 24h.

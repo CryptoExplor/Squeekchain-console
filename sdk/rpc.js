@@ -9,8 +9,8 @@ const sessionCooldowns = new Map();
 
 // Roles are observed availability preferences, never deployment/trust pins.
 export const PUBLIC_RPC_ENDPOINTS = [
-  { url: 'https://sepolia.gateway.tenderly.co', roles: ['snapshot', 'state', 'logs'], logOrder: 1 },
   { url: 'https://ethereum-sepolia-rpc.publicnode.com', roles: ['snapshot', 'state', 'logs'], logOrder: 2 },
+  { url: 'https://sepolia.gateway.tenderly.co', roles: ['snapshot', 'state', 'logs'], logOrder: 1 },
   { url: 'https://0xrpc.io/sep', roles: ['snapshot', 'state', 'logs'], logOrder: 3 },
 ];
 // The browser transport is HTTP JSON-RPC. WSS aliases are not fed to http(),
@@ -213,7 +213,7 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
     }
     return abortable(() => (args.method === 'eth_getLogs' ? logsClient : stateClient).request(args), signal);
   } }, { retryCount: 0 }) });
-  const readIdentity = async (snapshot, requests) => Promise.all(snapshot.peers.map(async peer => {
+  const readPeerIdentity = async (peer,requests) => {
     const endpoint=peer.identityUrl,method=requests[0]?.method;
     requireSepolia(await peer.getChainId());
     if(now()<(rpcCooldowns.get(endpoint)??0))throw new RpcAvailabilityError(new Error('RPC unavailable; waiting for endpoint cooldown'),{endpoint,method,kind:'cooldown'});
@@ -229,6 +229,33 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
       if(!isRpcProgrammingError(error)&&rpcCauses(error).some(({error:e})=>e.name==='TimeoutError'||e.name==='TypeError'))rpcCooldowns.set(endpoint,Math.max(rpcCooldowns.get(endpoint)??0,now()+30_000));
       throw recordFailure(withRpcContext(error,{endpoint,method}));
     }
-  }));
+  };
+  const readIdentity = async (snapshot, requests) => {
+    const original=snapshot.peers.slice();
+    const results=await Promise.allSettled(original.map(peer=>readPeerIdentity(peer,requests)));
+    // Inspect all failures before considering availability fallback. A genuine
+    // mismatch/programming error must not be hidden by another peer's outage.
+    for(const result of results)if(result.status==='rejected'&&!isRpcAvailabilityError(result.reason))throw result.reason;
+    const good=results.flatMap((result,i)=>result.status==='fulfilled'?[{peer:original[i],values:result.value}]:[]);
+    let last=results.find(result=>result.status==='rejected')?.reason;
+    for(const peer of peers) {
+      if(good.length>=2)break;
+      if(original.includes(peer))continue;
+      try {
+        requireSepolia(await peer.getChainId());
+        const block=await peer.getBlock({blockNumber:snapshot.blockNumber});
+        agree(snapshot,[block]);
+        good.push({peer,values:await readPeerIdentity(peer,requests)});
+      } catch(error) {
+        throwIfAborted(signal);
+        if(!isRpcAvailabilityError(error))throw error;
+        last=recordFailure(error);
+      }
+    }
+    if(good.length<2)throw last??new RpcAvailabilityError(new Error('Two independent identity peers unavailable'));
+    // The final guard checks these exact peers again, not the unavailable pair.
+    snapshot.peers=good.slice(0,2).map(item=>item.peer);
+    return good.slice(0,2).map(item=>item.values);
+  };
   return { client, readIdentity, invalidateChain, rpcDiagnostics: () => failures.slice(), ...createSnapshotGuard(client, peers, { signal }) };
 }

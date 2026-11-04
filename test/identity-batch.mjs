@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {readIdentityBatch} from '../sdk/identity-batch.js';
+import {createRpcContext,PUBLIC_RPCS} from '../sdk/rpc.js';
+import {isRpcAvailabilityError,isTrustError} from '../sdk/rpc-errors.js';
+const requests=Array.from({length:7},(_,i)=>({method:'eth_getStorageAt',params:['0x'+'11'.repeat(20),'0x'+i.toString(16),'0x64']}));
+let active=0,peak=0,batches=0,singles=0;const capabilities=new Map();
+const peer={identityUrl:'https://batch-rejected.test',request:async request=>{assert.equal(request.params[2],'0x64');singles++;active++;peak=Math.max(peak,active);await new Promise(resolve=>setImmediate(resolve));active--;return '0x'+request.params[1].slice(2).padStart(64,'0');}};
+const fetcher=async()=>{batches++;return {ok:false,status:413,json:async()=>({error:{code:-32005,message:'batch size limit exceeded'}})};};
+assert.equal((await readIdentityBatch(peer,requests,{fetcher,capabilities})).length,7);assert.equal(batches,1);assert.equal(singles,7);assert.equal(peak,2);
+await readIdentityBatch(peer,requests,{fetcher,capabilities});assert.equal(batches,1,'remember rejected batch capability, not chain data');
+await assert.rejects(readIdentityBatch(peer,requests,{capabilities:new Map(),fetcher:async()=>({ok:false,status:503,json:async()=>null})}),isRpcAvailabilityError);assert.equal(singles,14,'no fanout after rate limit/gateway cooldown');
+await assert.rejects(readIdentityBatch(peer,requests,{capabilities:new Map(),fetcher:async()=>({ok:true,status:200,json:async()=>[]})}),isTrustError);
+const perEntry=await readIdentityBatch(peer,requests,{capabilities:new Map(),fetcher:async(_url,options)=>({ok:true,status:200,json:async()=>JSON.parse(options.body).map(request=>({jsonrpc:'2.0',id:request.id,error:{code:-32005,message:'maximum batch size exceeded'}}))})});assert.equal(perEntry.length,7);assert.equal(singles,21);assert.equal(peak,2);
+console.log('PASS identity batch rejection: HTTP 413 -> native same-block singles, <=2 concurrent, capability-only memory; HTTP 503 availability/no fanout; malformed success still stops');
+const originalFetch=globalThis.fetch,hash='0x'+'ab'.repeat(32),slot='0x'+'11'.repeat(32),calls=[];let wrongHeader=false,malformed=false;
+try {
+ globalThis.fetch=async(url,options)=>{const payload=JSON.parse(options.body),origin=new URL(url).origin;calls.push({origin,batch:Array.isArray(payload)});
+  if(malformed&&Array.isArray(payload)&&origin.includes('publicnode'))return new Response('[]',{status:200,headers:{'content-type':'application/json'}});
+  if(Array.isArray(payload)&&origin.includes('tenderly'))return new Response('',{status:503,headers:{'Retry-After':'1'}});
+  const result=request=>request.method==='eth_chainId'?'0xaa36a7':request.method==='eth_blockNumber'?'0x70':request.method==='eth_getBlockByNumber'?{number:request.params[0],hash:wrongHeader&&origin.includes('0xrpc')?'0x'+'cd'.repeat(32):hash,timestamp:'0x64',transactions:[]}:slot;
+  const respond=request=>({jsonrpc:'2.0',id:request.id,result:result(request)});
+  return new Response(JSON.stringify(Array.isArray(payload)?payload.map(respond):respond(payload)),{status:200,headers:{'content-type':'application/json'}});
+ };
+ const context=createRpcContext({rpcCooldowns:new Map()}),snapshot=await context.snapshot(100n),values=await context.readIdentity(snapshot,requests);
+ assert.equal(values.length,2);assert.ok(snapshot.peers.some(p=>p.identityUrl.includes('publicnode')));assert.ok(snapshot.peers.some(p=>p.identityUrl.includes('0xrpc')));assert.ok(snapshot.peers.every(p=>!p.identityUrl.includes('tenderly')));await context.check(snapshot);
+ assert.equal(new Set(snapshot.peers.map(p=>new URL(p.identityUrl).origin)).size,2);assert.equal(PUBLIC_RPCS.length,3);
+ wrongHeader=true;await assert.rejects(context.check(snapshot),isTrustError);const other=createRpcContext({rpcCooldowns:new Map()}),next=await other.snapshot(100n);await assert.rejects(other.readIdentity(next,requests),isTrustError);
+ wrongHeader=false;malformed=true;calls.length=0;const broken=createRpcContext({rpcCooldowns:new Map()}),bad=await broken.snapshot(100n);await assert.rejects(broken.readIdentity(bad,requests),isTrustError);assert.ok(!calls.some(call=>call.origin.includes('0xrpc')),'an initial malformed success stops even when the other original peer is unavailable');
+ console.log('PASS real RPC transport fixture: Tenderly HTTP batch rejection fails over to third independent identity peer at the exact snapshot; final guard rechecks replacement; wrong replacement header stops');
+}finally{globalThis.fetch=originalFetch;}
