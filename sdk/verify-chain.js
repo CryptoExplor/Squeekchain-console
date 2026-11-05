@@ -49,10 +49,10 @@ export function createChainVerifier(cache=new Map(),profile) {
       // Staking has no proxyAdmin ABI: use its checked EIP-1967 admin slot above.
       for(const [field,value] of Object.entries(pin.wiring??{})){if(value==null)continue;calls.push({address:pin.address,abi:ABIS[name],functionName:field});expected.push([`${name}.${field}`,value]);}
     }
-    calls.push({address:pins.core.address,abi:coreAbi,functionName:'paused'},
-      {address:pins.staking.address,abi:stakingAbi,functionName:'paused'},
-      {address:pins.nft.address,abi:nftAbi,functionName:'paused'},
-      {address:pins.issuance.address,abi:miningAbi,functionName:'state'});
+    calls.push({address:pins.core.address,abi:ABIS.core,functionName:'paused'},
+      {address:pins.staking.address,abi:ABIS.staking,functionName:'paused'},
+      {address:pins.nft.address,abi:ABIS.nft,functionName:'paused'},
+      {address:pins.issuance.address,abi:ABIS.issuance,functionName:'state'});
     const values=await client.multicall({contracts:calls,allowFailure:false,blockNumber});
     expected.forEach(([field,value],i)=>{
       if(typeof value==='object')for(const [key,item] of Object.entries(value))check(same(values[i]?.[key],item),`${field}.${key}`);
