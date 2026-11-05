@@ -23,7 +23,7 @@ export function profileFromHash(hash = '') {
 export function canonicalHash(hash = '') {
   const text = String(hash);
   if (!text.startsWith('#')) return null;
-  const [, first, ...rest] = text.slice(1).replace(/^\//, '').split('/');
+  const [first, ...rest] = text.slice(1).replace(/^\//, '').split('/');
   if (!first || !Object.hasOwn(ALIASES, first)) return null;
   return `#${[ALIASES[first], ...rest].join('/')}`;
 }

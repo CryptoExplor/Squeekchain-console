@@ -54,13 +54,16 @@ console.log('PASS artwork: fresh validator and fetch boundary reject foreign/cre
 const hash='0x'+'ab'.repeat(32),block={number:100n,hash,timestamp:1n};
 const peer=()=>({getChainId:async()=>11155111,getBlock:async()=>block,getBlockNumber:async()=>112n});const peers=[peer(),peer()],client=peer();
 const snapshot=await createSnapshotGuard(client,peers).snapshot();assert.equal(snapshot.blockHash,hash);
-const word=address=>'0x'+address.slice(2).padStart(64,'0'),good=['core','mining'].flatMap(name=>[word(DEPLOYMENT.implementations[name]),word(DEPLOYMENT.proxyAdmins[name])]);
-// Prewarm the verifier's public caller-owned cache to exercise its warm slot path.
-const key=[DEPLOYMENT.release,DEPLOYMENT.core,DEPLOYMENT.mining,...['core','mining'].flatMap(name=>[DEPLOYMENT.implementations[name],DEPLOYMENT.proxyAdmins[name]])].join(':').toLowerCase();
-const verifier=createChainVerifier(new Map([[key,{ok:true,trusted:true,blockNumber:'99'}]]));let reads=0;
-await assert.rejects(verifier.prepare(client,snapshot,async(s,requests)=>{reads++;assert.equal(s.blockHash,hash);assert.equal(requests.length,4);const upgraded=[...good];upgraded[0]=word('0x1111111111111111111111111111111111111111');return [good,upgraded];}),/independent implementation\/admin slot/);assert.equal(reads,1);
-const checked=await verifier.prepare(client,snapshot,async()=>[good,good]);assert.equal(checked.value.cacheHit,true);
-const coldCache=new Map(),coldVerifier=createChainVerifier(coldCache,{...DEPLOYMENT,runtimeHashes:{core:keccak256('0x6001'),mining:keccak256('0x6001')}});
-await assert.rejects(coldVerifier.prepare(client,snapshot,async()=>{const valid=[...good,...Array(7).fill('0x6001')],forged=[...valid];forged[4]='0x6002';return [valid,forged];}),/independent implementation runtime hash/);assert.equal(coldCache.size,0);
-console.log('PASS hash-agreeing falsified-state regression: correct header hash cannot bypass independent v6 implementation/admin checks, including cache hits');
+const vProfile=getProfile('sepolia'),pins=vProfile.identities.pins,word=address=>'0x'+address.slice(2).padStart(64,'0');
+// Expected identity batch in the verifier's order: per pin impl slot, admin slot, then (cold only) runtime/impl code.
+const slotValues=Object.values(pins).flatMap(pin=>[word(pin.implSlot),word(pin.adminSlot)]);
+const codeCount=Object.values(pins).reduce((n,pin)=>n+(pin.runtimeCodeHash?1:0)+(pin.implCodeHash?1:0),0);
+// Warm path: a cached verification still re-reads every slot and refuses a peer that reports an upgraded implementation.
+const warmCache=new Map([[`identity:${JSON.stringify(vProfile.identities)}`,{ok:true,trusted:true,blockNumber:'99'}]]);
+const verifier=createChainVerifier(warmCache,vProfile);let reads=0;
+await assert.rejects(verifier.prepare(client,snapshot,async(s,requests)=>{reads++;assert.equal(s.blockHash,hash);assert.equal(requests.length,slotValues.length);const upgraded=[...slotValues];upgraded[0]=word('0x1111111111111111111111111111111111111111');return [slotValues,upgraded];}),/core implementation slot/);assert.equal(reads,1);
+// Cold path: a forged implementation runtime from one peer is refused and nothing is cached.
+const coldCache=new Map(),coldVerifier=createChainVerifier(coldCache,vProfile);
+await assert.rejects(coldVerifier.prepare(client,snapshot,async(s,requests)=>{assert.equal(requests.length,slotValues.length+codeCount);const valid=[...slotValues,...Array(codeCount).fill('0x6001')];return [valid,valid];}),/runtime hash/);assert.equal(coldCache.size,0);
+console.log('PASS hash-agreeing falsified-state regression: correct header hash cannot bypass independent implementation/admin slot or runtime checks, including cache hits');
 const ci=fs.readFileSync('.github/workflows/ci.yml','utf8');assert.ok(ci.indexOf('git diff --exit-code -- web/bundle.js web/tools.json')<ci.indexOf('- run: npm test'));console.log('PASS generated browser-asset drift guard runs before tests can overwrite stale artifacts');

@@ -38,7 +38,8 @@ const components=fs.readFileSync('web/components.js','utf8').replace("UNKNOWN = 
 assert.equal(sha(components),evidence.componentsSha256,'original components plus structured unstake details only');
 const app=fs.readFileSync('web/app.js','utf8');
 const columns=app.slice(app.indexOf('  function columnsForProfile() {'),app.indexOf('\n  function renderWatchMode()',app.indexOf('  function columnsForProfile() {')));
-assert.equal(sha(columns),evidence.columnsSha256,'restore baseline table labels/columns without changing SDK custody data');
+// Approved change (one graph now): the v9 column set is chosen by 'deployed', not by abiSet.
+assert.equal(sha(columns.replace('const isV9 = Boolean(getProfile(state.profileKey).addresses);','const isV9 = getProfile(state.profileKey).abiSet === "v9";')),evidence.columnsSha256,'restore baseline table labels/columns without changing SDK custody data');
 assert.equal(doc.querySelector('#watch-input').getAttribute('placeholder'),'0x… (view only)');
 assert.equal((html.match(/not affiliated with Squeekchain/g)??[]).length,1,'one non-affiliation line');
 assert.ok(doc.querySelector('#v9-actions'));assert.equal(doc.querySelectorAll('[data-trust-check]').length,7);

@@ -11,7 +11,7 @@ const response=(body,status=200,headers={})=>({ok:status===200,status,headers:ne
 const fetcher=async(url,options)=>{const path=url.replace('https://api.squeekchain.com/v1','');calls.push({path,options});if(mode==='offline')throw new TypeError('Offline');if(mode==='429')return response(null,429,{'Retry-After':'60'});if(mode==='304')return response(null,304);return response(fixtureRoute(fixtures,path),200,{ETag:'"one"'});};
 const api=createDisplayApi({profile,cache,now:()=>now,fetcher,rateBuckets:new Map()});
 await api.economy();await api.core();await api.status();await api.blocks();await api.feed();await api.settlements();
-assert.ok((await cache.get(displayKey(profile,'static-configuration'))).value.expectedIdentities.core.runtimeCodeHash);
+assert.ok((await cache.get(displayKey(profile,'static-configuration'))).value.expectedIdentities.core.implCodeHash);
 mode='304';await api.economy();assert.equal(calls.at(-1).options.headers['If-None-Match'],'"one"');
 mode='offline';for(let i=0;i<2;i++){now+=5000;const result=await api.status();assert.equal(result.data.measurement.rpmMilli,12500);assert.equal(result.stale,true);}
 now+=DISPLAY_TTL+1;await assert.rejects(api.status(),e=>e.kind==='transport');
@@ -24,7 +24,7 @@ fixtures=displayFixtures(now);fixtures.economy.identities.mining.implementation=
 fixtures=displayFixtures(now);await api.economy();mode='429';await api.core();const count=calls.length;await api.core();assert.equal(calls.length,count,'Retry-After suppresses network requests');now+=60001;mode='good';await api.core();assert.equal(calls.length,count+1);
 const fresh=createDisplayApi({profile,cache,now:()=>now,fetcher,rateBuckets:new Map()});const account=await fresh.account(owner);assert.equal(apiWallet(account,apiNetwork(await fresh.core(),await fresh.economy()),owner).totals.count,2);assert.equal(calls.findLast(c=>c.path.startsWith('/accounts/')).options.cache,'no-store');assert.equal(await cache.get(displayKey(profile,`/accounts/${owner}?limit=100`)),undefined);
 await fresh.squeek('41',1);const beforeArt=calls.length;await fresh.squeek('41',1);assert.equal(calls.length,beforeArt,'art token+level 24-hour cache hit');await fresh.invalidateArt(['41']);await fresh.squeek('41',1);assert.equal(calls.length,beforeArt+1,'merge invalidates metadata and endpoint ETag body');
-const v6=getProfile('sepolia');assert.notEqual(displayKey(profile,'network'),displayKey(v6,'network'));assert.notEqual(displayKey(profile,'network'),displayKey({...profile,identities:{...profile.identities,release:'other'}},'network'));
+assert.notEqual(displayKey(profile,'network'),displayKey(getProfile('mainnet'),'network'));assert.notEqual(displayKey(profile,'network'),displayKey({...profile,identities:{...profile.identities,release:'other'}},'network'));
 // Durable IndexedDB works across separate cache instances. Static expiry is separate from dynamic.
 await cache.set('tier',{at:now,value:'good'});assert.equal((await createDisplayCache(indexedDB).get('tier')).value,'good');assert.equal(DAY,86400000);
 console.log('PASS display schemas/cache: endpoint guards, unsupported versions, release/implementation/installation mismatch, explicit unavailable eviction, two failures retained, 15min expiry, ETag/304, Retry-After, no-store account, static pins, IDB namespaces, art invalidation');
@@ -36,7 +36,7 @@ fs.mkdirSync('.cache',{recursive:true});fs.mkdirSync('artifacts',{recursive:true
 console.log('PASS wheel scheduler: ACTIVE 5s, IDLE 60s, 10min virtual request counts, no frontier=no account/economy fetch, hidden pause');
 // Production allowlist contains no fork modules, impersonation shortcut or alternate peers.
 for(const name of fs.readdirSync('dist').filter(n=>/\.(js|html)$/.test(n))){const body=fs.readFileSync('dist/'+name,'utf8');assert.doesNotMatch(body,/Try a holder|hardhat_impersonate|anvil_impersonate|fork-test-peer|fork-watch\.js/);}
-for(const name of ['sdk/v9.js','sdk/squeekchain.js'])assert.match(fs.readFileSync(name,'utf8'),/namespace: [^\n]+:chain-only[^\n]+accountSource:null/);
+for(const name of ['sdk/squeekchain.js'])assert.match(fs.readFileSync(name,'utf8'),/namespace: [^\n]+:chain-only[^\n]+accountSource:null/);
 console.log('PASS action authority: canonical-only inventory namespace; production build excludes fork wallet/config/watch shortcuts');
 const headers=fs.readFileSync('web/_headers','utf8');const {PUBLIC_RPCS}=await import('../sdk/rpc.js');
 assert.deepEqual(PUBLIC_RPCS,['https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.gateway.tenderly.co','https://0xrpc.io/sep']);

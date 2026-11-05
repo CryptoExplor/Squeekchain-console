@@ -26,7 +26,7 @@ import {
   ACTION_REASONS,
   PUBLIC_RPC_ENDPOINTS,
   readToolResult, runPublicReadTool, toolProfile, settlementStatus, requireBurn,
-  profileFromHash, profileInput, parseEther, formatEther, unstakeQuoteError, SQUEEKS_POLICY,
+  profileFromHash, profileInput, canonicalHash, parseEther, formatEther, unstakeQuoteError, SQUEEKS_POLICY,
 } from "./bundle.js";
 
 import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
@@ -122,6 +122,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
 
   let networkRequest=null;
+  // Old links (#sepolia-v9/..., #sepolia-v6/...) are rewritten in place to the one Sepolia route.
+  {const fixed=canonicalHash(win.location.hash);if(fixed)win.history.replaceState(win.history.state,'',fixed);}
   const wallet=createWallet({win,storage:store,pick:pickWallet});
   const state = {
     profileKey: profileFromHash(win.location.hash) ?? profileInput(store.get("squeekchain:profile")),
