@@ -3,6 +3,8 @@ import {createRpcContext,createChainVerifier,abis,coreAbi,nftAbi,stakingAbi,isLo
 const serial=value=>JSON.parse(JSON.stringify(value,(_,v)=>typeof v==='bigint'?String(v):v));
 export function createExploreReader({profile,rpcUrl,signal,chainCache,verificationCache}){
  if(!profile.addresses)throw new Error('Not deployed');
+ // One graph now: the pinned published deployment, so the guarded branches always apply.
+ const v9=true;
  const context=createRpcContext({rpcUrl,signal,chainCache}),client=context.client,nft=profile.abis.nft,core=profile.abis.core,stakingAbi=profile.abis.staking,verifier=createChainVerifier(verificationCache,profile);let snapshot,prepared,network;
  const eventSets=v9?[[profile.addresses.nft,nft,['Transfer','Merged']],[profile.addresses.staking,stakingAbi,['Deposited','Withdrawn','DepositedMerge','Recovered']]]:[[profile.addresses.nft,abis.nft,['Transfer']],[profile.addresses.mining,abis.mining,['PositionsMerged']]];
  const events=eventSets.flatMap(([,abi,names])=>abi.filter(x=>x.type==='event'&&names.includes(x.name)));
