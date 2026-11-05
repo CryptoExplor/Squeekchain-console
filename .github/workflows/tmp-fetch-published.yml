@@ -20,7 +20,7 @@ jobs:
           for n in SqueekCore SqueekNFT SqueekToken SqueekMining SqueekStaking DotGridRenderer; do
             get "https://docs.squeekchain.com/assets/abi/$n.json" "out/abi/$n.json"
           done
-          for p in economy/state core measurement/state; do
+          for p in status squeeks/1 measurement/blocks economy/state core; do
             get "https://api.squeekchain.com/v1/$p" "out/api/$(echo "$p" | tr '/' '_').json"
           done
           ls -lR out
