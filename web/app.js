@@ -723,6 +723,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const unknownHoldings=Boolean(state.inspected) && (state.status?.owner?.toLowerCase()!==state.inspected.toLowerCase() || num(state.status?.totals?.count)===UNKNOWN);
     el.cp.button.disabled=state.watchOnly || state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
   }
+  let liveSupply=null,explorePrefetched=false;
   function renderNetwork(net) {
     const previous = observedRounds.get(state.profileKey);
     const round = net.core?.settledThroughRound;
@@ -744,7 +745,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     setStat($('net-progress'),core.blockProgress,value=>/^\d+$/.test(String(value))&&BigInt(value)<=1000000000n?`${(Number(value)/10000000).toFixed(1)}%`:UNKNOWN);
     for(const panel of ['Network'])recordSource(panel,net.source?.kind==='api'?'api':'rpc',net.source?.reason??(net.source?.stale?'Cached response; live request unavailable':net.source?.kind==='cached-rpc'?'24-hour display cache':null));
     $('net-issued-label').textContent='SQK issued';
-    setStat(el.net.squeeks, net.nft?.totalSupply, num);
+    setStat(el.net.squeeks, net.nft?.totalSupply, num);liveSupply=net.nft?.totalSupply??liveSupply;explore?.supply(liveSupply);
+    // Chain data loads without a wallet: warm the Explore index in the background once the chain verifies.
+    if(!explorePrefetched&&getProfile(state.profileKey).addresses){explorePrefetched=true;win.setTimeout(()=>{void ensureExplore().then(e=>{e.supply(liveSupply);return e.prefetch();}).catch(error=>recordSource('Explore','rpc',error.message));},1500);}
     setStat(el.net.paused, core.paused, value => value === true ? 'yes' : value === false ? 'no' : UNKNOWN);
     el.net.paused.parentElement.className = `stat ${core.paused === true ? 'bad' : core.paused === false ? 'ok' : ''}`;
 
@@ -1276,7 +1279,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const parts = win.location.hash.split('?')[0].replace(/^#\/?/,'').split('/');
     if (profileFromHash(win.location.hash)) parts.shift();
     const hash = parts.join('/');
-    return /^(squeeks|squeek|address|activity|art|explore|network|info)(\/|$)/.test(hash) ? hash+(win.location.hash.includes('?')?'?'+win.location.hash.split('?')[1]:'') : 'squeeks';
+    return /^(squeeks|squeek|address|activity|art|explore|network|info)(\/|$)/.test(hash) ? hash+(win.location.hash.includes('?')?'?'+win.location.hash.split('?')[1]:'') : (state.account?'squeeks':'explore');
   }
   function selectTab(route) {
     const aliases = { overview: 'squeeks', holdings: 'squeeks', agent: 'info/developers' };
@@ -1301,6 +1304,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('holder-overview').hidden=special&&String(route).startsWith('squeek/');$('squeek-page').hidden=!$('holder-overview').hidden;
     if(name==='squeeks'&&state.adapter){holdings.refresh();if(!query)void refreshNetworkExtras();}
     if(name==='network'&&state.adapter)void refreshNetworkExtras();
+    if(name==='art'&&!state.account&&!state.inspected&&!el.art.grid.children.length&&state.adapter?.art)void loadArt(['1']).catch(()=>{});
     if(name==='explore')void ensureExplore().then(e=>e.show()).catch(error=>recordSource('Explore','rpc',error.message));
     if(openHistory)openSheet('activity-drawer');
     if(special&&String(route).startsWith('squeek/')){try{const parsed=holderRoute(hash);void ensureWorkspace().then(w=>w.detail(parsed));}catch(error){routeError(error);}}else workspace?.detail(null);

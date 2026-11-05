@@ -14,9 +14,10 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
  let closed=false,scope,service,state,sequence=0,leaderOrder=[],scanController,busy=false,failed=false;
  const visible=()=>!closed&&!doc.hidden&&!doc.getElementById('panel-explore').classList.contains('hidden'),query=()=>new URLSearchParams(win.location.hash.split('?')[1]??''),isLeader=()=>query().get('section')==='leaders';
  const grid=createBrowseGrid({doc,win,root:cards,context:()=>({profile:capture().profileKey}),loadImage,imagesEnabled:()=>Boolean(state?.network),indexComplete:()=>Boolean(state?.complete),active:()=>visible()&&!isLeader()});
+ let background=false,supply=null;
  const metricNodes=['Live Squeeks','Holders','Staked power','Merges · last 24 hours'].map(label=>{const n=make('div',null,'stat'),strong=make('strong','—'),sub=make('small','—');n.append(make('span',label,'label'),strong,sub);stats.append(n);return {strong,sub};});
  function navigate(patch){const p=query();for(const[k,v]of Object.entries(patch))p.set(k,String(v));win.location.hash=win.location.hash.split('?')[0]+'?'+p;render(false);}
- function clear(){for(const n of metricNodes){n.strong.textContent='—';n.sub.textContent='';}grid.render(null);leaders.hidden=true;chartArea.hidden=true;switcher.hidden=true;}
+ function clear(){for(const n of metricNodes){n.strong.textContent='—';n.sub.textContent='';}if(/^\d+$/.test(String(supply??''))){metricNodes[0].strong.textContent=formatNumber(supply);metricNodes[0].sub.textContent='Loading holders and merges…';}grid.render(null);leaders.hidden=true;chartArea.hidden=true;switcher.hidden=true;}
  function render(refresh=true){if(!visible())return;stats.hidden=failed;const summary=exploreSummary(state,{partial:!failed});if(!summary){clear();return;}chartArea.hidden=switcher.hidden=false;browse.hidden=isLeader();leaders.hidden=!isLeader();for(const button of switcher.children)button.setAttribute('aria-pressed',String(button.dataset.section===(isLeader()?'leaders':'browse')));
   const values=[[formatNumber(summary.live),`${formatNumber(summary.burned)} burned in merges`],[formatNumber(summary.holders),`Top wallet: ${summary.topShare.toFixed(1)}%`],[formatNumber(summary.stakedPower),`${formatNumber(summary.vaultCount)} Squeeks in vault`],[formatNumber(summary.merges24),`${formatNumber(summary.merges1)} in the last hour`]];values.forEach(([a,b],i)=>{metricNodes[i].strong.textContent=a;metricNodes[i].sub.textContent=(state.complete?'':'Partial · ')+b;});
   const empty=summary.hours.every(h=>h.count===0);chart.hidden=empty;emptyNote.hidden=!empty;
@@ -36,7 +37,7 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
   status.textContent=p.phase==='final'?'Partial · Checking supply and final snapshot…':p.phase==='hydrate'?`Partial · Loading Squeeks: ${p.tokens} of ${p.tokenTotal}`:p.phase==='history'?`Checking history: ${p.headers} of ${p.headerTotal}`:`Scanning blocks: ${p.done} of ${p.total}`;
  }
  async function sync({restart=false}={}){
-  if(!visible())return;const load=capture(),key=`${load.generation}:${load.profileKey}`;
+  if(!visible()&&!background)return;const load=capture(),key=`${load.generation}:${load.profileKey}`;
   if(scope===key&&(busy||failed&&!restart))return;
   if(scope!==key){
    scanController?.abort();scanController=new AbortController();sequence++;scope=key;state=null;failed=false;leaderOrder=[];
@@ -60,10 +61,10 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
  }
  scan.onclick=()=>{const restart=state?.validationFailed===true;scope=null;void sync({restart});};show.onclick=()=>{hourTable.hidden=!hourTable.hidden;show.textContent=hourTable.hidden?'Show table':'Hide table';show.setAttribute('aria-expanded',String(!hourTable.hidden));};sort.onchange=()=>navigate({rankSort:sort.value,rankPage:1});
  const pause=()=>{if(busy){scanController?.abort();sequence++;scope=null;busy=false;root.dataset.indexStatus='paused';status.textContent='Paused · progress saved';scan.textContent='Retry';scan.hidden=false;}},visibility=()=>{if(doc.hidden)pause();else if(visible())void sync();};doc.addEventListener('visibilitychange',visibility);
- const route=()=>{if(!visible())pause();render(false);};win.addEventListener('hashchange',route);win.addEventListener('popstate',route);
+ const route=()=>{if(!visible()&&!background)pause();render(false);};win.addEventListener('hashchange',route);win.addEventListener('popstate',route);
  // Detail links originating here remain read-only, even if the connected wallet owns the NFT.
  browse.addEventListener('click',e=>{const a=e.target.closest('a');if(!a?.hash?.includes('/squeek/'))return;e.preventDefault();const before=win.location.href;win.history.pushState({exploreReadOnly:true},'',a.hash);win.dispatchEvent(new win.HashChangeEvent('hashchange',{oldURL:before,newURL:win.location.href}));});
- clear();return {show:()=>{if(state?.complete&&scope===`${capture().generation}:${capture().profileKey}`){render(false);return Promise.resolve();}return sync();},tick:()=>sync(),async history(id){
+ clear();return {supply(value){supply=value;if(!state)clear();},prefetch(){background=true;return sync();},show:()=>{if(state?.complete&&scope===`${capture().generation}:${capture().profileKey}`){render(false);return Promise.resolve();}return sync();},tick:()=>sync(),async history(id){
      if(!state?.complete||scope!==`${capture().generation}:${capture().profileKey}`)return {unknown:true,rows:[]};
      const events=await service.history(state,id);
      const text=({Transfer:'Transferred',Deposited:'Deposited',Withdrawn:'Withdrew',Recovered:'Withdrew',Merged:'Merged',DepositedMerge:'Merged',PositionsMerged:'Merged'});
