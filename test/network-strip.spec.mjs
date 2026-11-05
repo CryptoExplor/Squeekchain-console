@@ -1,21 +1,21 @@
 import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
 import {installV9Fixture} from './v9-fixture.mjs';
-for(const width of [1280,390])for(const mode of ['no-wallet','connected','api-blocked'])test(`Squeeks top strip ${mode} / ${width}`,async({page})=>{
+for(const width of [1280,390])for(const mode of ['no-wallet','connected','api-blocked'])test(`Network top strip ${mode} / ${width}`,async({page})=>{
   const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.setViewportSize({width,height:900});
   await installV9Fixture(page,{telemetry:mode!=='api-blocked'});
-  await page.evaluate(async mode=>{v9.net.core.blockProgress='500000000';if(mode==='connected')await squeek.connect();await squeek.refresh();},mode);
+  await page.evaluate(async mode=>{v9.net.core.blockProgress='500000000';if(mode==='connected')await squeek.connect();await squeek.refresh();},mode);await page.getByTestId('tab-network').click();
   await expect(page.locator('#wheel-state')).toHaveText(mode==='api-blocked'?'Wheel offline':'Running');
   if(mode!=='api-blocked')await expect(page.locator('#wheel-rpm')).toHaveText('12.5');
-  await expect(page.locator('#strip-block')).toHaveText('Block 8,192 · next 50.0%');
+  await expect(page.locator('#strip-block')).toHaveText('Squeek block 8,192 · next 50.0%');
   await expect(page.locator('.network-strip')).not.toContainText('Unknown');await expect(page.locator('#genesis-row')).toHaveText('Genesis · not open');
-  expect(await page.locator('nav [data-tab]').allTextContents()).toEqual(['Squeeks','Art','Explore','Info']);
+  expect(await page.locator('nav [data-tab]').allTextContents()).toEqual(['Squeeks','Art','Explore','Network','Info']);
   const positions=await page.locator('.network-strip').evaluate(root=>{const rect=id=>{const r=root.querySelector(id).getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left};};return {wheel:rect('#wheel-line'),block:rect('#strip-block'),link:rect('a'),genesis:rect('#genesis-row'),font:[root.querySelector('#wheel-line'),root.querySelector('#genesis-row')].map(n=>getComputedStyle(n).fontSize)};});
   expect(positions.font[0]).toBe(positions.font[1]);if(width===390){expect(positions.block.top).toBeGreaterThanOrEqual(positions.wheel.bottom);expect(positions.link.top).toBeGreaterThanOrEqual(positions.block.bottom);expect(positions.genesis.top).toBeGreaterThanOrEqual(positions.link.bottom);}
   if(mode==='api-blocked'){await expect(page.locator('#display-sources')).toContainText('Block height — Source: RPC');expect(await page.evaluate(()=>v9.networkCalls)).toBeGreaterThan(0);await expect(page.locator('#wheel-reading')).toBeHidden();}
   await page.evaluate(async()=>{await document.fonts.ready;window.scrollTo({top:0,left:0,behavior:'instant'});});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);expect(await page.evaluate(()=>v9.sends)).toBe(0);
-  fs.mkdirSync('artifacts/screenshots/phase5-fixes',{recursive:true});await page.screenshot({path:`artifacts/screenshots/phase5-fixes/squeeks-${mode}-${width}.png`,fullPage:false});await page.evaluate(()=>squeek.destroy());
+  fs.mkdirSync('artifacts/screenshots/phase5-fixes',{recursive:true});await page.screenshot({path:`artifacts/screenshots/phase5-fixes/network-${mode}-${width}.png`,fullPage:false});await page.evaluate(()=>squeek.destroy());
 });
 test('strip keeps last good RPM with visible age on failure, then recovers without an age label',async({page})=>{
   await installV9Fixture(page,{telemetry:true});await expect(page.locator('#wheel-rpm')).toHaveText('12.5');
