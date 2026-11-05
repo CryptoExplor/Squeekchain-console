@@ -723,7 +723,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const unknownHoldings=Boolean(state.inspected) && (state.status?.owner?.toLowerCase()!==state.inspected.toLowerCase() || num(state.status?.totals?.count)===UNKNOWN);
     el.cp.button.disabled=state.watchOnly || state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
   }
-  let liveSupply=null,explorePrefetched=false;
+  let liveSupply=null,explorePrefetched=false,artSampled=false;
   function renderNetwork(net) {
     const previous = observedRounds.get(state.profileKey);
     const round = net.core?.settledThroughRound;
@@ -1304,7 +1304,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('holder-overview').hidden=special&&String(route).startsWith('squeek/');$('squeek-page').hidden=!$('holder-overview').hidden;
     if(name==='squeeks'&&state.adapter){holdings.refresh();if(!query)void refreshNetworkExtras();}
     if(name==='network'&&state.adapter)void refreshNetworkExtras();
-    if(name==='art'&&!state.account&&!state.inspected&&!el.art.grid.children.length&&state.adapter?.art)void loadArt(['1']).catch(()=>{});
+    if(name==='art'&&!artSampled&&!state.account&&!state.inspected&&!el.art.grid.children.length&&state.adapter?.art){artSampled=true;void loadArt(['1']).catch(()=>{artSampled=false;});}
     if(name==='explore')void ensureExplore().then(e=>e.show()).catch(error=>recordSource('Explore','rpc',error.message));
     if(openHistory)openSheet('activity-drawer');
     if(special&&String(route).startsWith('squeek/')){try{const parsed=holderRoute(hash);void ensureWorkspace().then(w=>w.detail(parsed));}catch(error){routeError(error);}}else workspace?.detail(null);
