@@ -835,7 +835,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     setStat(el.holder.power, isV9 ? totals.deposited : totals.power, num);
     // Share is rarely published; fall back to total power so the summary never shows a blank slot.
     const showShare=num(totals.sharePercent,4)!==UNKNOWN;$('holder-share-label').textContent=showShare?'Share':'Power';
-    if(showShare)setStat(el.holder.share, totals.sharePercent, value => `${num(value, 4)}%`);else setStat(el.holder.share, totals.power, num);
+    if(showShare)setStat(el.holder.share, totals.sharePercent, value => `${num(value, 4)}%`);else setStat(el.holder.share, totals.power, value => {const text=String(value??'');if(!/^\d+$/.test(text))return UNKNOWN;const big=BigInt(text);/* Staking power is 18-decimal fixed point; no real wallet reaches 1e18 unscaled. */return num(String(big>=10n**18n?big/10n**18n:big));});
     setStat(el.holder.claimable, totals.claimable, sqk);
     el.holder.claim.disabled = state.busy || state.walletPromptPending || num(totals.count) === UNKNOWN || (!has && !isV9) || !signerOwns || !caps.claim;
     $("btn-custom-merge").disabled = state.busy || state.walletPromptPending || !has || !signerOwns || !caps.merge;
