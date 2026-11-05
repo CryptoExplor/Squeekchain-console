@@ -66,7 +66,7 @@ try {
     assert.equal($('verified-chip').textContent, 'Verified');
     assert.match(doc.querySelector('footer').textContent, /Independent.*not affiliated with Squeekchain/i);
     net = { core: { settledThroughRound: '0', blockHeight: '0', paused: false }, mining: { lagRounds: '0', minted: { sqk: '0' } }, nft: { totalSupply: '0' }, checkpoint: {} };
-    wallet = { owner, totals: { count: 0, power: 0, sharePercent: 0, claimable: { sqk: '0' } }, squeeks: [] };
+    wallet = { owner, totals: { count: 0, power: 0, deposited: 0, sharePercent: 0, claimable: { sqk: '0' } }, squeeks: [] };
     await app.refresh();
     for (const id of ['net-round', 'net-blocks', 'net-squeeks', 'holder-count', 'holder-power']) assert.equal($(id).textContent, '0', `known zero ${id}`);
     assert.equal($('holder-claimable').textContent, '0 SQK'); assert.equal($('net-paused').textContent, 'no');

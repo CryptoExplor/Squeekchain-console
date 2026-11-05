@@ -57,7 +57,7 @@ export async function probeEndpoint(url, request = rpcRequest) {
     })(),
     (async () => {
       try {
-        const result = await request(url, 'eth_getStorageAt', [DEPLOYMENT.mining, IMPLEMENTATION_SLOT, block]);
+        const result = await request(url, 'eth_getStorageAt', [DEPLOYMENT.addresses.mining, IMPLEMENTATION_SLOT, block]);
         const expected = `0x${'0'.repeat(24)}${DEPLOYMENT.identities.pins.issuance.implSlot.slice(2)}`;
         if (result.toLowerCase() !== expected.toLowerCase()) throw new Error('Mining implementation slot differs from pinned record');
         row['mining slot'] = 'OK: pinned implementation';
@@ -66,7 +66,7 @@ export async function probeEndpoint(url, request = rpcRequest) {
     (async () => {
       try {
         const logs = await request(url, 'eth_getLogs', [{
-          address: DEPLOYMENT.nft, fromBlock: toHex(at >= 9_999n ? at - 9_999n : 0n), toBlock: block,
+          address: DEPLOYMENT.addresses.nft, fromBlock: toHex(at >= 9_999n ? at - 9_999n : 0n), toBlock: block,
           topics: encodeEventTopics({ abi: nftAbi, eventName: 'Transfer' }),
         }]);
         if (!Array.isArray(logs)) throw new Error('Invalid log result');

@@ -1,6 +1,7 @@
 // Browser-local, display-only event projection. No transaction construction or ownership authority.
 const ZERO='0x'+'0'.repeat(40),uint=v=>/^(0|[1-9]\d*)$/.test(String(v??'')),hash=v=>/^0x[0-9a-f]{64}$/i.test(v??''),addr=v=>/^0x[0-9a-f]{40}$/i.test(v??'');
 const same=(a,b)=>String(a).toLowerCase()===String(b).toLowerCase();
+const MERGE_EVENTS=new Set(['Merged','DepositedMerge','PositionsMerged']);
 export const indexKey=profile=>'explore:v3:'+profile.key+':'+JSON.stringify([profile.addresses,profile.identities,String(profile.startBlock)]);
 export function applyExploreEvent(tokens,event,profile){
  const a=event.args,get=id=>{if(!/^[1-9]\d{0,3}$/.test(String(id))||BigInt(id)>9999n)throw new Error('Invalid indexed token');return tokens[String(id)]??={tokenId:String(id),owner:null,depositor:null,deposited:false,level:null,nextMergeHeight:null,burned:false};};
@@ -51,9 +52,11 @@ export function createExploreIndex({profile,store,reader,signal,progress=()=>{},
    if(!baseValid)rewind=start;state.tokens={};state.events=state.events.filter(e=>BigInt(e.blockNumber)<rewind);for(const e of state.events)applyExploreEvent(state.tokens,e,profile);cursor=rewind;state.complete=false;
   }}
   if(!resuming)delete state.hydrationPending;state.complete=false;state.scanSnapshot=serialSnapshot;state.snapshot=serialSnapshot;
-  let chunk=45000n;const changed=new Set();
+  // Busy deployments return >10k logs per ~7k blocks, and public peers answer an oversized
+  // range with a slow generic error, so start small and halve on any log-range failure.
+  let chunk=4000n;const changed=new Set();
   while(cursor<=target){check();const end=cursor+chunk-1n>target?target:cursor+chunk-1n;let events;
-   notify('logs');try{events=await bounded(()=>withBackoff(()=>reader.logs(cursor,end)));}catch(error){check();if(end>cursor&&reader.rangeError(error)){chunk=(end-cursor+1n)/2n;continue;}throw error;}
+   notify('logs');try{events=await bounded(()=>withBackoff(()=>reader.logs(cursor,end)),15000);}catch(error){check();if(end>cursor&&(reader.rangeError(error)||error?.name==='TimeoutError'||error?.name==='UnknownRpcError')){chunk=(end-cursor+1n)/2n;continue;}throw error;}
    const unique=new Map();for(const event of events){if(!uint(event.blockNumber)||BigInt(event.blockNumber)<cursor||BigInt(event.blockNumber)>end||!uint(event.logIndex)||!hash(event.blockHash)||!hash(event.transactionHash)||event.removed)throw new Error('Non-canonical index history');const key=event.blockNumber+':'+event.logIndex;if(unique.has(key))throw new Error('Duplicate index history');unique.set(key,event);}
    const ordered=[...unique.values()].sort((a,b)=>BigInt(a.blockNumber)<BigInt(b.blockNumber)?-1:BigInt(a.blockNumber)>BigInt(b.blockNumber)?1:Number(a.logIndex)-Number(b.logIndex));
    for(const e of ordered){applyExploreEvent(state.tokens,e,profile);for(const field of ['tokenId','survivor','donor'])if(e.args[field]!=null){const id=String(e.args[field]);changed.add(id);if(state.tokens[id])delete state.tokens[id].hydratedAtBlock;}}
@@ -69,16 +72,17 @@ export function createExploreIndex({profile,store,reader,signal,progress=()=>{},
   // than the 48h chart window. Timestamps for older events stay unfetched and
   // are loaded lazily by history() when that Squeek detail page opens.
   const cutoff=Number(snapshot.timestamp)-historyWindowSeconds;
-  const ordered=[...new Set(state.events.filter(e=>e.timestamp==null&&!e.timeUnknown).map(e=>e.blockNumber))]
+  // Only merges need a time during the scan (the 48 h chart); other events get theirs lazily in history().
+  const ordered=[...new Set(state.events.filter(e=>MERGE_EVENTS.has(e.eventName)&&e.timestamp==null&&!e.timeUnknown).map(e=>e.blockNumber))]
     .sort((a,b)=>BigInt(a)>BigInt(b)?-1:BigInt(a)<BigInt(b)?1:0),blocks=new Map();
-  for(let i=0;i<ordered.length;i+=3){
+  for(let i=0;i<ordered.length;i+=6){
     notify('history',{headers:i,headerTotal:ordered.length});
-    const batch=ordered.slice(i,i+3);
+    const batch=ordered.slice(i,i+6);
     const values=await Promise.all(batch.map(n=>bounded(()=>withBackoff(()=>reader.block(BigInt(n))))));
     batch.forEach((n,j)=>blocks.set(n,values[j]));
     if(values.some(value=>Number(value.timestamp)<cutoff))break;
   }
-  for(const e of state.events)if(e.timestamp==null){
+  for(const e of state.events)if(e.timestamp==null&&MERGE_EVENTS.has(e.eventName)){
     const b=blocks.get(e.blockNumber);
     if(!b){e.timeUnknown=true;continue;}
     if(!same(b.hash,e.blockHash))throw new Error('Index history hash mismatch');
@@ -98,11 +102,10 @@ export function createExploreIndex({profile,store,reader,signal,progress=()=>{},
   const ready=()=>live.filter(t=>addr(t.owner)&&uint(t.basePower)&&t.hydratedAtBlock!=null).length,groups=new Map();
   for(const t of hydrate){const slot=Math.floor((Number(t.tokenId)-1)/120);if(!groups.has(slot))groups.set(slot,[]);groups.get(slot).push(t);}
   notify('hydrate',{tokens:ready(),tokenTotal:live.length,state});
-  // Two hydration multicalls in flight instead of one after another: the public
-  // budget allows it and it halves the wall clock on a cold index.
+  // Three hydration multicalls in flight: within the public RPC budget, about a third of the serial wall clock.
   const slots=[...groups.entries()];
-  for(let i=0;i<slots.length;i+=2){
-    await Promise.all(slots.slice(i,i+2).map(async([slot,batch])=>{
+  for(let i=0;i<slots.length;i+=3){
+    await Promise.all(slots.slice(i,i+3).map(async([slot,batch])=>{
       check();const values=await bounded(()=>withBackoff(()=>reader.hydrate(batch)));if(values.length!==batch.length)throw new Error('Index incomplete');
       for(let j=0;j<batch.length;j++){const t=batch[j],v=values[j];if(!same(t.chainOwner,v.chainOwner)||!Number.isInteger(v.level)||v.level<1||v.level>network.policy.maximumLevel||!uint(v.nextMergeHeight)||!addr(v.owner))throw new Error('Index incomplete');Object.assign(t,v);t.basePower=network.policy.levels.find(p=>p.level===t.level)?.basePower??null;t.hydratedAtBlock=String(target);}
       await bounded(()=>{check();return store.set(chunkKey(slot),{blockHash:snapshot.blockHash,tokens:structuredClone(batch)});});
