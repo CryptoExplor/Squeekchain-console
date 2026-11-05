@@ -1,0 +1,31 @@
+name: tmp-fetch-published
+on:
+  push:
+    branches: [arena/ba7ca559-squeekchain-console]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch published record, ABIs and API envelopes
+        run: |
+          set -euo pipefail
+          mkdir -p out/abi out/api
+          curl -fsSL --max-time 60 https://docs.squeekchain.com/assets/deployments/sepolia.json -o out/sepolia.json
+          for n in SqueekCore SqueekNFT SqueekToken SqueekMining SqueekStaking DotGridRenderer; do
+            curl -fsSL --max-time 60 "https://docs.squeekchain.com/assets/abi/$n.json" -o "out/abi/$n.json" || echo "missing $n"
+          done
+          for p in economy/state core measurement/state; do
+            f=$(echo "$p" | tr '/' '_')
+            curl -fsSL --max-time 60 "https://api.squeekchain.com/v1/$p" -o "out/api/$f.json" || echo "missing $p"
+          done
+          ls -l out/abi out/api
+          sha256sum out/sepolia.json out/abi/*.json | tee out/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published-bundle
+          path: out/
+          retention-days: 2
