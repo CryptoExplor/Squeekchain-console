@@ -16,5 +16,15 @@ for (const f of files) {
     if (!target.startsWith(dist + path.sep) || !fs.existsSync(target)) bad.push(`${f} -> ${m[1]}`);
   }
 }
+// Named imports from the bundle must exist: a missing export is a SyntaxError that kills the whole module.
+const bundle = await import(new URL('file://' + path.join(dist, 'bundle.js')).href).catch(() => null);
+if (bundle) for (const f of files) {
+  const src = fs.readFileSync(path.join(dist, f), 'utf8');
+  for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*["']\.\/bundle\.js["']/g))
+    for (const part of m[1].split(',').map(x => x.trim()).filter(Boolean)) {
+      const name = part.split(/\s+as\s+/)[0].trim();
+      if (!(name in bundle)) bad.push(`${f} imports missing bundle export ${name}`);
+    }
+}
 assert.deepEqual(bad, [], `unresolvable module imports in dist/: ${bad.join(', ')}`);
 console.log(`PASS dist imports: ${files.length} scripts, every relative import resolves inside dist/`);

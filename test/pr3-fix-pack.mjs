@@ -4,7 +4,6 @@ const requestBudgets=JSON.parse(fs.readFileSync(new URL('./budgets.json',import.
 import {spawnSync} from 'node:child_process';
 import {encodeErrorResult,decodeFunctionData,encodeFunctionResult,multicall3Abi,toHex} from 'viem';
 import {nftAbi} from '../sdk/abi-core-20261103.js';
-import {nftAbi} from '../sdk/abi-core-20261103.js';
 import {profileBalances} from '../sdk/profile-selection.js';
 import {createRpcContext} from '../sdk/rpc.js';
 import {createDiscoveryStore} from '../sdk/discovery.js';

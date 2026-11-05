@@ -6,7 +6,6 @@ import { build } from 'esbuild';
 import { encodeFunctionResult, decodeFunctionData, multicall3Abi, encodeEventTopics, parseAbi, toHex, keccak256 } from 'viem';
 import { DEPLOYMENT, CORE_CONFIGURATION } from './fixtures/graph.mjs';
 import { createSqueekchain, requireBurn } from '../sdk/squeekchain.js';
-import { createSqueekchain } from '../sdk/squeekchain.js';
 import { createRpcContext, chainCheckedRequest, createSnapshotGuard, RpcTrustError, requireSepolia, PUBLIC_RPCS } from '../sdk/rpc.js';
 import { coreAbi, miningAbi, nftAbi, tokenAbi } from '../sdk/abi-core-20261103.js';
 import { verifyGraphAt, IMPLEMENTATION_SLOT } from '../sdk/verify-chain.js';
