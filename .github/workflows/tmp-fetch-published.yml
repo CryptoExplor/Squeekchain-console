@@ -12,18 +12,19 @@ jobs:
     steps:
       - name: Fetch published record, ABIs and API envelopes
         run: |
-          set -euo pipefail
           mkdir -p out/abi out/api
-          curl -fsSL --max-time 60 https://docs.squeekchain.com/assets/deployments/sepolia.json -o out/sepolia.json
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
+          get() { echo "$1 -> $(curl -sSL --max-time 60 -A "$UA" -H 'accept: application/json' -w '%{http_code}' -o "$2" "$1")"; }
+          get https://docs.squeekchain.com/assets/deployments/sepolia.json out/sepolia.json
           for n in SqueekCore SqueekNFT SqueekToken SqueekMining SqueekStaking DotGridRenderer; do
-            curl -fsSL --max-time 60 "https://docs.squeekchain.com/assets/abi/$n.json" -o "out/abi/$n.json" || echo "missing $n"
+            get "https://docs.squeekchain.com/assets/abi/$n.json" "out/abi/$n.json"
           done
           for p in economy/state core measurement/state; do
-            f=$(echo "$p" | tr '/' '_')
-            curl -fsSL --max-time 60 "https://api.squeekchain.com/v1/$p" -o "out/api/$f.json" || echo "missing $p"
+            get "https://api.squeekchain.com/v1/$p" "out/api/$(echo "$p" | tr '/' '_').json"
           done
-          ls -l out/abi out/api
+          ls -l out out/abi out/api
           sha256sum out/sepolia.json out/abi/*.json | tee out/SHA256SUMS
+          true
       - uses: actions/upload-artifact@v4
         with:
           name: published-bundle
