@@ -1,8 +1,8 @@
 import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
 import {decodeFunctionData,encodeFunctionResult,multicall3Abi} from 'viem';
-import {staking9Abi} from '../sdk/abi-v9.js';
-import {nftAbi} from '../sdk/abi.js';
+import {stakingAbi} from '../sdk/abi-core-20261103.js';
+import {nftAbi} from '../sdk/abi-core-20261103.js';
 import {displayFixtures,fixtureRoute,owner} from './fixtures/display-api.mjs';
 import {installDisplayFixture as install} from './display-fixture.mjs';
 test('production display path: API-only network; holder connect; lock, switch, wrong chain, disconnect/reload',async({page})=>{

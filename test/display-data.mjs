@@ -6,7 +6,7 @@ import { createDisplayApi,apiNetwork,apiWallet } from '../sdk/display-api.js';
 import { createWheelPoller } from '../sdk/display-poller.js';
 import { getProfile } from '../sdk/deployments.js';
 import { displayFixtures,fixtureRoute,owner } from './fixtures/display-api.mjs';
-const profile=getProfile('sepolia-v9'),cache=createDisplayCache(indexedDB);let now=Date.now(),fixtures=displayFixtures(now),mode='good',calls=[];
+const profile=getProfile('sepolia'),cache=createDisplayCache(indexedDB);let now=Date.now(),fixtures=displayFixtures(now),mode='good',calls=[];
 const response=(body,status=200,headers={})=>({ok:status===200,status,headers:new Headers(headers),json:async()=>structuredClone(body)});
 const fetcher=async(url,options)=>{const path=url.replace('https://api.squeekchain.com/v1','');calls.push({path,options});if(mode==='offline')throw new TypeError('Offline');if(mode==='429')return response(null,429,{'Retry-After':'60'});if(mode==='304')return response(null,304);return response(fixtureRoute(fixtures,path),200,{ETag:'"one"'});};
 const api=createDisplayApi({profile,cache,now:()=>now,fetcher,rateBuckets:new Map()});
@@ -24,7 +24,7 @@ fixtures=displayFixtures(now);fixtures.economy.identities.mining.implementation=
 fixtures=displayFixtures(now);await api.economy();mode='429';await api.core();const count=calls.length;await api.core();assert.equal(calls.length,count,'Retry-After suppresses network requests');now+=60001;mode='good';await api.core();assert.equal(calls.length,count+1);
 const fresh=createDisplayApi({profile,cache,now:()=>now,fetcher,rateBuckets:new Map()});const account=await fresh.account(owner);assert.equal(apiWallet(account,apiNetwork(await fresh.core(),await fresh.economy()),owner).totals.count,2);assert.equal(calls.findLast(c=>c.path.startsWith('/accounts/')).options.cache,'no-store');assert.equal(await cache.get(displayKey(profile,`/accounts/${owner}?limit=100`)),undefined);
 await fresh.squeek('41',1);const beforeArt=calls.length;await fresh.squeek('41',1);assert.equal(calls.length,beforeArt,'art token+level 24-hour cache hit');await fresh.invalidateArt(['41']);await fresh.squeek('41',1);assert.equal(calls.length,beforeArt+1,'merge invalidates metadata and endpoint ETag body');
-const v6=getProfile('sepolia-v6');assert.notEqual(displayKey(profile,'network'),displayKey(v6,'network'));assert.notEqual(displayKey(profile,'network'),displayKey({...profile,identities:{...profile.identities,release:'other'}},'network'));
+const v6=getProfile('sepolia');assert.notEqual(displayKey(profile,'network'),displayKey(v6,'network'));assert.notEqual(displayKey(profile,'network'),displayKey({...profile,identities:{...profile.identities,release:'other'}},'network'));
 // Durable IndexedDB works across separate cache instances. Static expiry is separate from dynamic.
 await cache.set('tier',{at:now,value:'good'});assert.equal((await createDisplayCache(indexedDB).get('tier')).value,'good');assert.equal(DAY,86400000);
 console.log('PASS display schemas/cache: endpoint guards, unsupported versions, release/implementation/installation mismatch, explicit unavailable eviction, two failures retained, 15min expiry, ETag/304, Retry-After, no-store account, static pins, IDB namespaces, art invalidation');
@@ -43,7 +43,7 @@ assert.deepEqual(PUBLIC_RPCS,['https://ethereum-sepolia-rpc.publicnode.com','htt
 for(const removed of ['sepolia.drpc.org','ethereum-sepolia-public.nodies.app','eth-sepolia.api.onfinality.io','api.zan.top','rpc.sepolia.ethpandaops.io']){assert.ok(!PUBLIC_RPCS.some(url=>url.includes(removed)));assert.ok(!headers.includes(removed));}
 console.log('PASS current default pool and CSP: Tenderly/PublicNode/0xRPC only; removed hosts stay absent');
 // Image/metadata cache survives a second visit, separates levels and expires at 24h.
-const {createImages}=await import('../web/images.js');let imageCalls=0,blobCalls=0;const imageCache=createDisplayCache(indexedDB),imageProfile=getProfile('sepolia-v9');
+const {createImages}=await import('../web/images.js');let imageCalls=0,blobCalls=0;const imageCache=createDisplayCache(indexedDB),imageProfile=getProfile('sepolia');
 const imageOptions={cache:imageCache,win:{URL:globalThis.URL},fetcher:async(_url,options)=>{blobCalls++;assert.equal(options.credentials,'omit');return {ok:true,blob:async()=>new Blob(['synthetic'],{type:'image/png'})};}};
 const imageApi={squeek:async(id,level)=>{imageCalls++;return {data:{metadata:{status:'available',name:'Synthetic',cardImageUrl:'https://api.squeekchain.com/cards/card.png',imageDataUri:fixtures.squeek.metadata.imageDataUri,attributes:[]}}};}};
 const firstImages=createImages(imageOptions),imageLoad={profile:imageProfile,token:{tokenId:'41',level:1},api:imageApi,fallback:()=>{throw new Error('No fallback expected');}};

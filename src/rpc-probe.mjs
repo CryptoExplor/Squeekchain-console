@@ -4,9 +4,10 @@ import {anySignal} from '../sdk/cancellation.js';
 import { pathToFileURL } from 'node:url';
 import { encodeEventTopics, toHex } from 'viem';
 import { PUBLIC_RPCS, requireSepolia } from '../sdk/rpc.js';
-import { DEPLOYMENT } from '../sdk/record.js';
-import { IMPLEMENTATION_SLOT } from '../sdk/verify.js';
-import { nftAbi } from '../sdk/abi.js';
+import { getProfile } from '../sdk/deployments.js';
+const DEPLOYMENT = getProfile();
+import { IMPLEMENTATION_SLOT } from '../sdk/verify-chain.js';
+import { nftAbi } from '../sdk/abi-core-20261103.js';
 
 export async function rpcRequest(url, method, params = []) {
   const deadline=anySignal([],15000);
@@ -57,7 +58,7 @@ export async function probeEndpoint(url, request = rpcRequest) {
     (async () => {
       try {
         const result = await request(url, 'eth_getStorageAt', [DEPLOYMENT.mining, IMPLEMENTATION_SLOT, block]);
-        const expected = `0x${'0'.repeat(24)}${DEPLOYMENT.implementations.mining.slice(2)}`;
+        const expected = `0x${'0'.repeat(24)}${DEPLOYMENT.identities.pins.issuance.implSlot.slice(2)}`;
         if (result.toLowerCase() !== expected.toLowerCase()) throw new Error('Mining implementation slot differs from pinned record');
         row['mining slot'] = 'OK: pinned implementation';
       } catch (error) { row['mining slot'] = failure(error); }

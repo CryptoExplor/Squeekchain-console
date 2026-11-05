@@ -7,7 +7,6 @@ import readline from "node:readline";
 import { profileInput } from "../sdk/profile-input.js";
 import { toolProfile, readToolResult } from "../sdk/tool-runtime.js";
 import { createSqueekchain } from "../sdk/squeekchain.js";
-import { createSqueek9 } from "../sdk/v9.js";
 import { getProfile, PROFILES, DEFAULT_PROFILE } from "../sdk/deployments.js";
 import { TOOL_SPECS, buildManifest } from "../sdk/tools.js";
 
@@ -26,7 +25,7 @@ if (!profile.addresses) {
 const adapters = new Map();
 const handlers = Object.fromEntries(TOOL_SPECS.filter(t=>t.surfaces.includes('mcp')).map(spec=>[spec.name,async args=>{
   const selected=toolProfile(args.profile??profile.key);
-  if(!adapters.has(selected.key))adapters.set(selected.key, selected.abiSet==='v9'?createSqueek9({profileKey:selected.key,rpcUrl}):createSqueekchain({rpcUrl,addresses:selected.addresses}));
+  if(!adapters.has(selected.key))adapters.set(selected.key, createSqueekchain({profileKey:selected.key,rpcUrl}));
   return readToolResult(adapters.get(selected.key),spec.name,args);
 }]));
 const availableTools = () => [

@@ -4,12 +4,12 @@ const requestBudgets=JSON.parse(fs.readFileSync(new URL('./budgets.json',import.
 import { spawnSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { encodeFunctionResult, decodeFunctionData, multicall3Abi, encodeEventTopics, parseAbi, toHex, keccak256 } from 'viem';
-import { DEPLOYMENT, CORE_CONFIGURATION } from '../sdk/record.js';
+import { DEPLOYMENT, CORE_CONFIGURATION } from './fixtures/graph.mjs';
 import { createSqueekchain, requireBurn } from '../sdk/squeekchain.js';
-import { createSqueek9 } from '../sdk/v9.js';
+import { createSqueekchain } from '../sdk/squeekchain.js';
 import { createRpcContext, chainCheckedRequest, createSnapshotGuard, RpcTrustError, requireSepolia, PUBLIC_RPCS } from '../sdk/rpc.js';
-import { coreAbi, miningAbi, nftAbi, tokenAbi } from '../sdk/abi.js';
-import { verifyGraphAt, IMPLEMENTATION_SLOT } from '../sdk/verify.js';
+import { coreAbi, miningAbi, nftAbi, tokenAbi } from '../sdk/abi-core-20261103.js';
+import { verifyGraphAt, IMPLEMENTATION_SLOT } from '../sdk/verify-chain.js';
 import { DEFAULT_PROFILE, PROFILES } from '../sdk/deployments.js';
 import { TOOL_SPECS } from '../sdk/tools.js';
 import { parseSqueekMetadata } from '../sdk/metadata.js';
@@ -94,11 +94,11 @@ function fakeClient({ alter = (_request, value) => value } = {}) {
   return client;
 }
 
-assert.equal(DEFAULT_PROFILE, 'sepolia-v9');
-assert.equal(PROFILES['sepolia-v6'].label, 'Sepolia v6');
-assert.equal(PROFILES['sepolia-v9'].label, 'Sepolia v9');
-for (const action of ['claim','merge','checkpoint','deposit','withdraw','stake','unstake']) assert.equal(PROFILES['sepolia-v9'].capabilities[action],true);
-const v9 = createSqueek9();
+assert.equal(DEFAULT_PROFILE, 'sepolia-core-20261103');
+assert.equal(PROFILES['sepolia'].label, 'Sepolia v6');
+assert.equal(PROFILES['sepolia'].label, 'Sepolia v9');
+for (const action of ['claim','merge','checkpoint','deposit','withdraw','stake','unstake']) assert.equal(PROFILES['sepolia'].capabilities[action],true);
+const v9 = createSqueekchain();
 for (const name of ['claimPreview','mergePreview','actionPreview']) assert.equal(typeof v9[name],'function');
 assert.throws(()=>v9.mergePreview(owner,'1','2'),/BURN-2/);
 assert.ok(PUBLIC_RPCS.length >= 3);
@@ -293,10 +293,10 @@ try {
   await wireSdk.walletStatus(owner);
   assert.ok(wire.length <= requestBudgets.v6.limit, `Warm wallet page load exceeded RPC budget: ${wire.length}`);
   assert.ok(cold<=requestBudgets.v6.coldNetwork);assert.ok(warmCount<=requestBudgets.v6.warmNetwork);assert.ok(wire.length<=requestBudgets.v6.wallet);
-  fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/v6-request-budget.json',JSON.stringify({profile:'sepolia-v6',coldNetwork:cold,warmNetwork:warmCount,wallet:wire.length,limit:25},null,2)+'\n');
+  fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/v6-request-budget.json',JSON.stringify({profile:'sepolia',coldNetwork:cold,warmNetwork:warmCount,wallet:wire.length,limit:25},null,2)+'\n');
   console.log(`PASS actual wire budget: cold network ${cold}; warm network ${warmCount}; wallet ${wire.length} requests; art batch one eth_call`);
   // Feature-isolated SDK fallback: cold detail + art; warm detail reuses cached art.
-  const pageSdk=createFixtureSdk({rpcContext:createRpcContext()});wire.length=0;await pageSdk.squeekStatus('1');await pageSdk.art('1');const pageCold=wire.length;wire.length=0;await pageSdk.squeekStatus('1');const pageWarm=wire.length;assert.ok(pageWarm<=requestBudgets.v6.limit);assert.ok(pageCold<=requestBudgets.v6SqueekPage.cold);assert.ok(pageWarm<=requestBudgets.v6SqueekPage.warm);fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/v6-squeek-page-budget.json',JSON.stringify({profile:'sepolia-v6',scope:'Synthetic actual-HTTP SDK detail+art cold; detail-only with cached art warm. Excludes app shell.',cold:pageCold,warm:pageWarm},null,2)+'\n');console.log(`PASS v6 Squeek page SDK HTTP: cold ${pageCold}, warm ${pageWarm}`);
+  const pageSdk=createFixtureSdk({rpcContext:createRpcContext()});wire.length=0;await pageSdk.squeekStatus('1');await pageSdk.art('1');const pageCold=wire.length;wire.length=0;await pageSdk.squeekStatus('1');const pageWarm=wire.length;assert.ok(pageWarm<=requestBudgets.v6.limit);assert.ok(pageCold<=requestBudgets.v6SqueekPage.cold);assert.ok(pageWarm<=requestBudgets.v6SqueekPage.warm);fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/v6-squeek-page-budget.json',JSON.stringify({profile:'sepolia',scope:'Synthetic actual-HTTP SDK detail+art cold; detail-only with cached art warm. Excludes app shell.',cold:pageCold,warm:pageWarm},null,2)+'\n');console.log(`PASS v6 Squeek page SDK HTTP: cold ${pageCold}, warm ${pageWarm}`);
   const actions=[['checkpoint',()=>wireSdk.checkpointPreview(owner)],['claim-32',()=>wireSdk.claimPreview(owner,Array.from({length:32},(_,i)=>String(i+1)))],['claim-33',()=>wireSdk.claimPreview(owner,Array.from({length:33},(_,i)=>String(i+1)))],['merge',()=>wireSdk.mergePreview(owner,'1','2',{confirm:'BURN-2'})]],actionCounts=[];
   for(const[action,preview]of actions){wire.length=0;const simulationsBefore=wireClient.requests.filter(r=>r.name==='simulateContract').length;const result=await preview();assert.equal(result.ok,true,action);assertGasFree(result);assert.equal(wireClient.requests.filter(r=>r.name==='simulateContract').length-simulationsBefore,result.batches?.length??1,action+' keeps snapshot simulation');const requests=wire.flat();assert.equal(requests.some(r=>r.method==='eth_estimateGas'),false);assert.equal(result.batches?.length??1,action==='claim-33'?2:1);actionCounts.push({action,httpRequests:wire.length,estimateGasRequests:requests.filter(r=>r.method==='eth_estimateGas').length,simulations:result.batches?.length??1});}
   fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/gas-cleanup-v6-requests.json',JSON.stringify(actionCounts,null,2)+'\n');console.log('PASS v6 action previews: every snapshot simulation retained; no eth_estimateGas or gas fields');

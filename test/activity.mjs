@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createActivity } from '../web/activity.js';
+import { DEFAULT_PROFILE } from '../sdk/deployments.js';
 const saved = new Map(), storage = { get: key => saved.get(key), set: (key, value) => saved.set(key, value) };
 const hash = `0x${'ab'.repeat(32)}`, blockHash = `0x${'cd'.repeat(32)}`;
 let receipt = null, confirmations = 1n;
@@ -43,9 +44,9 @@ console.log('PASS Activity: immediate persistent broadcast, hash dedup, mined/fi
 const KEY='wheelhouse:pending-transactions:v1';
 const entry={hash,label:'Legacy checkpoint',chainId:11155111,time:new Date().toISOString()};
 storage.set(KEY,JSON.stringify([entry]));
-const legacy=createActivity({storage,receiptReader:reader});assert.equal(legacy.list()[0].profile,'sepolia-v6');legacy.destroy();
+const legacy=createActivity({storage,receiptReader:reader});assert.equal(legacy.list()[0].profile,'sepolia');legacy.destroy();
 storage.set(KEY,JSON.stringify([{...entry,profile:'sepolia'}]));
-const explicit=createActivity({storage,receiptReader:reader});assert.equal(explicit.list()[0].profile,'sepolia-v9');explicit.destroy();
+const explicit=createActivity({storage,receiptReader:reader});assert.equal(explicit.list()[0].profile,DEFAULT_PROFILE);explicit.destroy();
 let release;
 storage.set(KEY,JSON.stringify([entry]));
 const stale=createActivity({storage,receiptReader:()=>new Promise(resolve=>{release=resolve;})});

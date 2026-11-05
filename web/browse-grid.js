@@ -1,6 +1,7 @@
 // Shared browsing only. Every selection is a hint, never transaction authority.
 import {formatNumber} from './components.js';
 import {squeekHash} from './holder-routes.js';
+import {getProfile} from './bundle.js';
 const uint=v=>typeof v!=='boolean'&&/^\d+$/.test(String(v??''));
 export function browseState(token,net){
  const max=net?.policy?.maximumLevel;if(token.stray)return {key:'unknown',label:'—'};if(!Number.isInteger(token.level)||token.level<1||!Number.isInteger(max))return {key:'unknown',label:'—'};
@@ -24,7 +25,7 @@ export function filterSqueeks(rows,query,net){
  const found=rows.filter(t=>!t.burned&&(!query.level||String(t.level)===query.level)&&(!query.state||browseState(t,net).key===query.state)&&(!query.where||(query.where==='vault')===Boolean(t.deposited||t.custody==='vault'))&&(!query.q||String(t.tokenId).includes(query.q.replace(/^#/,'')))&&(!query.pairs||pairs.has(String(t.tokenId))));
  return found.sort((a,b)=>{const av=query.sort==='level'?a.level:query.sort==='power'?power(a):a.tokenId,bv=query.sort==='level'?b.level:query.sort==='power'?power(b):b.tokenId;if(!uint(av)||!uint(bv))return uint(av)?-1:uint(bv)?1:BigInt(a.tokenId)<BigInt(b.tokenId)?-1:1;const n=BigInt(av)<BigInt(bv)?-1:BigInt(av)>BigInt(bv)?1:0;return n*(query.order==='desc'?-1:1)||(BigInt(a.tokenId)<BigInt(b.tokenId)?-1:1);});
 }
-export function createBrowseGrid({doc,win,root,context,loadImage,imagesEnabled=()=>true,selected=new Set(),canSelect=()=>false,onSelection=()=>{},onAction,onPairs,active=()=>true}){
+export function createBrowseGrid({doc,win,root,context,loadImage,imagesEnabled=()=>true,indexComplete=()=>true,selected=new Set(),canSelect=()=>false,onSelection=()=>{},onAction,onPairs,active=()=>true}){
  const make=(tag,text,cls)=>{const n=doc.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
  const bar=make('form',null,'browse-filters'),controls={},label=(name,text,options)=>{const l=make('label',text),s=make('select');s.name=name;s.setAttribute('aria-label',text);for(const [value,title]of options){const o=make('option',title);o.value=value;s.append(o);}l.append(s);bar.append(l);controls[name]=s;return s;};
  label('level','Level',[['','Any level']]);label('state','State',[['','Any state'],['ready','Ready'],['cooldown','Cooldown'],['max','Max level']]);label('where','Where',[['','Anywhere'],['wallet','Wallet'],['vault','Vault']]);label('sort','Sort',[['id','Token ID'],['level','Level'],['power','Power']]);label('order','Order',[['asc','Low to high'],['desc','High to low']]);
@@ -46,14 +47,18 @@ export function createBrowseGrid({doc,win,root,context,loadImage,imagesEnabled=(
   const c=current(),path=squeekHash(c.profile,id);card.querySelector('.squeek-image').href=path;card.querySelector('h3 a').href=path;
   const badge=card.querySelector('.level-badge');badge.textContent=Number.isInteger(t.level)?`L${t.level}`:'Level —';badge.className=`level-badge level-${Number.isInteger(t.level)?Math.min(10,t.level):'unknown'}`;card.querySelector('.card-state').textContent=browseState(t,net).label+' · '+(t.deposited?'Deposited':'Wallet');card.title=`Power: ${formatNumber(t.basePower??t.activeWeight??net?.policy?.levels?.find(l=>l.level===t.level)?.basePower)}`;
   const actions=card.querySelector('.card-actions');let input=actions.querySelector('input');if(canSelect()){if(!input){const l=make('label','Select');input=make('input');input.type='checkbox';input.setAttribute('aria-label',`Select Squeek #${id}`);input.onchange=()=>{input.checked?selected.add(id):selected.delete(id);onSelection();};l.prepend(input);actions.append(l);}input.disabled=false;input.checked=selected.has(id);}else if(input)input.closest('label').remove();
-  let button=actions.querySelector('button');if(canSelect()&&c.profile==='sepolia-v9'&&onAction){if(!button){button=make('button',null,'btn');actions.append(button);}button.textContent=t.deposited?'Withdraw':'Deposit';button.onclick=()=>onAction(t.deposited?'withdraw':'deposit',id);}else button?.remove();
+  let button=actions.querySelector('button');if(canSelect()&&Boolean(getProfile(c.profile).capabilities.deposit)&&onAction){if(!button){button=make('button',null,'btn');actions.append(button);}button.textContent=t.deposited?'Withdraw':'Deposit';button.onclick=()=>onAction(t.deposited?'withdraw':'deposit',id);}else button?.remove();
   const artKey=`${c.profile}:${id}:${t.level}`;if(card.artKey!==artKey){card.artKey=artKey;card.needsImage=t;}
   return {card,created};
  }
  function render(refresh=true){if(closed)return;const c=current();if(!active())return;const query=browseQuery(win.location.hash);view=query.view??storage();const all=filterSqueeks(rows,query,net),freshOrder=all.map(t=>String(t.tokenId));const nextFilter=JSON.stringify(query);if(refresh&&filterKey===nextFilter&&bar.getBoundingClientRect().top<0&&scope===`${c.profile}:${c.owner??''}`){const valid=new Set(freshOrder);order=[...order.filter(id=>valid.has(id)),...freshOrder.filter(id=>!order.includes(id))];}else order=freshOrder;
   filterKey=nextFilter;scope=`${c.profile}:${c.owner??''}`;const byId=new Map(all.map(t=>[String(t.tokenId),t])),sorted=order.map(id=>byId.get(id)).filter(Boolean),last=Math.max(1,Math.ceil(sorted.length/40)),page=Math.min(last,Math.floor(query.page));const slice=sorted.slice((page-1)*40,page*40);
   const max=net?.policy?.maximumLevel??10;if(controls.level.options.length!==max+1){controls.level.replaceChildren();for(let i=0;i<=max;i++){const o=make('option',i?`L${i}`:'Any level');o.value=i?String(i):'';controls.level.append(o);}}
-  for(const[name,n]of Object.entries(controls))n.value=query[name]??'';toggle.textContent=view==='grid'?'Table':'Grid';toggle.setAttribute('aria-label',`Show ${view==='grid'?'table':'grid'}`);const candidates=pairCandidates(rows,net);pairs.textContent=candidates.count==null?'':`Pairs ready to merge: ${candidates.count}`;pairs.setAttribute('aria-pressed',String(query.pairs));pairs.hidden=candidates.count==null;
+  for(const[name,n]of Object.entries(controls))n.value=query[name]??'';toggle.textContent=view==='grid'?'Table':'Grid';toggle.setAttribute('aria-label',`Show ${view==='grid'?'table':'grid'}`);const candidates=pairCandidates(rows,net),complete=indexComplete()&&candidates.count!=null;
+  // A still-loading index (or a scan across all wallets) makes this count jump
+  // and mean little, so it is labelled and hidden until the index is complete.
+  pairs.textContent=complete?`Ready pairs · all wallets: ${candidates.count}`:'';
+  pairs.setAttribute('aria-pressed',String(query.pairs));pairs.hidden=!complete;
   empty.hidden=sorted.length>0;root.hidden=view!=='grid'||!sorted.length;wrap.hidden=view!=='table'||!sorted.length;
   const keep=new Set(slice.map(t=>String(t.tokenId)));for(const child of [...root.children])if(!keep.has(child.dataset.token))child.remove();
   for(const [i,t] of slice.entries()){const {card}=patchCard(t);const detached=!card.isConnected;if(root.children[i]!==card)root.insertBefore(card,root.children[i]??null);if(detached&&!card.needsImage&&!card.querySelector('img')?.getAttribute('src')){if(observer)observer.observe(card);else void card.loadImage?.();}if(card.needsImage&&imagesEnabled()){const image=card.needsImage;delete card.needsImage;freshImage(card,image);}}

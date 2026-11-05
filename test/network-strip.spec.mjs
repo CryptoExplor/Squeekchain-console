@@ -23,7 +23,7 @@ test('strip keeps last good RPM with visible age on failure, then recovers witho
   await page.evaluate(async()=>{v9.statusBlocked=false;await squeek.pollDisplay();});await expect(page.locator('#wheel-rpm')).toHaveText('12.5');await expect(page.locator('#wheel-asof')).toBeHidden();expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
 test('legacy freeze stays inside strip; Activity only opens drawer; unlisted custom RPC is rejected before persistence',async({page})=>{
-  await installV9Fixture(page,{telemetry:true});await page.getByTestId('profile-select').selectOption('sepolia-v6');await expect(page.locator('.network-strip #v6-frozen')).toBeVisible();await expect(page.locator('#genesis-row')).toBeHidden();
+  await installV9Fixture(page,{telemetry:true});await page.getByTestId('profile-select').selectOption('sepolia');await expect(page.locator('.network-strip #v6-frozen')).toBeVisible();await expect(page.locator('#genesis-row')).toBeHidden();
   await page.locator('#holder-history-link').click();await expect(page.getByTestId('activity-drawer')).toBeVisible();expect(await page.locator('#activity-panel > p').count()).toBe(0);await page.getByTestId('activity-drawer').getByTestId('sheet-close').click();
   await page.getByTestId('settings-open').click();await page.getByTestId('rpc-url').fill('https://ethereum-sepolia-rpc.publicnode.com.evil.invalid/');await page.getByTestId('btn-save-rpc').click();await expect(page.getByTestId('rpc-test-result')).toContainText('CSP-listed host');expect(await page.evaluate(()=>localStorage.getItem('wheelhouse:rpc'))).toBeNull();expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });

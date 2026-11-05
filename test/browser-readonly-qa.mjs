@@ -6,13 +6,13 @@ import {chromium} from '@playwright/test';
 import {keccak256} from 'viem';
 import {getProfile} from '../sdk/deployments.js';
 import {PUBLIC_RPCS} from '../sdk/rpc.js';
-import {IMPLEMENTATION_SLOT} from '../sdk/verify.js';
+import {IMPLEMENTATION_SLOT} from '../sdk/verify-chain.js';
 import {observeExplore} from './explore-observer.mjs';
 import {createHash} from 'node:crypto';
 const url=process.env.QA_PREVIEW_URL,head=process.env.QA_HEAD_SHA??'local-unqualified';
 if(!url||!/^https:\/\/[a-z0-9-]+\.wheel-house\.pages\.dev\/?$/i.test(url))throw new Error('QA_PREVIEW_URL must identify the exact Cloudflare preview');
 const directory=path.join('artifacts','live-browser-qa'),report={head,preview:url,scope:'Fresh real Chromium contexts; direct public API/RPC; no wallet, mocks or signing',qualified:false,probes:[],requests:[],httpErrors:[],captures:[]};fs.mkdirSync(directory,{recursive:true});
-const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}:{}),...(process.env.PLAYWRIGHT_NO_SANDBOX==='true'?{args:['--no-sandbox','--disable-dev-shm-usage']}: {})}),profile=getProfile('sepolia-v9');
+const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}:{}),...(process.env.PLAYWRIGHT_NO_SANDBOX==='true'?{args:['--no-sandbox','--disable-dev-shm-usage']}: {})}),profile=getProfile('sepolia');
 let rpcRequests=0,forbidden=false,page;
 async function fresh(){
  const context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();
@@ -20,13 +20,13 @@ async function fresh(){
  page.on('response',response=>{if(response.status()>=400&&PUBLIC_RPCS.some(endpoint=>new URL(endpoint).origin===new URL(response.url()).origin)&&report.httpErrors.length<30)report.httpErrors.push({origin:new URL(response.url()).origin,status:response.status(),retryAfter:response.headers()['retry-after']??null});});
  page.on('requestfailed',request=>{if(report.requests.length<40)report.requests.push({origin:new URL(request.url()).origin,error:request.failure()?.errorText});});
  await page.addInitScript(()=>{
-  localStorage.setItem('wheelhouse:disconnected','true');localStorage.setItem('squeekchain:profile','sepolia-v9');
+  localStorage.setItem('wheelhouse:disconnected','true');localStorage.setItem('squeekchain:profile','sepolia');
  });
  await page.addInitScript(observeExplore);
  return {context,page};
 }
 const capture=async(name,width=1280,focusExplore=false)=>{await page.setViewportSize({width,height:900});await page.evaluate(async()=>{await document.fonts.ready;window.scrollTo(0,0);});if(focusExplore)await page.locator('.explore-stats').evaluate(n=>{n.scrollIntoView({block:'start'});window.scrollBy(0,-72);});if(/\bUnknown\b/.test(await page.locator('body').innerText()))throw new Error('Visible placeholder word outside Developers during '+name);const file=`${name}-${width}.png`;await page.screenshot({path:path.join(directory,file),fullPage:false});report.captures.push(file);};
-const enter=async()=>{const response=await page.goto(url+'/#sepolia-v9/explore?section=leaders',{waitUntil:'domcontentloaded',timeout:45000});if(response.status()!==200)throw new Error('Preview document is unavailable');report.previewHttpStatus=response.status();await page.waitForFunction(()=>window.squeek?.state?.profileKey==='sepolia-v9',{},{timeout:45000});if(await page.evaluate(()=>Boolean(window.ethereum)))throw new Error('QA requires a browser without a wallet provider');};
+const enter=async()=>{const response=await page.goto(url+'/#sepolia/explore?section=leaders',{waitUntil:'domcontentloaded',timeout:45000});if(response.status()!==200)throw new Error('Preview document is unavailable');report.previewHttpStatus=response.status();await page.waitForFunction(()=>window.squeek?.state?.profileKey==='sepolia',{},{timeout:45000});if(await page.evaluate(()=>Boolean(window.ethereum)))throw new Error('QA requires a browser without a wallet provider');};
 async function finish(started,baseline){
  await page.waitForFunction(()=>['complete','incomplete','unavailable'].includes(document.getElementById('explore-content')?.dataset.indexStatus),{},{timeout:420000});
  const result={milliseconds:performance.now()-started,httpRpcRequests:rpcRequests-baseline,...await page.locator('#explore-content').evaluate(root=>({status:root.dataset.indexStatus,indexed:root.dataset.indexed??null,supply:root.dataset.supply??null,blockNumber:root.dataset.scanBlock??null,text:root.querySelector('p')?.textContent})),monitor:await page.evaluate(()=>__qaExplore)};

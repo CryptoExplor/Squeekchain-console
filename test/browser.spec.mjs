@@ -10,7 +10,7 @@ test('offline browser: Wheelhouse identity, default/saved themes, mobile visibil
   await page.goto('/');
   await expect(page).toHaveTitle(/Wheelhouse/);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await expect(page.getByTestId('profile-select')).toHaveValue('sepolia-v9');
+  await expect(page.getByTestId('profile-select')).toHaveValue('sepolia');
   await page.getByRole('button', { name: 'Toggle theme' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.reload();
@@ -34,8 +34,8 @@ test('offline browser: Wheelhouse identity, default/saved themes, mobile visibil
   await page.getByTestId('btn-save-rpc').click();
   await expect(page.getByTestId('banner')).toContainText('HTTPS');
   await page.getByTestId('settings-sheet').getByTestId('sheet-close').click();
-  await page.selectOption('#profile-select', 'sepolia-v9');
-  await expect(page.getByTestId('profile-select')).toHaveValue('sepolia-v9');
+  await page.selectOption('#profile-select', 'sepolia');
+  await expect(page.getByTestId('profile-select')).toHaveValue('sepolia');
   await expect(page.getByTestId('btn-checkpoint')).toBeDisabled();
   await expect(page.getByTestId('tool-call').locator('option[value="squeek_request_merge"]')).toHaveCount(1);
   await page.selectOption('#profile-select', 'mainnet');
@@ -64,7 +64,7 @@ async function installRaceHarness(page) {
   await page.evaluate(async () => {
     window.squeek.destroy();
     const { mount } = await import('/app.js');
-    localStorage.setItem('squeekchain:profile','sepolia-v6'); history.replaceState(null,'','#sepolia-v6/network');
+    localStorage.setItem('squeekchain:profile','sepolia'); history.replaceState(null,'','#sepolia/network');
     const owner = '0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54';
     const network = round => ({ core: { settledThroughRound: String(round), blockHeight: '100', paused: false }, mining: { lagRounds: '0', minted: { sqk: '1' } }, nft: { totalSupply: '2' }, checkpoint: { canCheckpoint: true, nextRound: '2' } });
     const h = window.races = { loads: [], reads: [], sims: [], pendingNetwork: false, pendingSimulation: false, sends: 0, network };
@@ -75,7 +75,7 @@ async function installRaceHarness(page) {
       throw new Error(`Unexpected wallet method ${method}`);
     }, on() {} };
     const holdings = { owner, ethBalance: { eth: '0.1' }, totals: { count: 1, power: '1000', sharePercent: 1, claimable: { sqk: '1' } }, squeeks: [{ tokenId: '1', level: 1, claimable: { sqk: '1' } }] };
-    window.squeek = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), activityReader: async () => new Promise(resolve => { h.resolveReceipt = resolve; }), adapterFactory: (profileKey, load) => {
+    window.squeek = mount({ profileBalanceReader: async () => ({"sepolia":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia":{"wallet":"0","staked":"0","nftPower":"0"}}), activityReader: async () => new Promise(resolve => { h.resolveReceipt = resolve; }), adapterFactory: (profileKey, load) => {
       h.loads.push({ profileKey, ...load });
       return {
         networkStatus: async () => h.pendingNetwork ? new Promise(resolve => h.reads.push({ profileKey, ...load, resolve })) : h.network('10'),
@@ -118,9 +118,9 @@ test('switch during pending RPC: abort the load and discard old-profile data', a
 test('three rapid switches: only the final generation may render', async ({ page }) => {
   await installRaceHarness(page);
   await page.evaluate(() => { window.races.pendingNetwork = true; });
-  await page.selectOption('#profile-select', 'sepolia-v9');
-  await page.selectOption('#profile-select', 'sepolia-v6');
-  await page.selectOption('#profile-select', 'sepolia-v9');
+  await page.selectOption('#profile-select', 'sepolia');
+  await page.selectOption('#profile-select', 'sepolia');
+  await page.selectOption('#profile-select', 'sepolia');
   await page.waitForFunction(() => window.races.reads.length === 3);
   expect(await page.evaluate(() => window.races.reads.map(read => read.signal.aborted))).toEqual([true, true, false]);
   expect(await page.evaluate(() => new Set(window.races.reads.map(read => read.generation)).size)).toBe(3);
@@ -132,8 +132,8 @@ test('three rapid switches: only the final generation may render', async ({ page
   await page.evaluate(() => { window.races.reads[2].resolve(window.races.network('300')); });
   await expect(page.getByTestId('net-round')).toHaveText('300');
   // The baseline Kind stat is shared by equal profiles; retain explicit profile/generation checks.
-  expect(await page.evaluate(() => window.squeek.state.profileKey)).toBe('sepolia-v9');
-  await expect(page.getByTestId('profile-select')).toHaveValue('sepolia-v9');
+  expect(await page.evaluate(() => window.squeek.state.profileKey)).toBe('sepolia');
+  await expect(page.getByTestId('profile-select')).toHaveValue('sepolia');
   await expect(page.getByTestId('net-kind')).toHaveCount(0);
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
   await page.evaluate(() => window.squeek.destroy());
@@ -179,7 +179,7 @@ test('broadcast Activity survives a profile switch, late wallet response and pag
   }, hash);
   await expect(page.getByTestId('activity-list')).toContainText('confirmed');
   expect(await page.evaluate(async () => (await window.pendingSend).reason)).toBe('profile-changed');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('wheelhouse:pending-transactions:v1'))[0])).toMatchObject({ hash, chain: 'Sepolia', label: 'Checkpoint', profile:'sepolia-v6' });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('wheelhouse:pending-transactions:v1'))[0])).toMatchObject({ hash, chain: 'Sepolia', label: 'Checkpoint', profile:'sepolia' });
   await page.reload();
   await expect(page.getByTestId('not-deployed')).toBeVisible();
   await page.getByTestId('wallet-button').click();

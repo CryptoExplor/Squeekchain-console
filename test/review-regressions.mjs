@@ -48,8 +48,8 @@ win.ethereum = {
   },
   on() {},
 };
-win.localStorage.setItem("squeekchain:profile", "sepolia-v9");
-const api = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), doc, win, adapterFactory: () => adapter, fetcher: (...args) => { requests++; return fetchHook(...args); } });
+win.localStorage.setItem("squeekchain:profile", "sepolia");
+const api = mount({ profileBalanceReader: async () => ({"sepolia":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia":{"wallet":"0","staked":"0","nftPower":"0"}}), doc, win, adapterFactory: () => adapter, fetcher: (...args) => { requests++; return fetchHook(...args); } });
 try {
   await api.refresh(); await tick();
   const fields = ['wheel-state', 'wheel-rpm', 'wheel-speed', 'wheel-distance', 'wheel-note'];
@@ -94,7 +94,7 @@ try {
   assert.equal($('wheel-line').hidden,true);
   assert.equal(requests, previousRequests, 'non-Sepolia refreshes never fetch device telemetry');
 
-  const switchingBack = api.switchProfile('sepolia-v9');
+  const switchingBack = api.switchProfile('sepolia');
   assert.equal($('wheel-state').textContent, '—', 'profile change resets rather than reusing old readings');
   assert.equal($('wheel-rpm').textContent, '');
   await switchingBack; release(response(measurement(5000))); await tick();
@@ -131,7 +131,7 @@ try {
   console.log('PASS review: wallet text and verification failure remain visible in base and breakpoint CSS');
 
   verifyFails = false;
-  await api.switchProfile('sepolia-v6');
+  await api.switchProfile('sepolia');
   await api.connect();
   api.selectTab('holdings');
   const key = (name, shiftKey = false) => {

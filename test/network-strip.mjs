@@ -6,7 +6,7 @@ import {createNetworkStrip} from '../web/network-strip.js';
 const html=fs.readFileSync('web/index.html','utf8'),doc=new JSDOM(html).window.document,$=id=>doc.getElementById(id);
 assert.equal(new Set([...doc.querySelectorAll('[id]')].map(n=>n.id)).size,doc.querySelectorAll('[id]').length,'no duplicate element IDs');assert.equal($('verified-chip').dataset.testid,'verified-chip');
 let clock=Date.now();const strip=createNetworkStrip(doc,{now:()=>clock});
-strip.reset('sepolia-v9');assert.equal($('wheel-state').textContent,'—');assert.ok($('wheel-line').classList.contains('muted'));assert.ok($('wheel-reading').hidden);assert.ok($('strip-block').hidden);
+strip.reset('sepolia');assert.equal($('wheel-state').textContent,'—');assert.ok($('wheel-line').classList.contains('muted'));assert.ok($('wheel-reading').hidden);assert.ok($('strip-block').hidden);
 assert.equal(strip.reading({measurement:null}),false);assert.equal($('wheel-state').textContent,'—','successful source with no first reading is not offline');
 strip.offline();assert.equal($('wheel-state').textContent,'Wheel offline');assert.equal($('wheel-rpm').textContent,'');assert.ok($('wheel-reading').hidden);
 strip.network({core:{blockHeight:'8430',blockProgress:'478838171'}});assert.equal($('strip-height').textContent,'8,430');assert.equal($('strip-percent').textContent,'47.9%');assert.equal($('strip-block').hidden,false);
@@ -17,7 +17,7 @@ assert.equal(strip.reading({measurement:null}),false);assert.equal($('wheel-rpm'
 strip.reading({measurement:{...data.measurement,receivedAt:new Date(clock).toISOString(),rpmMilli:0}});assert.equal($('wheel-state').textContent,'Resting');assert.equal($('wheel-rpm').textContent,'0.0');assert.equal($('wheel-reading').hidden,false);assert.ok($('wheel-asof').hidden);
 strip.network({core:{blockHeight:'0',blockProgress:'0'}});assert.equal($('strip-height').textContent,'0');assert.equal($('strip-percent').textContent,'0.0%');
 for(const core of [{},{blockHeight:null},{blockHeight:'Unknown'},{blockHeight:'1',blockProgress:'1000000001'},{blockHeight:'1',blockProgress:'-1'}]){strip.network({core});assert.ok($('strip-next').hidden);}
-strip.reset('sepolia-v6');assert.ok($('wheel-line').hidden);strip.reset('sepolia-v9');strip.offline();assert.equal($('wheel-state').textContent,'Wheel offline','no cross-profile device reuse');
+strip.reset('sepolia');assert.ok($('wheel-line').hidden);strip.reset('sepolia');strip.offline();assert.equal($('wheel-state').textContent,'Wheel offline','no cross-profile device reuse');
 assert.deepEqual([...doc.querySelectorAll('nav [data-tab]')].map(node=>node.textContent),['Squeeks','Art','Explore','Info']);
 assert.equal(doc.querySelector('#panel-activity'),null);assert.equal($('network-events'),null,'removed incorrect public round/checkpoint list');assert.ok($('activity-drawer').contains($('account-activity')));assert.equal(doc.querySelector('#activity-panel > p'),null);
 assert.ok(doc.querySelector('.network-strip').contains($('genesis-row')));assert.ok(doc.querySelector('.network-strip').contains($('v6-frozen')));assert.equal(doc.querySelector('.network-strip').lastElementChild,$('genesis-row'));

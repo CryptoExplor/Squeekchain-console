@@ -14,7 +14,7 @@ const html = fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf
 const dom = new JSDOM(html, { url: 'https://console.test/' });
 const { window: win } = dom;
 const $ = id => win.document.getElementById(id);
-win.localStorage.setItem("squeekchain:profile", "sepolia-v9");
+win.localStorage.setItem("squeekchain:profile", "sepolia");
 let rejectNetwork = false, pending, selectedClaim, selectedMerge;
 const adapter = {
   networkStatus: async () => { if (pending) return pending; if (rejectNetwork) throw new Error('RPC offline'); return net; },
@@ -26,7 +26,7 @@ const adapter = {
   art: async tokenId => ({ tokenId, name: 'Test Squeek', attributes: [], image: 'data:image/svg+xml;base64,PHN2Zy8+' }),
 };
 win.ethereum = { request: async ({ method }) => method === 'eth_chainId' ? '0xaa36a7' : [owner], on() {} };
-const api = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}), doc: win.document, win, adapterFactory: () => adapter, fetcher: async () => response() });
+const api = mount({ profileBalanceReader: async () => ({"sepolia":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia":{"wallet":"0","staked":"0","nftPower":"0"}}), doc: win.document, win, adapterFactory: () => adapter, fetcher: async () => response() });
 await api.refresh();
 assert.equal(win.document.documentElement.dataset.theme, 'light');
 assert.equal($('btn-theme').getAttribute('aria-pressed'), 'false');
@@ -49,7 +49,7 @@ assert.match((await api.callTool('squeek_request_merge',{survivor:'1',donor:'2'}
 assert.equal(selectedMerge,undefined,'request merge must refuse before construction without the burn acknowledgement');
 await api.loadArt(['1']);
 assert.equal($('art-grid').querySelectorAll('img').length, 1);
-await api.switchProfile('sepolia-v6');
+await api.switchProfile('sepolia');
 net.checkpoint.roundSettled = false;
 await api.refresh();
 assert.equal($('settlement-notice').classList.contains('hidden'),true);
@@ -88,12 +88,12 @@ assert.equal($('wheel-rpm').textContent, '');assert.equal($('wheel-line').hidden
 // An in-flight testnet read must never repopulate the mainnet page.
 let release;
 pending = new Promise(resolve => { release = resolve; });
-const switching = api.switchProfile('sepolia-v9');
+const switching = api.switchProfile('sepolia');
 await api.switchProfile('mainnet');
 release(net); await switching; pending = null;
 assert.equal($('net-round').textContent, '—');
 rejectNetwork = true;
-await api.switchProfile('sepolia-v9');
+await api.switchProfile('sepolia');
 assert.equal($('verified-chip').textContent, 'Unavailable');
 assert.equal($('btn-checkpoint').disabled,true);
 assert.equal($('banner').textContent,"Can't verify right now");

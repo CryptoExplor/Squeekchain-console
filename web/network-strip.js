@@ -1,6 +1,7 @@
+import { getProfile } from '../sdk/deployments.js';
 // Presentation only. Device readings never become transaction inputs.
 import {telemetryView} from './telemetry.js';
-export function createNetworkStrip(doc,{now=()=>Date.now()}={}) {
+export function createNetworkStrip(doc,{now=()=>Date.now(),wheelEnabled=key=>Boolean(getProfile(key).apiBase)}={}) {
   const $=id=>doc.getElementById(id);
   const known=value=>value!=null&&/^\d+$/.test(String(value));
   let profile,last;
@@ -36,8 +37,8 @@ export function createNetworkStrip(doc,{now=()=>Date.now()}={}) {
         $('strip-block').hidden=true;
         loading();
       }
-      $('wheel-line').hidden=key!=='sepolia-v9';
-      $('strip-status').hidden=key!=='sepolia-v9';
+      $('wheel-line').hidden=!wheelEnabled(key);
+      $('strip-status').hidden=!wheelEnabled(key);
     },
     loading,
     network(net) {

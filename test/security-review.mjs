@@ -11,12 +11,12 @@ import {displayFixtures,fixtureRoute,owner} from './fixtures/display-api.mjs';
 import {getProfile} from '../sdk/deployments.js';
 import {displayKey} from '../sdk/display-cache.js';
 import {createSnapshotGuard} from '../sdk/rpc.js';
-import {createSessionVerifier} from '../sdk/verify.js';
-import {DEPLOYMENT} from '../sdk/record.js';
+import {createChainVerifier} from '../sdk/verify-chain.js';
+import {DEPLOYMENT} from './fixtures/graph.mjs';
 import {isRpcProgrammingError,isRpcAvailabilityError} from '../sdk/rpc-errors.js';
 const original={any:Object.getOwnPropertyDescriptor(AbortSignal,'any'),timeout:Object.getOwnPropertyDescriptor(AbortSignal,'timeout')};
 const response=data=>({ok:true,status:200,headers:new Headers(),json:async()=>data});
-const profile=getProfile('sepolia-v9'),fixture=displayFixtures();
+const profile=getProfile('sepolia'),fixture=displayFixtures();
 function cache(){const values=new Map();return {get:async key=>values.get(key),set:async(k,v)=>values.set(k,v),delete:async k=>values.delete(k),values};}
 try{
  delete AbortSignal.any;delete AbortSignal.timeout;
@@ -57,10 +57,10 @@ const snapshot=await createSnapshotGuard(client,peers).snapshot();assert.equal(s
 const word=address=>'0x'+address.slice(2).padStart(64,'0'),good=['core','mining'].flatMap(name=>[word(DEPLOYMENT.implementations[name]),word(DEPLOYMENT.proxyAdmins[name])]);
 // Prewarm the verifier's public caller-owned cache to exercise its warm slot path.
 const key=[DEPLOYMENT.release,DEPLOYMENT.core,DEPLOYMENT.mining,...['core','mining'].flatMap(name=>[DEPLOYMENT.implementations[name],DEPLOYMENT.proxyAdmins[name]])].join(':').toLowerCase();
-const verifier=createSessionVerifier(new Map([[key,{ok:true,trusted:true,blockNumber:'99'}]]));let reads=0;
+const verifier=createChainVerifier(new Map([[key,{ok:true,trusted:true,blockNumber:'99'}]]));let reads=0;
 await assert.rejects(verifier.prepare(client,snapshot,async(s,requests)=>{reads++;assert.equal(s.blockHash,hash);assert.equal(requests.length,4);const upgraded=[...good];upgraded[0]=word('0x1111111111111111111111111111111111111111');return [good,upgraded];}),/independent implementation\/admin slot/);assert.equal(reads,1);
 const checked=await verifier.prepare(client,snapshot,async()=>[good,good]);assert.equal(checked.value.cacheHit,true);
-const coldCache=new Map(),coldVerifier=createSessionVerifier(coldCache,{...DEPLOYMENT,runtimeHashes:{core:keccak256('0x6001'),mining:keccak256('0x6001')}});
+const coldCache=new Map(),coldVerifier=createChainVerifier(coldCache,{...DEPLOYMENT,runtimeHashes:{core:keccak256('0x6001'),mining:keccak256('0x6001')}});
 await assert.rejects(coldVerifier.prepare(client,snapshot,async()=>{const valid=[...good,...Array(7).fill('0x6001')],forged=[...valid];forged[4]='0x6002';return [valid,forged];}),/independent implementation runtime hash/);assert.equal(coldCache.size,0);
 console.log('PASS hash-agreeing falsified-state regression: correct header hash cannot bypass independent v6 implementation/admin checks, including cache hits');
 const ci=fs.readFileSync('.github/workflows/ci.yml','utf8');assert.ok(ci.indexOf('git diff --exit-code -- web/bundle.js web/tools.json')<ci.indexOf('- run: npm test'));console.log('PASS generated browser-asset drift guard runs before tests can overwrite stale artifacts');

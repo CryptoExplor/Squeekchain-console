@@ -5,7 +5,8 @@ import { createWalletClient, custom, encodeFunctionData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 import { createSqueekchain } from '../sdk/squeekchain.js';
-import { DEPLOYMENT } from '../sdk/record.js';
+import { getProfile } from '../sdk/deployments.js';
+const DEPLOYMENT = getProfile().addresses;
 import { miningAbi } from '../sdk/abi.js';
 
 try {

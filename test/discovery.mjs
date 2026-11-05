@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { indexedDB } from 'fake-indexeddb';
 import { createDiscoveryStore, discoverOwnedIds } from '../sdk/discovery.js';
-import { nftAbi } from '../sdk/abi.js';
+import { nftAbi } from '../sdk/abi-core-20261103.js';
 const owner = '0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54';
 const other = '0x0000000000000000000000000000000000000001';
 const nft = '0x0eAF3E0d40A0a8E5a6Ac030b2459E9FB0B7905c6';

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { PUBLIC_RPCS } from '../sdk/rpc.js';
 import { observeLiveRpc } from './live-network.mjs';
 
-for (const profile of ['sepolia-v6','sepolia-v9']) test(`real browser: public CORS Sepolia RPCs and ${profile} same-block verification/reads`, async ({ page }, testInfo) => {
+for (const profile of ['sepolia','sepolia']) test(`real browser: public CORS Sepolia RPCs and ${profile} same-block verification/reads`, async ({ page }, testInfo) => {
   const network = observeLiveRpc(page, PUBLIC_RPCS);
   let toolResult;
   try {

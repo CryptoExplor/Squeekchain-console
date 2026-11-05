@@ -3,8 +3,8 @@
  *
  * Profile-driven: each deployment profile maps onto an adapter with the same surface
  * (verify / networkStatus / walletStatus / capability-driven actions / art).
- *   sepolia-v9   → pinned issuance v9 + staking + NFT graph (guarded reads/actions)
- *   sepolia-v6   → the published SqueekMining v6 graph        (reads + checkpoint/claim/merge)
+ *   sepolia  → the current published deployment (guarded reads/actions)
+ *   mainnet  → not deployed: no reads and no actions
  *   mainnet      → no deployment
  *
  * Every action is simulated first and signed in the user's wallet. No key ever reaches this code.
@@ -14,13 +14,11 @@ import { createNetworkStrip } from './network-strip.js';
 import {
   createDisplayApi, createDisplayCache, displayKey, apiNetwork, apiWallet, createWheelPoller, DAY, DISPLAY_TTL,
   createSqueekchain,
-  createSqueek9,
   PROFILES,
   DEFAULT_PROFILE,
   getProfile,
   TOOL_SPECS,
   buildManifest,
-  CHAIN,
   abortable,
   createDiscoveryStore,
   createRpcContext,
@@ -28,10 +26,13 @@ import {
   ACTION_REASONS,
   PUBLIC_RPC_ENDPOINTS,
   readToolResult, runPublicReadTool, toolProfile, settlementStatus, requireBurn,
-  profileBalances, chooseProfile, profileFromHash, profileInput, parseEther, formatEther, profileHeld, profileCountLabel, unstakeQuoteError,
+  profileFromHash, profileInput, parseEther, formatEther, unstakeQuoteError, SQUEEKS_POLICY,
 } from "./bundle.js";
 
 import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
+
+// Sepolia is the only chain Wheelhouse talks to; the profile decides the rest.
+const SEPOLIA_CHAIN_ID = 11155111;
 import {holderRoute,watchAddress,watchHash} from './holder-routes.js';
 import {createHoldings} from './holdings.js';
 import {formingBlock} from './wheel-feed.js';
@@ -45,7 +46,6 @@ const outstandingPrompts=new WeakMap();
 const EXPLORER = "https://eth-sepolia.blockscout.com";
 const THEME_KEY = "squeekchain:theme";
 
-const profileCountText=count=>profileCountLabel(count).replace(/\bUnknown\b/g,'—');
 export function mount({ doc = document, win = window, adapterFactory, fetcher = globalThis.fetch, activityReader, profileBalanceReader } = {}) {
   const $ = (id) => doc.getElementById(id);
   let workspace,workspaceReady;
@@ -125,7 +125,6 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const wallet=createWallet({win,storage:store,pick:pickWallet});
   const state = {
     profileKey: profileFromHash(win.location.hash) ?? profileInput(store.get("squeekchain:profile")),
-    profileCounts: {},
     adapter: null,
     get account(){return wallet.get().account;},
     get chainId(){return wallet.get().chainId;},
@@ -161,17 +160,26 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
   const hideBanner = () => {readBanner=false;el.banner.classList.add('hidden');};
   const clearReadBanner=()=>{if(readBanner)hideBanner();};
+  // The chip and the banner are ONE state. Never let a green "Verified" chip sit
+  // above a stale "Can't verify right now" banner.
+  function trustDisplay({kind,chipText,bannerKind=null,title=''}) {
+    const chip=$('profile-status');
+    chip.textContent=chipText;
+    chip.className=`chip ${kind==='verified'?'ok':kind==='unavailable'?'warn':'bad'}`;
+    chip.title=el.verified.title=title;
+    $('trust-checklist').dataset.state=kind==='verified'?'verified':kind==='unavailable'?'unknown':'stopped';
+    if(kind==='verified')clearReadBanner();
+    else showBanner(BANNER_READ_FAILURE,bannerKind??(kind==='unavailable'?'warn':'bad'));
+  }
+  const BANNER_READ_FAILURE="Can't verify right now";
   function showReadFailure(error,scope) {
     const failure=rpcToolError(error,state.adapter?.rpcDiagnostics?.()??[]);
     state.lastReadFailure={scope,profile:state.profileKey,...failure};
     const availability=failure.diagnostics.availability;
-    const message="Can't verify right now";
     el.verified.textContent=availability?'Unavailable':'Stopped';
-    $('profile-status').textContent=availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Unverified';
-    $('profile-status').className=`chip ${availability?'warn':'bad'}`;
-    $('profile-status').title=el.verified.title='';
-    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent=UNKNOWN;$('trust-result').textContent=message;$('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
-    showBanner(message,availability?'warn':'bad');readBanner=true;
+    trustDisplay({kind:availability?'unavailable':'mismatch',chipText:availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Unverified'});
+    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent=UNKNOWN;$('trust-result').textContent=BANNER_READ_FAILURE;$('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
+    readBanner=true;
   }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
   const num = formatNumber;
@@ -179,7 +187,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const setStat = (node, value, formatter = valueText) => {const stat=node.closest('.stat');if(stat)Stat(stat).set(value,formatter);else node.textContent=valueText(formatter(value));};
   const json = (v) => JSON.stringify(v, null, 2);
   const actionNames={merge:'Merge Squeeks',mergeDeposited:'Merge deposited',deposit:'Deposit',withdraw:'Withdraw',claim:'Claim',claimAndStake:'Claim and stake',stake:'Stake',unstake:'Unstake',approveNft:'Approve one Squeek',approveAll:'Approve all Squeeks',approveSqk:'Approve SQK'};
-  const technical=value=>JSON.stringify(value,(_key,v)=>typeof v==='string'&&v.includes(getProfile('sepolia-v9').identities?.release??'\u0000')?'[internal deployment]':v,2);
+  const hiddenDeployments=()=>Object.values(PROFILES).flatMap(profile=>[profile.identities?.release,profile.identities?.key].filter(Boolean));
+  const technical=value=>JSON.stringify(value,(_key,v)=>typeof v==='string'&&hiddenDeployments().some(secret=>v.includes(secret))?'[internal deployment]':v,2);
   const showOut = (node,value) => {
     if(node.id==='tool-result'){node.textContent=technical(value);node.classList.remove('hidden');return;}
     node.replaceChildren();const title=doc.createElement('p');title.textContent=value.ok?'Simulation passed':value.reason?errorMessage({message:value.reason}):'Preview unavailable';node.append(title);
@@ -190,7 +199,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
   const errorMessage = err => {
     const message=String(err?.message??err);
-    return err?.revert||/\b(?:storage|slots?|digest|revision|release|runtime)\b|\w+\(/i.test(message)||message.includes(getProfile('sepolia-v9').identities.release)
+    return err?.revert||/\b(?:storage|slots?|digest|revision|release|runtime)\b|\w+\(/i.test(message)||hiddenDeployments().some(secret=>message.includes(secret))
       ? 'The network or contract check failed. Actions are stopped. See Info › Developers for technical details.' : message;
   };
   const provider = () => wallet.provider();
@@ -237,7 +246,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     // API rows are display hints, NEVER a transaction ID/eligibility source.
     if(!adapterFactory&&['mergePreview','claimPreview','actionPreview'].includes(method)){
       const action=method==='mergePreview'?'merge':method==='claimPreview'?'claim':args[1];
-      const needsIds=['merge','mergeDeposited','deposit','withdraw','approveNft'].includes(action)||(action==='claim'&&getProfile(load.profileKey).abiSet!=='v9'&&args[1]?.length);
+      const needsIds=['merge','mergeDeposited','deposit','withdraw','approveNft'].includes(action);
       if(needsIds){const live=await load.adapter.walletStatus(args[0]);assertCurrent(load);const owned=id=>{const found=live.squeeks.find(item=>String(item.tokenId)===String(id));if(!found)throw new Error('Token not in fresh on-chain inventory');return found.tokenId;};
         if(method==='mergePreview')args=[args[0],owned(args[1]),owned(args[2]),args[3]];
         else if(method==='claimPreview')args=[args[0],args[1].map(owned)];
@@ -258,7 +267,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const networkView=createNetworkView({doc,source:recordSource,current:isCurrent,visible:()=>!$('panel-squeeks').classList.contains('hidden'),readContext:()=>{const load=captureLoad();return {load,api:displayApi(load)};}});
   function refreshNetworkExtras(){const load=captureLoad();return networkView.refresh(load,displayApi(load),state.account);}
 
-  function displayApi(load){if(adapterFactory||load.profileKey!=='sepolia-v9')return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
+  function displayApi(load){if(adapterFactory||!getProfile(load.profileKey).apiBase)return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
   function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000));$('display-age').textContent=age?`as of ${age} min`:'';}
 
   function displayVerification(value){
@@ -273,14 +282,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
   async function displayRead(load,kind,owner,{force=false}={}){
     if(adapterFactory)return readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
-    const profile=getProfile(load.profileKey),key=displayKey(profile,kind+':'+(owner??'')),ttl=profile.abiSet==='v6'&&kind==='network'?DAY:DISPLAY_TTL;
-    let saved=lastGood.get(key);if(!saved&&profile.abiSet==='v6'&&kind==='network')saved=await displayCache.get(key);assertCurrent(load);
-    if(!force&&profile.abiSet==='v6'&&kind==='network'&&saved&&Date.now()-saved.at<ttl)return {...saved.value,source:{kind:'cached-rpc',at:saved.at}};
+    const profile=getProfile(load.profileKey),key=displayKey(profile,kind+':'+(owner??'')),ttl=DISPLAY_TTL;
+    let saved=lastGood.get(key);assertCurrent(load);
     try{let value;const api=displayApi(load);
       if(api){if(kind==='network'){const economy=await api.economy(),core=await api.core();value=apiNetwork(core,economy);}
         else {const net=!force&&state.net?.source?.kind==='api'?state.net:await displayRead(load,'network',null,{force});value=apiWallet(await api.account(owner),net,owner);}
       }else value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
-      assertCurrent(load);if(!value.source)value={...value,source:{kind:'rpc',at:Date.now()}};const entry={value,at:value.source.at};lastGood.set(key,entry);if(profile.abiSet==='v6'&&kind==='network')await displayCache.set(key,entry);return value;
+      assertCurrent(load);if(!value.source)value={...value,source:{kind:'rpc',at:Date.now()}};const entry={value,at:value.source.at};lastGood.set(key,entry);return value;
     }catch(error){assertCurrent(load);if(error.name==='TypeError'&&!error.kind)throw error;if(error.name==='RpcTrustError'||error.kind==='mismatch'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
       if(error.kind==='unavailable'||error.kind==='schema'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
       if(saved&&Date.now()-saved.at<ttl&&(error.kind==='transport'||error.name==='TypeError'))return {...saved.value,source:{...saved.value.source,kind:saved.value.source?.kind==='api'?'api':'cached-rpc',at:saved.at,stale:true}};
@@ -341,27 +349,22 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const profile = getProfile(profileKey);
     if (!profile.addresses) return null;
     if (adapterFactory) return adapterFactory(profileKey, { signal: loadController.signal, generation });
-    return profile.abiSet === "v9"
-      ? createSqueek9({ profileKey, cache: store, verificationCache, chainCache, discoveryCache, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null })
-      : createSqueekchain({ addresses: profile.addresses, cache: store, verificationCache, chainCache, discoveryCache, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null });
+    return createSqueekchain({ profileKey, cache: store, verificationCache, chainCache, discoveryCache, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null });
   }
 
   function renderProfileOptions() {
-    el.profileSelect.replaceChildren(
-      ...Object.values(PROFILES).map((p) => {
-        const option = doc.createElement("option");
-        option.value = p.key;
-        const count = state.profileCounts[p.key];
-        option.textContent = p.label + (state.account && p.addresses ? ` · ${profileCountText(count)}` : "");
-        // Mainnet remains selectable as an honest launch-status view.
-        return option;
-      }),
-    );
+    // Two networks only: the published Sepolia deployment and mainnet, which is
+    // listed as not deployed and never gets guessed addresses.
+    el.profileSelect.replaceChildren(...Object.values(PROFILES).map(profile => {
+      const option = doc.createElement("option");
+      option.value = profile.key;
+      option.textContent = profile.label;
+      return option;
+    }));
     el.profileSelect.value = state.profileKey;
     const badge = $('profile-status');
     badge.removeAttribute('aria-label');
-    $('profile-choice').classList.toggle('hidden', !state.account || !(profileHeld(state.profileCounts['sepolia-v6']) && profileHeld(state.profileCounts['sepolia-v9'])));
-    $('profile-choice').textContent = `v6: ${profileCountText(state.profileCounts['sepolia-v6'])}. v9: ${profileCountText(state.profileCounts['sepolia-v9'])}. Choose either profile in the selector.`;
+    $('profile-choice').classList.add('hidden');
   }
 
   async function switchProfile(profileKey, { preserveWallet = false, syncWallet = false } = {}) {
@@ -438,7 +441,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     selectTab(currentRoute());
   }
 
-  const networkStrip = createNetworkStrip(doc);
+  const networkStrip = createNetworkStrip(doc,{wheelEnabled:key=>Boolean(getProfile(key).apiBase)});
   let wheelOffline=false,profileRead;
   const capabilities = () => ({...getProfile(state.profileKey).capabilities,reasons:ACTION_REASONS});
 
@@ -448,7 +451,6 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     networkStrip.reset(state.profileKey);
     networkStrip.network(null);
     for(const id of ['net-progress','net-squeeks','net-paused'])$(id).textContent=UNKNOWN;
-    $('v6-frozen').classList.toggle('hidden',profile.abiSet!=='v6');
     $("holder-rewards-notice").textContent = ""; $("holder-rewards-notice").classList.add("hidden");
     $("settlement-status").textContent = "";
     el.net.settlement.textContent = "";
@@ -468,7 +470,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     renderPolicy(null);
     renderContracts(profile);
     renderCapabilities(profile);
-    el.net.chain.textContent = profile.chainId === CHAIN.id ? "Sepolia" : "Ethereum";
+    el.net.chain.textContent = profile.chainId === SEPOLIA_CHAIN_ID ? "Sepolia" : "Ethereum";
     el.net.release.textContent = profile.addresses?`${profile.short.toUpperCase()} · Sepolia`:"Not deployed";
     el.net.notice.textContent = profile.addresses?"Test network. Use test funds only.":"Not deployed on Ethereum.";
     el.net.notice.className = `notice ${profile.addresses ? "" : "warn"}`;
@@ -500,6 +502,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('trust-time').textContent=lastVerificationTime==null?UNKNOWN:new Date(lastVerificationTime).toISOString();
   }
   function renderTrust(v) {
+    if(v?.ok&&v?.trusted)clearReadBanner();
     lastVerificationTime=v?Date.now():null;
     $('trust-block').textContent=valueText(v?.blockNumber ?? state.net?.snapshot?.blockNumber);
     if(v?.ok||!v&&!state.lastReadFailure)$('rpc-diagnostics').textContent='';
@@ -565,7 +568,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     else if(state.net)networkStrip.network(state.net);
   }
   async function refreshTelemetry({ reset = true } = {}) {
-    const load=captureLoad(),enabled=state.profileKey==='sepolia-v9';
+    const load=captureLoad(),enabled=Boolean(getProfile(state.profileKey).apiBase);
     if(reset){networkStrip.loading();for(const id of ['wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-note').textContent=enabled?'Waiting for a device reading.':'No live device reading for this profile.';}
     if(!enabled)return;
     try{const api=displayApi(load);const result=await viewAwait(load,()=>api?api.status():telemetry.read({signal:load.signal}));assertCurrent(load);wheelReading(load,api?result.data:result,api?result:{});}
@@ -581,7 +584,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     try {
       await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: profile.hexChainId }] });
     } catch (err) {
-      if ((err?.code === 4902 || /Unrecognized chain/i.test(err?.message ?? "")) && profile.chainId === CHAIN.id) {
+      if ((err?.code === 4902 || /Unrecognized chain/i.test(err?.message ?? "")) && profile.chainId === SEPOLIA_CHAIN_ID) {
         if(!currentRequest())return;
         await p.request({
           method: "wallet_addEthereumChain",
@@ -590,7 +593,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
               chainId: profile.hexChainId,
               chainName: "Sepolia",
               nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-              rpcUrls: CHAIN.rpcUrls,
+              rpcUrls: PUBLIC_RPC_ENDPOINTS.map(endpoint => typeof endpoint === "string" ? endpoint : endpoint.url),
               blockExplorerUrls: [EXPLORER],
             },
           ],
@@ -624,11 +627,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const load=captureLoad(),account=state.account;
     if(!account||!state.adapter||state.chainId!==11155111)return;
     try{
-      const counts=await viewAwait(load,()=>profileBalanceReader?profileBalanceReader(account):profileBalances(account,{rpcUrl:store.get('wheelhouse:rpc')||undefined,provider,chainCache,discoveryCache,signal:load.signal}));
-      assertCurrent(load);state.profileCounts=counts;renderProfileOptions();
-      const chosen=state.watchOnly||/\/squeek\//.test(win.location.hash)?state.profileKey:chooseProfile(state.profileKey,counts);
-      if(chosen!==state.profileKey){await switchProfile(chosen,{preserveWallet:true});return;}
-    }catch(error){if(!isCurrent(load))return;state.profileCounts={};renderProfileOptions();}
+      if(profileBalanceReader)await viewAwait(load,()=>profileBalanceReader(account));
+      assertCurrent(load);renderProfileOptions();
+    }catch(error){if(!isCurrent(load))return;renderProfileOptions();}
     await refreshAll();
   }
   function onWallet(next,previous,reason){
@@ -637,8 +638,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const changed=next.account?.toLowerCase()!==previous.account?.toLowerCase()||next.chainId!==previous.chainId||next.providerInfo?.rdns!==previous.providerInfo?.rdns;
     if(!changed||(!next.account&&!previous.account&&next.chainId===previous.chainId))return;
     const wasWatch=state.watchOnly||state.inspected&&state.inspected.toLowerCase()!==previous.account?.toLowerCase();
-    resetLoad();chainCache.clear();dialog.close();state.lastReadFailure=null;closeWalletMenu();state.profileCounts={};
-    if(previous.account&&next.account?.toLowerCase()!==previous.account.toLowerCase())pendingSwitchNotice();
+    resetLoad();chainCache.clear();dialog.close();state.lastReadFailure=null;closeWalletMenu();    if(previous.account&&next.account?.toLowerCase()!==previous.account.toLowerCase())pendingSwitchNotice();
     if(!wasWatch)state.inspected=next.account;
     renderHolder(null);renderProfileOptions();renderCheckpointGate();renderActivity(activity.list());
     if(!getProfile(state.profileKey).addresses)return;
@@ -697,7 +697,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       ticket.rpcPending=true;
       // The wallet sets network gas and fees; never forward preview fee/gas overrides.
       const response=Promise.resolve().then(()=>p.request({method:'eth_sendTransaction',params:[{from:owner,to:tx.to,data:tx.data,value:`0x${BigInt(tx.value??0).toString(16)}` }]})).then(result=>{
-        activity.record(result,label,CHAIN.id,load.profileKey,owner);void activity.refresh();
+        activity.record(result,label,SEPOLIA_CHAIN_ID,load.profileKey,owner);void activity.refresh();
         if(ticket.cancelled||!isCurrent(load))void followLateHash(result,load.profileKey,owner);
         return result;
       }).finally(()=>{if(outstandingPrompts.get(p)===ticket)outstandingPrompts.delete(p);ticket.notice?.remove();if(!destroyed){renderCheckpointGate();renderHolder(state.status,state.plan);}});
@@ -733,11 +733,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const advancement=hasRound&&previous!=null&&BigInt(round)>previous&&core.paused!==true?' Mining live: rounds advanced.':'';
     const stalled=settlementStatus(net).stalled===true;
     const notice=stalled?`Rewards paused: settlement stopped at round ${round}.`:'';
-    for (const node of [el.net.settlement,$('holder-rewards-notice')]) { const text=node===el.net.settlement&&getProfile(state.profileKey).abiSet==='v6'?'':notice;node.textContent=text;node.classList.toggle('hidden',!text); }
+    for (const node of [el.net.settlement,$('holder-rewards-notice')]) { node.textContent=notice;node.classList.toggle('hidden',!notice); }
     $('settlement-status').textContent=advancement.trim();
     setStat(el.net.blocks, core.blockHeight, num);
     setStat(el.net.lag, mining.lagRounds, value => num(value) === UNKNOWN ? UNKNOWN : `${num(value)} ${BigInt(value)===1n?'round':'rounds'}`);
-    const v9=getProfile(state.profileKey).abiSet==='v9';
+    const v9=Boolean(getProfile(state.profileKey).addresses);
     setStat(el.net.issued,net.supply?.issued??(v9?mining.issued:mining.minted),sqk);
     setStat($('net-progress'),core.blockProgress,value=>/^\d+$/.test(String(value))&&BigInt(value)<=1000000000n?`${(Number(value)/10000000).toFixed(1)}%`:UNKNOWN);
     for(const panel of ['Network'])recordSource(panel,net.source?.kind==='api'?'api':'rpc',net.source?.reason??(net.source?.stale?'Cached response; live request unavailable':net.source?.kind==='cached-rpc'?'24-hour display cache':null));
@@ -765,7 +765,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   function columnsForProfile() {
-    const isV9 = getProfile(state.profileKey).abiSet === "v9";
+    const isV9 = Boolean(getProfile(state.profileKey).addresses);
     return isV9
       ? [
           { key: "tokenId", label: "token" },
@@ -810,7 +810,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     workspace?.sync(status);if(status&&!workspace)void ensureWorkspace().then(w=>{if(state.status===status)w.sync(status);});
     renderCheckpointGate();
     const caps = capabilities();
-    const isV9 = getProfile(state.profileKey).abiSet === 'v9';
+    const isV9 = Boolean(getProfile(state.profileKey).addresses);
     el.holder.power.parentElement.querySelector('.label').textContent = isV9 ? 'Deposited' : 'Power';
     const inspected=status?.owner??state.inspected??state.account;
     el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);
@@ -876,10 +876,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       verifiedForGeneration=v;state.lastReadFailure=null;
       renderTrust(v);
       el.verified.textContent = v.ok && v.trusted ? "Verified" : "Stopped";
-      el.verified.className = "sr-only"; $("profile-status").className = `chip ${v.ok && v.trusted ? "ok" : "bad"}`;
-      $("profile-status").textContent = v.ok && v.trusted ? "Verified" : "Mismatch: stop";
-      el.verified.title = v.ok && v.trusted ? `Network and contract checks passed at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; latest check at block ${v.blockNumber ?? "unknown"}. Two independent connections agree.` : "Network or contract checks did not match. Actions are stopped.";
-      $("profile-status").title = el.verified.title;
+      el.verified.className = "sr-only";
+      trustDisplay({kind:v.ok&&v.trusted?'verified':'mismatch',chipText:v.ok&&v.trusted?'Verified':'Mismatch: stop',
+        title:v.ok&&v.trusted?`Network and contract checks passed at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; latest check at block ${v.blockNumber ?? "unknown"}. Two independent connections agree.`:"Network or contract checks did not match. Actions are stopped."});
   }
 
   async function refreshNetwork(options={}) {
@@ -1023,7 +1022,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for (const batch of preview.batches) {
       if (!isCurrent(load) || state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet or profile changed. Stopped.");
       const fresh = await readFor(load, "claimPreview", owner, batch.tokenIds);
-      const v9=getProfile(load.profileKey).abiSet==='v9';
+      const v9=Boolean(getProfile(load.profileKey).addresses);
       if (!fresh.ok || fresh.batches.length!==1 || (v9?BigInt(fresh.batches[0].amount.base)<BigInt(batch.amount.base):fresh.batches[0].amount.base!==batch.amount.base) || recipientOf(fresh,owner)!==recipientOf(preview,owner))throw new Error('Claim outcome changed. Review a fresh preview; no automatic retry.');
       if(v9&&BigInt(fresh.batches[0].amount.base)>BigInt(batch.amount.base)){showClaimIncrease(batch.amount,fresh.batches[0].amount);showOut(el.holder.claimOut,fresh);}
       receipts.push(await sendTransaction(fresh.batches[0].tx, 'Claim SQK', owner, load));
@@ -1465,7 +1464,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   async function selectPlannerStep(step,load){try{assertCurrent(load);if(!canUseHolder())return;const fresh=await readFor(load,'walletStatus',state.account);assertCurrent(load);if(step.kind==='custody'){const token=fresh.squeeks.find(t=>String(t.tokenId)===step.tokenId);if(!token||Boolean(token.deposited)!==(step.action==='withdraw'))throw new Error('Pair changed');renderHolder(fresh,fresh.mergePlan);holdings.selectAction(step.action,[token.tokenId]);return;}const a=fresh.squeeks.find(t=>String(t.tokenId)===step.survivor),b=fresh.squeeks.find(t=>String(t.tokenId)===step.donor);if(!a||!b||a.level!==b.level||Boolean(a.deposited)!==Boolean(b.deposited))throw new Error('Pair changed');renderHolder(fresh,fresh.mergePlan);holdings.selectPair(a.tokenId,b.tokenId);if(a.deposited){$('v9-action').value='mergeDeposited';renderActionFields();}else{$('v9-action').value='merge';renderActionFields();}$('merge-selection').scrollIntoView?.({block:'center'});}catch(error){toast(errorMessage(error),'err');}}
   let explore,exploreReady;
   async function ensureExplore(){exploreReady??=import('./explore.js').then(({createExploreView})=>explore=createExploreView({doc,win,root:$('explore-content'),capture:captureLoad,current:isCurrent,readerOptions:load=>({profile:getProfile(load.profileKey),rpcUrl:store.get('wheelhouse:rpc')||undefined,signal:load.signal,chainCache,verificationCache}),loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),source:recordSource,onTrustError:clearDisplayMismatch}));return exploreReady;}
-  async function ensureWorkspace(){workspaceReady??=import('./holder-workspace.js').then(({initHolderWorkspace})=>workspace=initHolderWorkspace({doc,win,state,captureLoad,isCurrent,read:readFor,getApi:load=>displayApi(load)??state.adapter?.holderApi,loadImage:loadHolderImage,canAct:canUseHolder,getIndexedHistory:id=>win.history.state?.exploreReadOnly?explore?.history(id)??{unknown:true,rows:[]}:null,onPair:selectPlannerStep,onAction:async(action,id)=>{if(!canUseHolder())return;selectTab('squeeks');if(action==='claim')return viewTask(()=>requestClaim([id]));const load=captureLoad(),fresh=await readFor(load,'walletStatus',state.account);if(!fresh.squeeks.some(t=>String(t.tokenId)===id))return;renderHolder(fresh,fresh.mergePlan);holdings.selectAction(action,[id]);},onOverview:()=>{win.location.hash=`${state.profileKey}/squeeks`;selectTab('squeeks');},onError:error=>{if(error.name==='RpcTrustError')clearDisplayMismatch(error);},local:()=>activity.list(),quote:!adapterFactory?(load,owner)=>readFor(load,'claimPreview',owner):state.adapter?.holderClaimPreview?(load,owner)=>viewAwait(load,()=>load.adapter.holderClaimPreview(owner)):null}));return workspaceReady;}
+  async function ensureWorkspace(){workspaceReady??=import('./holder-workspace.js').then(({initHolderWorkspace})=>workspace=initHolderWorkspace({doc,win,state,captureLoad,isCurrent,read:readFor,getApi:load=>displayApi(load)??state.adapter?.holderApi,loadImage:loadHolderImage,canAct:canUseHolder,getIndexedHistory:id=>win.history.state?.exploreReadOnly?(explore?.history(id)??Promise.resolve({unknown:true,rows:[]})):null,onPair:selectPlannerStep,onAction:async(action,id)=>{if(!canUseHolder())return;selectTab('squeeks');if(action==='claim')return viewTask(()=>requestClaim([id]));const load=captureLoad(),fresh=await readFor(load,'walletStatus',state.account);if(!fresh.squeeks.some(t=>String(t.tokenId)===id))return;renderHolder(fresh,fresh.mergePlan);holdings.selectAction(action,[id]);},onOverview:()=>{win.location.hash=`${state.profileKey}/squeeks`;selectTab('squeeks');},onError:error=>{if(error.name==='RpcTrustError')clearDisplayMismatch(error);},local:()=>activity.list(),quote:!adapterFactory?(load,owner)=>readFor(load,'claimPreview',owner):state.adapter?.holderClaimPreview?(load,owner)=>viewAwait(load,()=>load.adapter.holderClaimPreview(owner)):null}));return workspaceReady;}
   const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();$('v9-review').focus();},loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),onPairs:()=>ensureWorkspace().then(w=>w.planner())});
   $('btn-planner').onclick=()=>ensureWorkspace().then(w=>w.planner());
   $('sqk-claim-host').append($('btn-claim'),$('claim-ids'),$('holder-rewards-notice'));
@@ -1484,9 +1483,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   void activity.refresh();
   let provisionalResult,liveMeasurement;
   function renderProvisional(result=provisionalResult){provisionalResult=result;const active=liveMeasurement?.freshness==='online'&&liveMeasurement.coreStatus==='ACTIVE'&&Date.now()-Date.parse(liveMeasurement.receivedAt)<120000;const text=formingBlock(result?.data,active);$('provisional-blocks').textContent=text??'';$('provisional-blocks').classList.toggle('hidden',!text);}
-  const poller=createWheelPoller({enabled:()=>state.profileKey==='sepolia-v9',doc,setTimer:win.setTimeout.bind(win),clearTimer:win.clearTimeout.bind(win),
+  const poller=createWheelPoller({enabled:()=>Boolean(getProfile(state.profileKey).apiBase),doc,setTimer:win.setTimeout.bind(win),clearTimer:win.clearTimeout.bind(win),
     contextKey:()=>`${generation}:${state.profileKey}`,
-    readStatus:async()=>{const load=captureLoad();if(load.profileKey!=='sepolia-v9')throw new Error('No v6 wheel poll');const api=displayApi(load);const result=api?await api.status():{data:await telemetry.read({signal:load.signal})};assertCurrent(load);return result;},
+    readStatus:async()=>{const load=captureLoad();if(!getProfile(load.profileKey).apiBase)throw new Error('No wheel reading for this profile');const api=displayApi(load);const result=api?await api.status():{data:await telemetry.read({signal:load.signal})};assertCurrent(load);return result;},
     readBlocks:adapterFactory?null:async()=>displayApi(captureLoad()).blocks(),
     frontier:()=>({settled:state.net?.core?.settledThroughRound,processed:state.net?.mining?.processedThroughRound}),
     onStatus:async(data,result)=>{void explore?.tick();recordSource('Wheel','api',result.stale?'Cached response; live request unavailable':null);void refreshNetworkExtras();workspace?.updatePace(result.stale?null:data);liveMeasurement=result.stale?null:data.measurement;renderProvisional();wheelReading(captureLoad(),data,result);},
@@ -1494,7 +1493,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     onBlocks:renderProvisional,
     onError:(error,scope)=>{
       if(scope==='status')void explore?.tick();
-      if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;
+      if(error.name==='AbortError'||!getProfile(state.profileKey).apiBase)return;
       recordSource(scope==='status'?'Wheel':'Live wheel','api',error.message);
       if(error.name==='RpcTrustError'){
         if(state.net?.source?.kind!=='rpc'||state.net.verification?.trusted!==true)clearDisplayMismatch(error);

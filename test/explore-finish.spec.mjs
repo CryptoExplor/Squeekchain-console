@@ -31,7 +31,7 @@ async function setup(page,{failFinal=false,stallFinal=false,delayHydration=false
  return seen;
 }
 test('empty IndexedDB: real same-snapshot final guard renders stats and leaderboard within five seconds',async({page})=>{
- const seen=await setup(page);await page.evaluate(()=>location.hash='#sepolia-v9/explore?section=leaders');
+ const seen=await setup(page);await page.evaluate(()=>location.hash='#sepolia/explore?section=leaders');
  await expect(page.locator('#explore-content')).toHaveAttribute('data-index-status','complete');
  await expect(page.locator('.explore-stats .stat').first()).toContainText('480');
  await expect(page.getByTestId('explore-leaderboard').locator('tbody tr').first()).toBeVisible();

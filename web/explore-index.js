@@ -21,15 +21,22 @@ export function applyExploreEvent(tokens,event,profile){
  }
 }
 function validCache(value,profile){return value?.version===3&&value.key===indexKey(profile)&&uint(value.lastBlock)&&hash(value.lastHash)&&Array.isArray(value.events)&&value.events.length<=200000&&value.tokens&&typeof value.tokens==='object'&&!Array.isArray(value.tokens);}
-export function createExploreIndex({profile,store,reader,signal,progress=()=>{},now=()=>performance.now(),finalTimeoutMs=4000}){
+// A public peer answering 429 is backpressure, not a failed scan: wait out
+// Retry-After (bounded) and let the next peer serve the retry.
+export const RATE_LIMIT_WAIT_MS=10000;
+const rateLimited=error=>Boolean(error)&&(error.name==='RpcAvailabilityError'||error.kind==='cooldown'||[429,503].includes(Number(error.httpStatus??error.status))||/rate limit|too many requests|retry-after|cooldown/i.test(String(error.message??'')));
+const retryWait=error=>Math.min(Number(error?.retryAfterMs)>0?Number(error.retryAfterMs):1000,RATE_LIMIT_WAIT_MS);
+export function createExploreIndex({profile,store,reader,signal,progress=()=>{},now=()=>performance.now(),finalTimeoutMs=20000,historyWindowSeconds=172800,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
  let flight;
+ // One bounded backoff per call site; a second 429 fails over to the caller's next peer.
+ const withBackoff=async work=>{try{return await work();}catch(error){if(!rateLimited(error))throw error;await sleep(retryWait(error));check();return work();}};
  const check=()=>{if(signal?.aborted)throw signal.reason??new DOMException('Aborted','AbortError');};
  async function bounded(work,ms=30000){check();let timer;try{return await Promise.race([Promise.resolve().then(work),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error('Explore step timed out'),{name:'TimeoutError'})),ms);})]);}finally{clearTimeout(timer);}}
  async function perform({restart=false}={}){
   const started=now();check();let cached=restart?null:await bounded(()=>store.get(indexKey(profile)));
   if(!validCache(cached,profile)||cached?.validationFailed||cached?.totalSupply!=null&&!cached.complete&&!cached.scanSnapshot)cached=null;
   let resuming=Boolean(cached&&!cached.complete&&cached.scanSnapshot);
-  let snapshot=await bounded(()=>reader.begin(resuming?BigInt(cached.scanSnapshot.blockNumber):profile.abiSet==='v6'&&cached?.complete?BigInt(cached.lastBlock):undefined));
+  let snapshot=await bounded(()=>reader.begin(resuming?BigInt(cached.scanSnapshot.blockNumber):undefined));
   if(resuming&&!same(snapshot.blockHash,cached.scanSnapshot.blockHash)){cached=null;resuming=false;snapshot=await bounded(()=>reader.begin());}
   check();const target=BigInt(snapshot.blockNumber),start=BigInt(profile.startBlock);
   if(target<start)throw new Error('Index incomplete');
@@ -43,22 +50,40 @@ export function createExploreIndex({profile,store,reader,signal,progress=()=>{},
    const base=rewind-1n,baseValid=base<start||cached.baseBlock===String(base)&&hash(cached.baseHash)&&same(await bounded(()=>reader.hash(base)),cached.baseHash);
    if(!baseValid)rewind=start;state.tokens={};state.events=state.events.filter(e=>BigInt(e.blockNumber)<rewind);for(const e of state.events)applyExploreEvent(state.tokens,e,profile);cursor=rewind;state.complete=false;
   }}
-  if(profile.abiSet==='v6'&&cached?.complete&&!reorg){const network=await bounded(()=>reader.network());state.complete=Object.values(state.tokens).filter(t=>t.minted&&!t.burned).length===Number(network.totalSupply);await bounded(()=>reader.finish());return {...state,snapshot:cached.snapshot,metrics:{milliseconds:now()-started,reorg:false,cached:true},status:state.complete?'complete':'incomplete'};}
   if(!resuming)delete state.hydrationPending;state.complete=false;state.scanSnapshot=serialSnapshot;state.snapshot=serialSnapshot;
   let chunk=45000n;const changed=new Set();
   while(cursor<=target){check();const end=cursor+chunk-1n>target?target:cursor+chunk-1n;let events;
-   notify('logs');try{events=await bounded(()=>reader.logs(cursor,end));}catch(error){check();if(end>cursor&&reader.rangeError(error)){chunk=(end-cursor+1n)/2n;continue;}throw error;}
+   notify('logs');try{events=await bounded(()=>withBackoff(()=>reader.logs(cursor,end)));}catch(error){check();if(end>cursor&&reader.rangeError(error)){chunk=(end-cursor+1n)/2n;continue;}throw error;}
    const unique=new Map();for(const event of events){if(!uint(event.blockNumber)||BigInt(event.blockNumber)<cursor||BigInt(event.blockNumber)>end||!uint(event.logIndex)||!hash(event.blockHash)||!hash(event.transactionHash)||event.removed)throw new Error('Non-canonical index history');const key=event.blockNumber+':'+event.logIndex;if(unique.has(key))throw new Error('Duplicate index history');unique.set(key,event);}
    const ordered=[...unique.values()].sort((a,b)=>BigInt(a.blockNumber)<BigInt(b.blockNumber)?-1:BigInt(a.blockNumber)>BigInt(b.blockNumber)?1:Number(a.logIndex)-Number(b.logIndex));
    for(const e of ordered){applyExploreEvent(state.tokens,e,profile);for(const field of ['tokenId','survivor','donor'])if(e.args[field]!=null){const id=String(e.args[field]);changed.add(id);if(state.tokens[id])delete state.tokens[id].hydratedAtBlock;}}
-   state.events.push(...ordered);if(state.events.length>200000)throw new Error('Index history limit reached');state.lastBlock=String(end);state.lastHash=await bounded(()=>reader.hash(end));cursor=end+1n;await save();notify('logs');
+   state.events.push(...ordered);if(state.events.length>200000)throw new Error('Index history limit reached');state.lastBlock=String(end);state.lastHash=await bounded(()=>withBackoff(()=>reader.hash(end)));cursor=end+1n;await save();notify('logs');
   }
-  const network=await bounded(()=>reader.network());state.network=network;state.totalSupply=String(network.totalSupply);
+  const network=await bounded(()=>withBackoff(()=>reader.network()));state.network=network;state.totalSupply=String(network.totalSupply);
   // This used to run AFTER 100% hydration: one serial request per historical
   // event block, followed by a two-peer header read. Do this explicitly first.
-  const pending=[...new Set(state.events.filter(e=>e.timestamp==null).map(e=>e.blockNumber))],blocks=new Map();
-  for(let i=0;i<pending.length;i+=3){notify('history',{headers:i,headerTotal:pending.length});const batch=pending.slice(i,i+3);const values=await Promise.all(batch.map(n=>bounded(()=>reader.block(BigInt(n)))));batch.forEach((n,j)=>blocks.set(n,values[j]));}
-  for(const e of state.events)if(e.timestamp==null){const b=blocks.get(e.blockNumber);if(!same(b.hash,e.blockHash))throw new Error('Index history hash mismatch');e.timestamp=String(b.timestamp);}
+  // The chart is the only consumer of timestamps during a scan, so only events
+  // inside the last 48 hours are fetched here. Per-Squeek history fills its own
+  // timestamps lazily when that detail page opens (see history()).
+  // Walk distinct event blocks newest-first and stop at the first block older
+  // than the 48h chart window. Timestamps for older events stay unfetched and
+  // are loaded lazily by history() when that Squeek detail page opens.
+  const cutoff=Number(snapshot.timestamp)-historyWindowSeconds;
+  const ordered=[...new Set(state.events.filter(e=>e.timestamp==null&&!e.timeUnknown).map(e=>e.blockNumber))]
+    .sort((a,b)=>BigInt(a)>BigInt(b)?-1:BigInt(a)<BigInt(b)?1:0),blocks=new Map();
+  for(let i=0;i<ordered.length;i+=3){
+    notify('history',{headers:i,headerTotal:ordered.length});
+    const batch=ordered.slice(i,i+3);
+    const values=await Promise.all(batch.map(n=>bounded(()=>withBackoff(()=>reader.block(BigInt(n))))));
+    batch.forEach((n,j)=>blocks.set(n,values[j]));
+    if(values.some(value=>Number(value.timestamp)<cutoff))break;
+  }
+  for(const e of state.events)if(e.timestamp==null){
+    const b=blocks.get(e.blockNumber);
+    if(!b){e.timeUnknown=true;continue;}
+    if(!same(b.hash,e.blockHash))throw new Error('Index history hash mismatch');
+    if(Number(b.timestamp)>=cutoff)e.timestamp=String(b.timestamp);else e.timeUnknown=true;
+  }
   const base=target-64n;state.baseBlock=String(base);state.baseHash=base>=start?await bounded(()=>reader.hash(base)):null;
   const live=Object.values(state.tokens).filter(t=>t.minted&&!t.burned),chunkKey=slot=>indexKey(profile)+':hydration:'+target+':'+slot;
   // A log checkpoint is written once; small independent hydration chunks avoid
@@ -73,19 +98,51 @@ export function createExploreIndex({profile,store,reader,signal,progress=()=>{},
   const ready=()=>live.filter(t=>addr(t.owner)&&uint(t.basePower)&&t.hydratedAtBlock!=null).length,groups=new Map();
   for(const t of hydrate){const slot=Math.floor((Number(t.tokenId)-1)/120);if(!groups.has(slot))groups.set(slot,[]);groups.get(slot).push(t);}
   notify('hydrate',{tokens:ready(),tokenTotal:live.length,state});
-  for(const [slot,batch] of groups){check();const values=await bounded(()=>reader.hydrate(batch));if(values.length!==batch.length)throw new Error('Index incomplete');
-   for(let j=0;j<batch.length;j++){const t=batch[j],v=values[j];if(!same(t.chainOwner,v.chainOwner)||!Number.isInteger(v.level)||v.level<1||v.level>network.policy.maximumLevel||!uint(v.nextMergeHeight)||!addr(v.owner))throw new Error('Index incomplete');Object.assign(t,v);t.basePower=profile.abiSet==='v6'?t.activeWeight:network.policy.levels.find(p=>p.level===t.level)?.basePower??null;t.hydratedAtBlock=String(target);}
-   await bounded(()=>{check();return store.set(chunkKey(slot),{blockHash:snapshot.blockHash,tokens:structuredClone(batch)});});
-   notify('hydrate',{tokens:ready(),tokenTotal:live.length,state});
+  // Two hydration multicalls in flight instead of one after another: the public
+  // budget allows it and it halves the wall clock on a cold index.
+  const slots=[...groups.entries()];
+  for(let i=0;i<slots.length;i+=2){
+    await Promise.all(slots.slice(i,i+2).map(async([slot,batch])=>{
+      check();const values=await bounded(()=>withBackoff(()=>reader.hydrate(batch)));if(values.length!==batch.length)throw new Error('Index incomplete');
+      for(let j=0;j<batch.length;j++){const t=batch[j],v=values[j];if(!same(t.chainOwner,v.chainOwner)||!Number.isInteger(v.level)||v.level<1||v.level>network.policy.maximumLevel||!uint(v.nextMergeHeight)||!addr(v.owner))throw new Error('Index incomplete');Object.assign(t,v);t.basePower=network.policy.levels.find(p=>p.level===t.level)?.basePower??null;t.hydratedAtBlock=String(target);}
+      await bounded(()=>{check();return store.set(chunkKey(slot),{blockHash:snapshot.blockHash,tokens:structuredClone(batch)});});
+    }));
+    check();notify('hydrate',{tokens:ready(),tokenTotal:live.length,state});
   }
-  for(const t of live)t.basePower=profile.abiSet==='v6'?t.activeWeight:network.policy.levels.find(p=>p.level===t.level)?.basePower??null;
-  // No historical RPC work is allowed after hydration reaches 100%. The only
-  // remaining work is local supply validation, the final guard and IDB commit.
+  for(const t of live)t.basePower=network.policy.levels.find(p=>p.level===t.level)?.basePower??null;
+  // No historical RPC work is allowed after hydration reaches 100%. The local
+  // commit is NOT inside the network budget: a full IndexedDB write plus a
+  // two-peer check in 4s was the old failure. The check now gets its own window
+  // and is retried once before the UI offers Retry.
   notify('final',{tokens:live.length,tokenTotal:live.length,state});
-  await bounded(async()=>{check();const complete=BigInt(live.length)===BigInt(state.totalSupply)&&live.every(t=>addr(t.owner)&&uint(t.basePower));await reader.finish();check();state.complete=complete;state.validationFailed=!complete;await save();check();},finalTimeoutMs);
+  await save();
+  const validate=()=>bounded(async()=>{check();await reader.finish();check();
+    return BigInt(live.length)===BigInt(state.totalSupply)&&live.every(t=>addr(t.owner)&&uint(t.basePower));},finalTimeoutMs);
+  let complete;
+  try{complete=await validate();}
+  catch(error){check();complete=await validate();}
+  state.complete=complete;state.validationFailed=!complete;
+  await save();
   return {...state,status:state.complete?'complete':'incomplete',metrics:{milliseconds:now()-started,reorg,cached:false,resumed:resuming}};
  }
- return {sync(options){if(flight)return flight;flight=perform(options).finally(()=>flight=null);return flight;},history(state,id){return state?.events?.filter(e=>['tokenId','survivor','donor'].some(k=>String(e.args[k])===String(id)))??[];}};
+ return {sync(options){if(flight)return flight;flight=perform(options).finally(()=>flight=null);return flight;},
+  // Per-Squeek history is resolved when its page opens, not during the scan.
+  async history(state,id){
+    const events=state?.events?.filter(e=>['tokenId','survivor','donor'].some(k=>String(e.args[k])===String(id)))??[];
+    if(!state)return events;
+    const pending=[...new Set(events.filter(e=>e.timestamp==null&&!e.timeUnknown).map(e=>e.blockNumber))].slice(0,40);
+    for(const block of pending){
+      try{
+        const value=await withBackoff(()=>reader.block(BigInt(block)));
+        if(events.some(e=>String(e.blockNumber)===String(block)&&!same(value.hash,e.blockHash)))throw new Error('History hash mismatch');
+        for(const e of state.events)if(String(e.blockNumber)===String(block)){e.timestamp=String(value.timestamp);delete e.timeUnknown;}
+      }catch(error){
+        if(error?.name==='AbortError')throw error;
+        for(const e of state.events)if(String(e.blockNumber)===String(block))e.timeUnknown=true;
+      }
+    }
+    return events;
+  }};
 }
 export function exploreSummary(state,{partial=false}={}){
  if(!state?.complete&&!(partial&&state?.network&&state?.snapshot))return null;const tokens=Object.values(state.tokens).filter(t=>t.minted&&!t.burned&&(state.complete||t.hydratedAtBlock!=null&&addr(t.owner)&&uint(t.basePower))),wallets=new Map(),max=state.network.policy.maximumLevel,height=BigInt(state.network.core.blockHeight);let stakedPower=0n,stakedCount=0,vaultCount=0;

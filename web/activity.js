@@ -16,7 +16,7 @@ export function createActivity({ storage, receiptReader, onChange = () => {}, no
       const saved=JSON.parse(raw??'[]');
       items=Array.isArray(saved)?saved.filter(item=>validHash(item.hash)&&item.chainId===11155111
         &&typeof item.label==='string'&&item.label.length<=200&&Number.isFinite(Date.parse(item.time)))
-        .map(item=>({...item,profile:profileInput(item.profile??'sepolia-v6'),status:'pending'})):[];
+        .map(item=>({...item,profile:profileInput(item.profile??DEFAULT_PROFILE),status:'pending'})):[];
     }catch{items=[];}
   }
   sync();

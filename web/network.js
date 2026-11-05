@@ -1,14 +1,15 @@
 // Read-only Genesis row. Only the existing wheel poller schedules refreshes.
+import {getProfile} from './bundle.js';
 const PHASES={awaiting_inventory:'awaiting inventory',pending:'not open',open:'open',waiting_for_hamster:'waiting for the wheel',randomness_pending:'preparing draw',processing:'assigning entries',claimable:'claimable',cancelled:'cancelled'};
 export function createNetworkView({doc,source,current,visible,readContext}){
  const $=id=>doc.getElementById(id);
  let revision=0,genesisFlight;
  function reset(profile){
-  revision++;genesisFlight=null;$('genesis-row').classList.toggle('hidden',profile.abiSet!=='v9');
+  revision++;genesisFlight=null;$('genesis-row').classList.toggle('hidden',!Boolean(profile.addresses));
   $('genesis-row').textContent='Genesis · not open';$('genesis-wallet').textContent='';$('genesis-wallet').classList.add('hidden');
  }
  async function genesis(load,api,owner){
-  if(!api||!visible()||load.profileKey!=='sepolia-v9')return;
+  if(!api||!visible()||!getProfile(load.profileKey).apiBase)return;
   if(genesisFlight)return genesisFlight;
   const rev=revision,valid=()=>rev===revision&&current(load);
   const flight=(async()=>{

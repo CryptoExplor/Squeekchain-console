@@ -17,7 +17,7 @@ const BASE_SPECS = [
   {
     name: "squeek_network_status",
     description:
-      "Network-wide SqueekCore + SqueekMining state: settled round, Squeek block height, checkpoint lag, emission per day, total power, minted/supply cap, level table and whether a checkpoint can advance now. In sepolia-v9, emission is null (unavailable), not zero.",
+      "Network-wide SqueekCore + SqueekMining state: settled round, Squeek block height, checkpoint lag, emission per day, total power, minted/supply cap, level table and whether a checkpoint can advance now. Emission fields are null (unavailable), never zero, when the chain does not publish them.",
     inputSchema: obj(),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
@@ -33,7 +33,7 @@ const BASE_SPECS = [
   {
     name: "squeek_wallet_status",
     description:
-      "Per-address holdings: live Squeek positions (level, active/pending power, merge cooldown block), claimable SQK, total power, network share and estimated SQK/day. Defaults to the connected wallet in the browser. In sepolia-v9, sharePercent and estimatedSqkPerDay are null (unavailable), not zero.",
+      "Per-address holdings: live Squeek positions (level, active/pending power, merge cooldown block), claimable SQK, total power, network share and estimated SQK/day. Defaults to the connected wallet in the browser. sharePercent and estimatedSqkPerDay are null (unavailable), never zero.",
     inputSchema: obj({ owner: str("0x address to inspect (optional in the browser: defaults to the connected wallet)") }),
     surfaces: ["web", "mcp"],
     sideEffects: "read-only",
@@ -116,7 +116,7 @@ const BASE_SPECS = [
 
 ];
 
-const profileArg = str('Deployment for this call; defaults to the active browser profile or MCP session default', {enum:['sepolia-v6','sepolia-v9']});
+const profileArg = str('Deployment for this call; defaults to the active browser profile or MCP session default', {enum:['sepolia','mainnet']});
 const stakingSpecs = Object.keys(STAKING_ACTIONS).flatMap(action => ['preview','prepare'].map(mode => ({
   name:mode==='prepare'?`squeek_prepare_${action}`:`squeek_${action}_preview`,
   description:`Simulate ${action}; return unsigned calldata only. Amounts, fees and IDs are decimal base-unit strings. Approvals are separate explicit actions. merge_deposited requires BURN-<donor> before construction. Re-preview in the owner wallet before signing.`,
@@ -133,7 +133,7 @@ const requestSpecs=walletActions.map(action=>{
     surfaces:['web'],sideEffects:'wallet-popup'};
 });
 const v9ToolNames=new Set([...stakingSpecs.map(spec=>spec.name),...walletActions.filter(action=>!['checkpoint','claim','merge'].includes(action)).map(action=>`squeek_request_${action}`)]);
-export const TOOL_SPECS = [...unsignedSpecs,...requestSpecs].map(spec=>({...spec,surfaces:spec.sideEffects==='wallet-popup'?['web']:['web','mcp'],inputSchema:{...spec.inputSchema,properties:{...spec.inputSchema.properties,profile:v9ToolNames.has(spec.name)?{...profileArg,enum:['sepolia-v9']}:profileArg}}}));
+export const TOOL_SPECS = [...unsignedSpecs,...requestSpecs].map(spec=>({...spec,surfaces:spec.sideEffects==='wallet-popup'?['web']:['web','mcp'],inputSchema:{...spec.inputSchema,properties:{...spec.inputSchema.properties,profile:profileArg}}}));
 
 /** Tool manifest published as web/tools.json and advertised by the MCP server. */
 export function buildManifest({ surface } = {}) {

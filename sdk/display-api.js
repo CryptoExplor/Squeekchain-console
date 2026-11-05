@@ -21,14 +21,45 @@ function metadataImage(metadata){if(metadata?.status!=='available')return;
  requireData(typeof metadata.cardImageUrl==='string'||(typeof metadata.imageDataUri==='string'&&metadata.imageDataUri.length<=262144&&/^data:image\/svg\+xml;base64,/.test(metadata.imageDataUri)),'Invalid metadata image');
 }
 
+// The display API moved from the flat v2 `identities` block to a v3 envelope whose
+// identities live under deployment.components. Both are checked against the SAME
+// pinned profile; neither source is ever allowed to redefine an address.
+const ZERO_ADDRESS='0x'+'0'.repeat(40);
+function validateComponentIdentities(data,profile){
+ const components=data?.deployment?.components;
+ requireData(components&&typeof components==='object','Invalid deployment components');
+ const pairs=[['core','core'],['collection','nft'],['token','token'],['mining','issuance'],['staking','staking']];
+ for(const [component,pinName] of pairs){
+  const pin=profile.identities.pins[pinName],value=components[component];
+  requireData(value&&typeof value==='object',`Missing components.${component}`);
+  identity(value.address,pin.address,`components.${component}.address`);
+  if(pin.implSlot&&pin.implSlot!==ZERO_ADDRESS){
+   identity(value.implementation?.address,pin.implSlot,`components.${component}.implementation.address`);
+   if(pin.implCodeHash)identity(value.implementation?.code?.runtimeHash,pin.implCodeHash,`components.${component}.implementation.code.runtimeHash`);
+   if(pin.implementationStorageLayoutDigest)identity(value.implementation?.storageLayoutDigest,pin.implementationStorageLayoutDigest,`components.${component}.implementation.storageLayoutDigest`);
+   if(pin.adminSlot&&pin.adminSlot!==ZERO_ADDRESS)identity(value.proxyAdmin?.address,pin.adminSlot,`components.${component}.proxyAdmin.address`);
+  }else if(pin.runtimeCodeHash){
+   identity(value.code?.runtimeHash,pin.runtimeCodeHash,`components.${component}.code.runtimeHash`);
+  }
+ }
+}
 export function validateEconomyEnvelope(data,profile,version){
- requireData(data?.schemaVersion===version,'Unsupported display schema');
+ const supported=[version,3];
+ requireData(supported.includes(data?.schemaVersion),'Unsupported display schema');
  if(data.status!=='available')throw new DisplayError('unavailable','API source unavailable');
  identity(data.release?.id,profile.identities.release,'release.id',false);
- const i=data.identities,p=profile.identities.pins;
- for(const [field,name] of [['core','core'],['token','token'],['genesis','nft']])identity(i?.[field],profile.addresses[name],`identities.${field}`);
- for(const [field,name] of [['mining','issuance'],['staking','staking']])for(const [key,expected] of Object.entries({proxy:p[name].address,implementation:p[name].implSlot,implementationVersion:p[name].implementationCodeVersion,storageLayoutDigest:p[name].implementationStorageLayoutDigest}))identity(i?.[field]?.[key],expected,`identities.${field}.${key}`,key!=='implementationVersion');
- if(i?.launch!=null)identity(i.launch,profile.addresses.launch,'identities.launch');
+ if(data.schemaVersion===3&&data.deployment?.components){
+  validateComponentIdentities(data,profile);
+  if(profile.identities.deploymentBlock!=null)identity(data.chain?.deploymentBlock,String(profile.identities.deploymentBlock),'chain.deploymentBlock',false);
+ }else{
+  // A v3 envelope without components must still carry the pinned identity block;
+  // an envelope with neither is a schema error, never an implicit pass.
+  requireData(data.identities&&typeof data.identities==='object','Missing API identity context');
+  const i=data.identities,p=profile.identities.pins;
+  for(const [field,name] of [['core','core'],['token','token'],['genesis','nft']])identity(i?.[field],profile.addresses[name],`identities.${field}`);
+  for(const [field,name] of [['mining','issuance'],['staking','staking']])for(const [key,expected] of Object.entries({proxy:p[name].address,implementation:p[name].implSlot,implementationVersion:p[name].implementationCodeVersion,storageLayoutDigest:p[name].implementationStorageLayoutDigest}))identity(i?.[field]?.[key],expected,`identities.${field}.${key}`,key!=='implementationVersion');
+  if(i?.launch!=null)identity(i.launch,profile.addresses.launch,'identities.launch');
+ }
  identity(data.chain?.chainId,'11155111','chain.chainId',false);identity(data.chain?.target,'sepolia','chain.target',false);
  requireData(uint(data.chain?.safeThroughBlock),'Invalid API chain context');
  requireData(typeof data.installationId==='string'&&data.installationId.length>0,'Missing installation context');

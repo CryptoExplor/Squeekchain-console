@@ -3,9 +3,9 @@ import { encodeEventTopics, toHex } from 'viem';
 import { createRpcContext, PUBLIC_RPCS, PUBLIC_RPC_ENDPOINTS, RpcTrustError } from '../sdk/rpc.js';
 import { isRpcAvailabilityError, isLogRangeError, rpcErrorDiagnostics } from '../sdk/rpc-errors.js';
 import { createDiscoveryStore, discoverOwnedIds } from '../sdk/discovery.js';
-import { DEPLOYMENT } from '../sdk/record.js';
-import { nftAbi } from '../sdk/abi.js';
-import { IMPLEMENTATION_SLOT } from '../sdk/verify.js';
+import { DEPLOYMENT } from './fixtures/graph.mjs';
+import { nftAbi } from '../sdk/abi-core-20261103.js';
+import { IMPLEMENTATION_SLOT } from '../sdk/verify-chain.js';
 import { probeEndpoint } from '../src/rpc-probe.mjs';
 
 const [first, second, third] = PUBLIC_RPCS;
