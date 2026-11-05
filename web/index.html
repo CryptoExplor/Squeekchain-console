@@ -52,7 +52,7 @@
 
 
 
-      <button class="tab" role="tab" data-tab="squeeks" aria-selected="false" data-testid="tab-squeeks" id="tab-squeeks" aria-controls="panel-squeeks">Squeeks</button><button class="tab" role="tab" data-tab="art" aria-selected="false" data-testid="tab-art" id="tab-art" aria-controls="panel-art">Art</button><button class="tab" role="tab" data-tab="explore" aria-selected="false" data-testid="tab-explore" id="tab-explore" aria-controls="panel-explore">Explore</button><button class="tab" role="tab" data-tab="info" aria-selected="false" data-testid="tab-info" id="tab-info" aria-controls="panel-info">Info</button></nav><div id="deployment-content" data-testid="deployment-content">
+      <button class="tab" role="tab" data-tab="squeeks" aria-selected="false" data-testid="tab-squeeks" id="tab-squeeks" aria-controls="panel-squeeks">Squeeks</button><button class="tab" role="tab" data-tab="art" aria-selected="false" data-testid="tab-art" id="tab-art" aria-controls="panel-art">Art</button><button class="tab" role="tab" data-tab="explore" aria-selected="false" data-testid="tab-explore" id="tab-explore" aria-controls="panel-explore">Explore</button><button class="tab" role="tab" data-tab="network" aria-selected="false" data-testid="tab-network" id="tab-network" aria-controls="panel-network">Network</button><button class="tab" role="tab" data-tab="info" aria-selected="false" data-testid="tab-info" id="tab-info" aria-controls="panel-info">Info</button></nav><div id="deployment-content" data-testid="deployment-content">
 
 
       <!-- ── overview ──────────────────────────────────────────────────────── -->
@@ -60,7 +60,7 @@
       <section data-panel="squeeks" class="hidden" id="panel-squeeks" data-testid="panel-squeeks" role="tabpanel" aria-labelledby="tab-squeeks">
         <div class="network-strip" data-testid="network-strip" aria-label="Network summary">
         <span id="wheel-line" class="muted"><strong id="wheel-state" data-testid="wheel-state">—</strong><span id="wheel-reading" hidden> · <span id="wheel-rpm" data-testid="wheel-rpm"></span> RPM</span><span id="wheel-asof" hidden></span></span>
-        <span id="strip-block" hidden>Block <strong id="strip-height"></strong><span id="strip-next" hidden> · next <span id="strip-percent"></span></span></span>
+        <span id="strip-block" hidden>Squeek block <strong id="strip-height"></strong><span id="strip-next" hidden> · next <span id="strip-percent"></span></span></span>
         <a id="strip-status" href="https://sepolia.squeekchain.com/status" target="_blank" rel="noopener noreferrer">Status ↗</a>
         <span id="genesis-wallet" class="hidden" data-testid="genesis-wallet"></span><span id="genesis-row" data-testid="genesis-row">Genesis · not open</span>
       </div><p id="display-age" data-testid="display-age" class="muted small"></p>
@@ -77,10 +77,10 @@
 
 
           <div id="holder-body" class="hidden" data-testid="holder-body">
-            <div class="my-12 grid cols-4 hidden">
+            <div class="my-12 grid cols-4" id="holder-summary" data-testid="holder-summary">
               <div class="stat"><span class="label">Squeeks</span><strong id="holder-count" data-testid="holder-count">—</strong></div>
               <div class="stat"><span class="label">Power</span><strong id="holder-power" data-testid="holder-power">—</strong></div>
-              <div class="stat"><span class="label">Share</span><strong id="holder-share" data-testid="holder-share">—</strong></div>
+              <div class="stat"><span class="label" id="holder-share-label">Share</span><strong id="holder-share" data-testid="holder-share">—</strong></div>
               <div class="stat accent"><span class="label">Claimable</span><strong id="holder-claimable" data-testid="holder-claimable">—</strong></div>
             </div>
             <div class="row">
@@ -121,6 +121,25 @@
       </section>
 
       <section data-panel="explore" class="hidden" id="panel-explore" data-testid="panel-explore" role="tabpanel" aria-labelledby="tab-explore"><h2>Explore Squeeks</h2><div id="explore-content"></div></section>
+      <section data-panel="network" class="hidden" id="panel-network" data-testid="panel-network" role="tabpanel" aria-labelledby="tab-network"><div class="section-heading"><h1>Network</h1></div>
+<section class="panel" id="profile-panel" data-testid="profile-panel"><div class="panel-head"><h2>Chain pulse</h2><span class="panel-note mono small" id="profile-release" data-testid="profile-release">—</span></div><div class="grid cols-4"><div class="stat"><span class="label">Network</span><strong id="net-chain" data-testid="net-chain">—</strong></div><div class="stat"><span class="label">Squeeks live</span><strong id="net-squeeks" data-testid="net-squeeks">—</strong></div><div class="stat"><span class="label">Squeek block</span><strong id="net-blocks" data-testid="net-blocks">—</strong></div><div class="stat"><span class="label">Settled round</span><strong id="net-round" data-testid="net-round">—</strong></div><div class="stat"><span class="label">Checkpoint lag</span><strong id="net-lag" data-testid="net-lag">—</strong></div><div class="stat"><span class="label" id="net-issued-label" data-testid="net-issued-label">SQK issued</span><strong id="net-issued" data-testid="net-issued">—</strong></div><div class="stat"><span class="label">Core paused</span><strong id="net-paused" data-testid="net-paused">—</strong></div><div class="stat"><span class="label">Next block</span><strong id="net-progress" data-testid="net-progress">—</strong></div></div><p id="settlement-notice" data-testid="settlement-notice" class="hidden" role="status"></p><p id="provisional-blocks" data-testid="provisional-blocks" class="provisional-line hidden"></p><p id="profile-notice" data-testid="profile-notice"></p><p id="settlement-status" data-testid="settlement-status" class="muted small"></p></section><section class="panel" id="wheel-panel" data-testid="wheel-panel"><div class="panel-head"><h2>From the wheel</h2></div><p id="wheel-note" data-testid="wheel-note"></p><dl class="squeek-detail-facts"><dt>Wheel speed</dt><dd id="wheel-speed" data-testid="wheel-speed">—</dd><dt>Daily distance</dt><dd id="wheel-distance" data-testid="wheel-distance">—</dd></dl></section>
+        <div class="panel" id="checkpoint-panel" data-testid="checkpoint-panel">
+          <div class="panel-head">
+            <h2>Checkpoint <span class="label">anyone can run it</span></h2>
+            <span class="panel-note">permissionless · no caller reward · you pay gas</span>
+          </div>
+          <p class="muted small" id="cp-explain" data-testid="cp-explain">
+            Turns settled rounds into issued SQK. Holders cannot claim until someone checkpoints, so this is the job
+            a wallet without Squeeks can do.
+          </p>
+          <div class="row">
+            <button class="btn btn-gold" id="btn-checkpoint" disabled="" data-testid="btn-checkpoint">Simulate &amp; checkpoint</button>
+            <span class="mono small" id="cp-reason" data-testid="cp-reason">—</span>
+          </div>
+          <div class="out hidden" id="cp-result" data-testid="cp-result"></div>
+        </div>
+      </section>
+
 
       <!-- ── art ───────────────────────────────────────────────────────────── -->
       <section data-panel="art" class="hidden" id="panel-art" data-testid="panel-art" role="tabpanel" aria-labelledby="tab-art">
@@ -158,7 +177,7 @@
 <section id="info-status" hidden class="panel info-section" tabindex="-1" data-testid="info-status"><h2>Status</h2><p id="capability-profile" data-testid="capability-profile"></p><div id="capability-grid" class="status-list" data-testid="capability-grid"></div></section>
 <section id="info-contracts" hidden class="panel info-section" tabindex="-1" data-testid="info-contracts"><h2>Contracts</h2><p id="contracts-release" data-testid="contracts-release"></p><ul id="contracts-list" data-testid="contracts-list"></ul></section>
 <section id="info-developers" hidden class="info-section" tabindex="-1" data-testid="info-developers"><h2>Developers</h2>
-<section class="panel" id="profile-panel" data-testid="profile-panel"><h3>Network read details</h3><p>Block <strong id="net-blocks" data-testid="net-blocks">—</strong> · next <span id="net-progress" data-testid="net-progress">—</span></p><div class="grid cols-4"><div class="stat"><span class="label">Settled round</span><strong id="net-round" data-testid="net-round">—</strong></div><div class="stat"><span class="label">Checkpoint lag</span><strong id="net-lag" data-testid="net-lag">—</strong></div><div class="stat"><span class="label" id="net-issued-label" data-testid="net-issued-label">SQK issued</span><strong id="net-issued" data-testid="net-issued">—</strong></div></div><p id="settlement-notice" data-testid="settlement-notice" class="hidden" role="status"></p><p id="provisional-blocks" data-testid="provisional-blocks" class="provisional-line hidden"></p><p id="wheel-note" data-testid="wheel-note"></p><dl><dt>Wheel speed</dt><dd id="wheel-speed" data-testid="wheel-speed">—</dd><dt>Daily distance</dt><dd id="wheel-distance" data-testid="wheel-distance">—</dd></dl></section><div class="panel" id="network-diagnostics"><h3>Verification details</h3><dl><div><dt>RPC configuration</dt><dd><ul id="trust-rpcs" data-testid="trust-rpcs" aria-label="RPC peers"></ul></dd></div></dl><pre id="rpc-diagnostics" class="out" data-testid="rpc-diagnostics"></pre><h3>Display sources</h3><ul id="display-sources" aria-live="polite"></ul><dl class="network-metrics"><div><dt>Network</dt><dd class="stat"><strong id="net-chain" data-testid="net-chain">—</strong></dd></div><div><dt>Deployment</dt><dd id="profile-release" data-testid="profile-release">—</dd></div><div><dt>Squeeks live</dt><dd class="stat"><strong id="net-squeeks" data-testid="net-squeeks">—</strong></dd></div><div class="stat"><dt>Core paused</dt><dd class="stat"><strong id="net-paused" data-testid="net-paused">—</strong></dd></div></dl><p id="profile-notice" data-testid="profile-notice"></p><p id="settlement-status" data-testid="settlement-status"></p></div>
+<div class="panel" id="network-diagnostics"><h3>Verification details</h3><dl><div><dt>RPC configuration</dt><dd><ul id="trust-rpcs" data-testid="trust-rpcs" aria-label="RPC peers"></ul></dd></div></dl><pre id="rpc-diagnostics" class="out" data-testid="rpc-diagnostics"></pre><h3>Display sources</h3><ul id="display-sources" aria-live="polite"></ul></div>
         <details id="agent-setup"><summary>Agent setup</summary><div class="section-heading"><div><h2>Build with Squeekchain<span class="brand-dot">.</span></h2></div></div>
         <div class="panel">
           <div class="panel-head">
@@ -181,21 +200,6 @@
         </div>
       <p>Local stdio MCP · read/prepare only, never signs or submits.</p>
 <pre class="out" data-testid="mcp-snippet">{ "mcpServers": { "wheelhouse": { "command": "node", "args": ["/absolute/path/Squeekchain-console/mcp/server.js"] } } }</pre></details>
-        <div class="panel" id="checkpoint-panel" data-testid="checkpoint-panel">
-          <div class="panel-head">
-            <h2>Checkpoint <span class="label">anyone can run it</span></h2>
-            <span class="panel-note">permissionless · no caller reward · you pay gas</span>
-          </div>
-          <p class="muted small" id="cp-explain" data-testid="cp-explain">
-            Turns settled rounds into issued SQK. Holders cannot claim until someone checkpoints, so this is the job
-            a wallet without Squeeks can do.
-          </p>
-          <div class="row">
-            <button class="btn btn-gold" id="btn-checkpoint" disabled="" data-testid="btn-checkpoint">Simulate &amp; checkpoint</button>
-            <span class="mono small" id="cp-reason" data-testid="cp-reason">—</span>
-          </div>
-          <div class="out hidden" id="cp-result" data-testid="cp-result"></div>
-        </div>
 </section>
 <section id="info-about" hidden class="panel info-section" tabindex="-1" data-testid="info-about"><h2>About</h2><div class="row"><a class="text-link" href="https://squeekchain.com/genesis/i/kbxh52st" target="_blank" rel="noopener noreferrer">Discover Genesis ↗</a><a href="https://github.com/CryptoExplor/Squeekchain-console" target="_blank" rel="noreferrer">Source ↗</a><a href="https://squeekchain.com" target="_blank" rel="noreferrer">Squeekchain ↗</a><a href="https://docs.squeekchain.com" target="_blank" rel="noreferrer">Docs ↗</a></div><p>Also see: <a href="https://sepolia.squeekchain.com/status" target="_blank" rel="noreferrer">Official Status</a> · <a href="https://sepolia.squeekchain.com/squeeks" target="_blank" rel="noreferrer">Official Portfolio</a> · <a href="https://squeek-dashboard.fun/" target="_blank" rel="noreferrer">squeek-dashboard.fun</a></p></section></section><!-- deployment-content: hidden entirely for undeployed profiles -->
     <div id="wallet-wait" class="wallet-wait hidden" role="status" aria-live="polite"><span>Waiting for your wallet…</span><button class="btn" id="wallet-cancel">Cancel</button><span class="small">Cancel releases this app, not a request already open in your wallet.</span></div></main>

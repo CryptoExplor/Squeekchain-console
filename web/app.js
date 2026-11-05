@@ -790,7 +790,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderWatchMode() {
     const viewing=watching();
     $('watch-mode').classList.toggle('hidden',!viewing);
-    $('watch-chip').textContent=viewing?`Viewing ${short(state.inspected)}`:'';
+    $('watch-chip').textContent=viewing?`Viewing ${short(state.inspected)} · view only, actions need this wallet connected`:'';
     $('watch-chip').title=viewing?state.inspected:'';
     el.holder.watchRow.classList.remove('hidden');
   }
@@ -833,7 +833,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const signerOwns = Boolean(!watching()&&(state.chainId==null||state.chainId===11155111) && state.account && status.owner?.toLowerCase() === state.account.toLowerCase());
     setStat(el.holder.count, totals.count, num);
     setStat(el.holder.power, isV9 ? totals.deposited : totals.power, num);
-    setStat(el.holder.share, totals.sharePercent, value => num(value, 4) === UNKNOWN ? UNKNOWN : `${num(value, 4)}%`);
+    // Share is rarely published; fall back to total power so the summary never shows a blank slot.
+    const showShare=num(totals.sharePercent,4)!==UNKNOWN;$('holder-share-label').textContent=showShare?'Share':'Power';
+    if(showShare)setStat(el.holder.share, totals.sharePercent, value => `${num(value, 4)}%`);else setStat(el.holder.share, totals.power, num);
     setStat(el.holder.claimable, totals.claimable, sqk);
     el.holder.claim.disabled = state.busy || state.walletPromptPending || num(totals.count) === UNKNOWN || (!has && !isV9) || !signerOwns || !caps.claim;
     $("btn-custom-merge").disabled = state.busy || state.walletPromptPending || !has || !signerOwns || !caps.merge;
@@ -1277,12 +1279,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     return /^(squeeks|squeek|address|activity|art|explore|network|info)(\/|$)/.test(hash) ? hash+(win.location.hash.includes('?')?'?'+win.location.hash.split('?')[1]:'') : 'squeeks';
   }
   function selectTab(route) {
-    const aliases = { network:'squeeks', overview: 'squeeks', holdings: 'squeeks', agent: 'info/developers' };
+    const aliases = { overview: 'squeeks', holdings: 'squeeks', agent: 'info/developers' };
     const query=String(route).split('?')[1]??(win.location.hash.split('?')[0].endsWith('/'+String(route))?win.location.hash.split('?')[1]:'');route=String(route).split('?')[0];route = aliases[route] ?? route;
     const special=/^(address|squeek)\//.test(route);
     let [name, section] = String(route).split('/');if(special)name=String(route).startsWith('address/')?(String(route).split('/')[2]??'squeeks'):'squeeks';
     const openHistory=name==='activity';if(openHistory)name='squeeks';
-    if (!['squeeks', 'art', 'explore', 'info'].includes(name)) name = 'squeeks';
+    if (!['squeeks', 'art', 'explore', 'network', 'info'].includes(name)) name = 'squeeks';
     const deployed = Boolean(getProfile(state.profileKey).addresses);
     if(!deployed)name='info';
     const sections=['how-it-works','trust','status','contracts','developers','about'];
@@ -1298,6 +1300,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for(const link of doc.querySelectorAll('.info-links a')){if(name==='info'&&link.hash.endsWith('/'+section))link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
     $('holder-overview').hidden=special&&String(route).startsWith('squeek/');$('squeek-page').hidden=!$('holder-overview').hidden;
     if(name==='squeeks'&&state.adapter){holdings.refresh();if(!query)void refreshNetworkExtras();}
+    if(name==='network'&&state.adapter)void refreshNetworkExtras();
     if(name==='explore')void ensureExplore().then(e=>e.show()).catch(error=>recordSource('Explore','rpc',error.message));
     if(openHistory)openSheet('activity-drawer');
     if(special&&String(route).startsWith('squeek/')){try{const parsed=holderRoute(hash);void ensureWorkspace().then(w=>w.detail(parsed));}catch(error){routeError(error);}}else workspace?.detail(null);
