@@ -26,9 +26,12 @@ export function requireBurn(donor, confirm) {
 const same = (a,b) => String(a).toLowerCase() === String(b).toLowerCase();
 const positive = value => { if (!/^\d+$/.test(String(value)) || BigInt(value) <= 0n || BigInt(value) >= 2n ** 256n) throw new Error('Positive uint256 required'); return BigInt(value); };
 const idsInput = values => { if (!Array.isArray(values) || !values.length || values.length > 1000) throw new Error('Supply token IDs'); const ids = values.map(positive); if (new Set(ids.map(String)).size !== ids.length) throw new Error('Duplicate token IDs'); return ids.sort((a,b)=>a<b?-1:1); };
-export function createSqueekchain({ profileKey = DEFAULT_PROFILE, rpcUrl, provider, rpcContext, signal, chainCache, discoveryCache = createDiscoveryStore(), verificationCache } = {}) {
+export function createSqueekchain({ profileKey = DEFAULT_PROFILE, rpcUrl, provider, rpcContext, signal, chainCache, discoveryCache = createDiscoveryStore(), verificationCache, addresses, ...options } = {}) {
+  // Safety: verification can never be bypassed, and callers can't swap in their own contracts.
+  if (options.skipVerification) throw new Error('Verification cannot be disabled');
   const profile = getProfile(profileKey);
   if (!profile.addresses) throw new Error('Sepolia deployment required');
+  if (addresses) for (const [k,v] of Object.entries(addresses)) if (v && (!profile.addresses[k] || !same(v, profile.addresses[k]))) throw new Error('Only the published deployment record is supported');
   const A = profile.abis ?? PUBLISHED_ABIS;
   const addr = Object.fromEntries(Object.entries(profile.addresses).map(([k,v])=>[k,getAddress(v.toLowerCase())]));
   const context = rpcContext ?? createRpcContext({ rpcUrl, provider, signal, chainCache });

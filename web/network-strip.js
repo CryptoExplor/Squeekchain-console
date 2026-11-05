@@ -1,4 +1,4 @@
-import { getProfile } from '../sdk/deployments.js';
+import { getProfile } from './bundle.js';
 // Presentation only. Device readings never become transaction inputs.
 import {telemetryView} from './telemetry.js';
 export function createNetworkStrip(doc,{now=()=>Date.now(),wheelEnabled=key=>Boolean(getProfile(key).apiBase)}={}) {
