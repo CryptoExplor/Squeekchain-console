@@ -25,42 +25,33 @@ jobs:
           done
           ls -lR out
           tar -czf bundle.tgz -C out .
-          wc -c bundle.tgz
           base64 -w0 bundle.tgz > bundle.b64
-          wc -c bundle.b64
-      - name: Publish bundle via check runs
+          wc -c bundle.tgz bundle.b64
+      - name: Publish bundle through check-run outputs
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
-          total=$(wc -c < bundle.b64)
-          chunk=58000
-          index=0
-          start=0
-          while [ "$start" -lt "$total" ]; do
-            part=$(dd if=bundle.b64 bs=1 skip="$start" count="$chunk" 2>/dev/null)
-            export PART="$part"
-            body=$(python3 - "$index" "$SHA" <<PY
-import json,os,sys
-idx=int(sys.argv[1]); sha=sys.argv[2]
-part=os.environ['PART']
-print(json.dumps({
-  'name': f'published-bundle-{idx}',
-  'head_sha': sha,
-  'status': 'completed',
-  'conclusion': 'success',
-  'output': {'title': f'published-bundle-{idx}', 'summary': f'chunk {idx}', 'text': part},
-}))
-PY
-)
-            curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'accept: application/vnd.github+json' \
-              "https://api.github.com/repos/${{ github.repository }}/check-runs" -d "$body" -o "resp-$index.json" -w "check-run $index http=%{http_code}\n"
-            head -c 300 "resp-$index.json"; echo
-            start=$((start + chunk))
-            index=$((index + 1))
-          done
-      - name: Publish bundle via step summary
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          data = open('bundle.b64').read()
+          token, sha, repo = os.environ['GH_TOKEN'], os.environ['SHA'], os.environ['REPO']
+          size = 58000
+          chunks = [data[i:i + size] for i in range(0, len(data), size)]
+          for index, chunk in enumerate(chunks):
+              body = json.dumps({
+                  'name': 'published-bundle-%d' % index,
+                  'head_sha': sha,
+                  'status': 'completed',
+                  'conclusion': 'success',
+                  'output': {'title': 'published-bundle-%d' % index, 'summary': 'chunk %d of %d' % (index, len(chunks)), 'text': chunk},
+              }).encode()
+              request = urllib.request.Request('https://api.github.com/repos/%s/check-runs' % repo, data=body, method='POST', headers={
+                  'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'})
+              with urllib.request.urlopen(request) as response:
+                  print(index, response.status, len(chunk))
+          PY
+      - name: Step summary marker
         if: always()
-        run: |
-          echo 'BUNDLE-PRESENT' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'BUNDLE-PRESENT' >> "$GITHUB_STEP_SUMMARY"
