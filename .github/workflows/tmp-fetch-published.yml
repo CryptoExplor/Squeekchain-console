@@ -4,7 +4,7 @@ on:
     branches: [arena/ba7ca559-squeekchain-console]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   fetch:
     runs-on: ubuntu-latest
@@ -25,8 +25,12 @@ jobs:
           ls -l out out/abi out/api
           sha256sum out/sepolia.json out/abi/*.json | tee out/SHA256SUMS
           true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: published-bundle
-          path: out/
-          retention-days: 2
+      - name: Commit published bundle to this branch
+        run: |
+          git config user.name 'arena-fetch'
+          git config user.email 'arena-fetch@users.noreply.github.com'
+          mkdir -p docs/published
+          cp -r out docs/published/core-sepolia-20261103
+          git add docs/published
+          git commit -m 'chore(ci): record published deployment bundle' || echo nothing
+          git push origin HEAD:arena/ba7ca559-squeekchain-console
