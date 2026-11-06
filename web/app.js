@@ -860,6 +860,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $("claim-ids").classList.toggle("hidden", isV9);
     $("v9-actions").classList.toggle("hidden", !isV9);$("action-fields").classList.remove("hidden");
     $("v9-review").disabled = !signerOwns || state.busy || state.walletPromptPending;
+    // Say why an action is unavailable instead of leaving a silent grey button.
+    const blockedReason=watching()?'View only. Connect this wallet to act.':!state.account?'Connect a wallet to act.':(state.chainId!=null&&state.chainId!==11155111)?'Switch your wallet to Sepolia.':(state.busy||state.walletPromptPending)?'Finish the transaction in progress first.':!signerOwns?'This wallet does not hold these Squeeks.':'';
+    for(const [button,extra] of [[el.holder.claim,!caps.claim?'Claiming is paused on this network.':(!has&&!isV9)?'No Squeeks to claim for.':''],[$("btn-custom-merge"),!caps.merge?'Merging is paused on this network.':!has?'No Squeeks to merge.':''],[$("v9-review"),'']]){if(!button)continue;button.title=button.disabled?(blockedReason||extra):'';}
 
 
     holdings.render(status);if(state.claimQuote)workspace?.claim(state.claimQuote,status.owner);
