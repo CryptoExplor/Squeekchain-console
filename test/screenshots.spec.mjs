@@ -125,7 +125,7 @@ for (const width of [900, 1024]) test(`header: single desktop row at ${width}px,
   await page.getByTestId('profile-select').selectOption('sepolia');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
-  await expect(page.getByTestId('verified-chip')).toHaveAttribute('title', /Network and contract checks passed at block 12101025; latest check at block 12101024/);
+  await expect(page.getByTestId('verified-chip')).toHaveAttribute('title', /Network and contract checks passed at Sepolia block 12101025; latest check at Sepolia block 12101024/);
   await assertCompactHeader(page, width, true); await page.evaluate(() => window.squeek.destroy());
 });
 
