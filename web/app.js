@@ -282,12 +282,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('profile-status').title='Awaiting contract verification. Display data is not transaction authority. Open Info › Trust for details.';
     el.verified.textContent='Checking…';
   }
+  const chainFirst=new Map();
   async function displayRead(load,kind,owner,{force=false}={}){
     if(adapterFactory)return readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
     const profile=getProfile(load.profileKey),key=displayKey(profile,kind+':'+(owner??'')),ttl=DISPLAY_TTL;
     let saved=lastGood.get(key);assertCurrent(load);
     try{let value;const api=displayApi(load);
-      if(api){if(kind==='network'){const economy=await api.economy(),core=await api.core();value=apiNetwork(core,economy);}
+      if(api&&kind==='wallet'&&owner&&(chainFirst.get(owner.toLowerCase())??0)>Date.now()){const chain=await readFor(load,'walletStatus',owner);value={...chain,earnings:chain.earnings??saved?.value?.earnings,rewards:chain.rewards??saved?.value?.rewards};}
+      else if(api){if(kind==='network'){const economy=await api.economy(),core=await api.core();value=apiNetwork(core,economy);}
         else {const net=!force&&state.net?.source?.kind==='api'?state.net:await displayRead(load,'network',null,{force});value=apiWallet(await api.account(owner),net,owner);}
       }else value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
       assertCurrent(load);if(!value.source)value={...value,source:{kind:'rpc',at:Date.now()}};const entry={value,at:value.source.at};lastGood.set(key,entry);return value;
@@ -679,6 +681,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
   async function sendTransaction(tx, label, owner = state.account, load = captureLoad()) {
     assertCurrent(load);
+    // The display API trails the chain by several minutes. After this wallet sends a tx, read it from chain for 15 min.
+    if(owner)chainFirst.set(owner.toLowerCase(),Date.now()+15*60e3);
     if(watching())throw new Error('Viewing only');
     const p = provider();
     if (!p || !state.account) throw new Error("connect a wallet to sign");
@@ -1490,7 +1494,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   let explore,exploreReady;
   async function ensureExplore(){exploreReady??=import('./explore.js').then(({createExploreView})=>explore=createExploreView({doc,win,root:$('explore-content'),capture:captureLoad,current:isCurrent,readerOptions:load=>({profile:getProfile(load.profileKey),rpcUrl:store.get('wheelhouse:rpc')||undefined,signal:load.signal,chainCache,verificationCache}),loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),source:recordSource,onTrustError:clearDisplayMismatch}));return exploreReady;}
   async function ensureWorkspace(){workspaceReady??=import('./holder-workspace.js').then(({initHolderWorkspace})=>workspace=initHolderWorkspace({doc,win,state,captureLoad,isCurrent,read:readFor,getApi:load=>displayApi(load)??state.adapter?.holderApi,loadImage:loadHolderImage,canAct:canUseHolder,getIndexedHistory:id=>win.history.state?.exploreReadOnly?(explore?.history(id)??Promise.resolve({unknown:true,rows:[]})):null,onPair:selectPlannerStep,onAction:async(action,id)=>{if(!canUseHolder())return;selectTab('squeeks');if(action==='claim')return viewTask(()=>requestClaim([id]));const load=captureLoad(),fresh=await readFor(load,'walletStatus',state.account);if(!fresh.squeeks.some(t=>String(t.tokenId)===id))return;renderHolder(fresh,fresh.mergePlan);holdings.selectAction(action,[id]);},onOverview:()=>{win.location.hash=`${state.profileKey}/squeeks`;selectTab('squeeks');},onError:error=>{if(error.name==='RpcTrustError')clearDisplayMismatch(error);},local:()=>activity.list(),quote:!adapterFactory?(load,owner)=>readFor(load,'claimPreview',owner):state.adapter?.holderClaimPreview?(load,owner)=>viewAwait(load,()=>load.adapter.holderClaimPreview(owner)):null}));return workspaceReady;}
-  const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();$('v9-review').focus();},loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),onPairs:()=>ensureWorkspace().then(w=>w.planner())});
+  const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();if(action==='claimAndStake'&&!$('v9-review').disabled)$('v9-review').click();else $('v9-review').focus();},loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),onPairs:()=>ensureWorkspace().then(w=>w.planner())});
   $('btn-planner').onclick=()=>ensureWorkspace().then(w=>w.planner());
   $('sqk-claim-host').append($('btn-claim'),$('claim-ids'),$('holder-rewards-notice'));
   // ── boot ──────────────────────────────────────────────────────────────────
