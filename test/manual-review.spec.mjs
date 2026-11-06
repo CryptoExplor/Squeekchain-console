@@ -18,7 +18,7 @@ for(const theme of ['light','dark'])for(const width of [1280,390])test(`connecte
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await capture(page,info,`read-failure-${theme}-${width}.png`);
  await page.evaluate(async()=>{v9.walletError=null;await squeek.refresh();});await expect(page.getByTestId('banner')).toBeHidden();await expect(page.getByTestId('profile-status')).toHaveText('Verified');expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
-for(const profile of ['sepolia','sepolia'])for(const width of [1280,390])test(`one wallet address and menu ETH / ${profile} / ${width}`,async({page},info)=>{
+for(const profile of ['sepolia'])for(const width of [1280,390])test(`one wallet address and menu ETH / ${profile} / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);
  await page.evaluate(async profile=>{v9.counts['sepolia']={wallet:'1',staked:'0',nftPower:'0'};await squeek.switchProfile(profile);await squeek.connect();},profile);
  await expect(page.getByTestId('profile-select')).toHaveValue(profile);await expect(page.getByTestId('wallet-chip')).toHaveCount(0);await expect(page.getByTestId('wallet-button')).toContainText('0x5989');await expect(page.locator('.topbar .chip:visible')).toHaveCount(1);
@@ -78,7 +78,7 @@ test('minified dist scripts render and retain wallet safety with lazy Settings a
  for(const script of ['/app.js','/bundle.js','/activity.js','/components.js','/holdings.js','/images.js','/settings.js','/developers.js'])await expect.poll(()=>scripts.has(script),{message:script+' must load from dist'}).toBe(true);
  expect(errors).toEqual([]);expect(await page.evaluate(()=>reviewCounters.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
-for(const profile of ['sepolia','sepolia'])test(`saved custom RPC reaches production ${profile} adapter without a fixture factory`,async({page})=>{
+for(const profile of ['sepolia'])test(`saved custom RPC reaches production ${profile} adapter without a fixture factory`,async({page})=>{
  const custom=[];await page.route('**/*',route=>{
   const url=new URL(route.request().url());if(url.hostname==='127.0.0.1')return route.continue();
   if(url.href==='https://0xrpc.io/saved-rpc-test'){const request=route.request().postDataJSON();custom.push(request);return route.fulfill({json:{jsonrpc:'2.0',id:request.id,result:request.method==='eth_chainId'?'0xaa36a7':'0xb7c6a0'}});}

@@ -5,7 +5,7 @@ import { installV9Fixture } from './v9-fixture.mjs';
 
 const other='0x1111111111111111111111111111111111111111';
 const actions={checkpoint:'checkpoint',claim:'claim',merge:'merge',deposit:'deposit',withdraw:'withdraw',merge_deposited:'mergeDeposited',claim_and_stake:'claimAndStake',stake:'stake',unstake:'unstake'};
-for(const [name,action] of Object.entries(actions)) for(const profile of (['checkpoint','claim','merge'].includes(name)?['sepolia','sepolia']:['sepolia'])) test(`agent request ${name} / ${profile}: simulation and human wallet only`,async({page})=>{
+for(const [name,action] of Object.entries(actions)) for(const profile of (['checkpoint','claim','merge'].includes(name)?['sepolia']:['sepolia'])) test(`agent request ${name} / ${profile}: simulation and human wallet only`,async({page})=>{
   await installV9Fixture(page);await page.evaluate(()=>squeek.connect());
   await page.evaluate(()=>Object.assign(v9.tx,{gas:'0x111',gasPrice:'0x222',maxFeePerGas:'0x333',maxPriorityFeePerGas:'0x444'}));
   if(profile==='sepolia'){await page.getByTestId('profile-select').selectOption(profile);expect(await page.evaluate(()=>v9.adapterProfiles)).toContain('sepolia');}

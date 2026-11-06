@@ -53,7 +53,7 @@ test('profile switch keeps wallet, aborts old reads, clears profile data and rel
  await page.evaluate(()=>{sessions.hold=false;sessions.reads[0].resolve();sessions.reads[1].resolve();});await page.evaluate(()=>switching);await expect(page.getByTestId('holder-owner')).toHaveAttribute('title',owner);expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);await page.evaluate(()=>squeek.destroy());
 });
 
-for(const profile of ['sepolia','sepolia']){
+for(const profile of ['sepolia']){
  test(`connected wallet with pending holdings never asks to connect ${profile}`,async({page})=>{
   await install(page,{profile,hold:true});await expect(page.getByTestId('wallet-button')).toContainText('0x5989');await expect.poll(()=>page.evaluate(()=>sessions.reads.length)).toBe(1);await expect(page.getByTestId('holder-empty')).toContainText('Loading Squeeks and SQK…',{timeout:1500});await expect(page.locator('#holder-connect')).toBeHidden();await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('holder-count')).toHaveText('—');await page.evaluate(()=>{sessions.hold=false;sessions.reads[0].resolve();});await expect(page.getByTestId('holder-count')).toHaveText('2');await expect(page.getByTestId('holder-empty')).toBeHidden();expect(await page.evaluate(()=>sessions.calls.some(c=>c.method==='eth_requestAccounts'))).toBe(false);await page.evaluate(()=>squeek.destroy());
  });
@@ -74,7 +74,7 @@ test('wrong-chain wallet asks for Sepolia, not another connection',async({page})
  await install(page);await expect(page.getByTestId('holder-count')).toHaveText('2');await page.evaluate(()=>squeek.wallet.provider().emit('chainChanged','0x1'));await expect(page.getByTestId('holder-empty')).toContainText('Switch to Sepolia to see your Squeeks and SQK.');await expect(page.locator('#holder-connect')).toBeHidden();await expect(page.getByTestId('holder-retry')).toBeHidden();await expect(page.getByTestId('btn-claim')).toBeDisabled();await page.evaluate(()=>squeek.wallet.provider().emit('chainChanged','0xaa36a7'));await expect(page.getByTestId('holder-count')).toHaveText('2');await page.evaluate(()=>squeek.destroy());
 });
 
-for(const profile of ['sepolia','sepolia'])test(`explicit Connect switches to Sepolia without reconnect ${profile}`,async({page})=>{
+for(const profile of ['sepolia'])test(`explicit Connect switches to Sepolia without reconnect ${profile}`,async({page})=>{
  await install(page,{profile,disconnected:true,initialChain:'0x1'});await page.evaluate(()=>squeek.connect());await expect(page.getByTestId('holder-count')).toHaveText('2');expect(await page.evaluate(()=>squeek.state.chainId)).toBe(11155111);expect(await page.evaluate(()=>sessions.calls.filter(c=>c.method==='wallet_switchEthereumChain').map(c=>c.params))).toEqual([[{chainId:'0xaa36a7'}]]);expect(await page.evaluate(()=>sessions.calls.filter(c=>c.method==='eth_requestAccounts').length)).toBe(1);await page.evaluate(()=>squeek.destroy());
 });
 test('profile selector switches Mainnet and Sepolia; Mainnet has no deployment reads',async({page})=>{
