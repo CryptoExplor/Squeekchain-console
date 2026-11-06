@@ -12,7 +12,7 @@ export function formatNumber(value, digits = 0) {
   return Number.isFinite(number) ? number.toLocaleString('en-US', { maximumFractionDigits: digits }) : UNKNOWN;
 }
 export function formatAmount(amount) {
-  const value = formatNumber(amount?.sqk, 4);
+  const value = formatNumber(amount?.sqk, 2);
   return value === UNKNOWN ? UNKNOWN : `${value} SQK`;
 }
 export function Skeleton(node, busy) {
