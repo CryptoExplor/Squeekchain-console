@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import { encodeEventTopics, encodeAbiParameters, encodeErrorResult, pad, toHex, zeroAddress } from 'viem';
 import { PROFILES } from '../sdk/deployments.js';
 import { stakingAbi } from '../sdk/abi-core-20261103.js';
-import { profileBalances, chooseProfile, profileHeld, profileCountLabel, profileFromHash } from '../sdk/profile-selection.js';
+import { profileFromHash, canonicalHash } from '../sdk/profile-input.js';
+import { depositedIds } from '../sdk/deposits.js';
 import { createDiscoveryStore } from '../sdk/discovery.js';
 import { readIdentityBatch } from '../sdk/identity-batch.js';
 import { RpcAvailabilityError, RpcTrustError, isTrustError, isRpcAvailabilityError } from '../sdk/rpc-errors.js';
@@ -19,23 +20,20 @@ function log(eventName,args,index=0) {
   return {address:profile.addresses.staking,blockNumber:toHex(snapshot.blockNumber),logIndex:toHex(index),removed:false,
     topics:encodeEventTopics({abi:stakingAbi,eventName,args}),data:encodeAbiParameters(fields,fields.map(input=>args[input.name]??0n))};
 }
-async function inventory({v6=0n,wallet=0n,power=987654n,historyFail=false,accountSource=null,logs,maxRange,wrongDepositor=false,badFinal=false,v9Display}={}) {
-  let guarded=false;const calls=[];
+// Staked inventory is now sdk/deposits.js (used by walletStatus at the same guarded snapshot).
+// Ported invariants: indexed owner+collection history only, same-snapshot depositor/custody
+// confirmation in ONE multicall, Unknown (throw) instead of a zero count, adaptive log ranges.
+async function staked({historyFail=false,logs,maxRange,wrongDepositor=false,wrongCustody=false}={}) {
+  const calls=[];
   const client={
     multicall:async request=>{
-      calls.push(request);assert.equal(request.blockNumber,snapshot.blockNumber);
-      if(request.contracts[0].functionName==='balanceOf') {
-        assert.deepEqual(request.contracts.map(c=>c.functionName),['balanceOf','balanceOf','accountPower']);
-        assert.equal(request.contracts[2].address,profile.addresses.staking);
-        assert.ok(request.contracts.every(c=>c.args[0].toLowerCase()===owner.toLowerCase()));
-        return [v6,wallet,[power,0n]].map(result=>({status:result===null?'failure':'success',result}));
-      }
-      assert.equal(request.allowFailure,false);
-      return request.contracts.map(c=>c.functionName==='depositor'?(wrongDepositor?zeroAddress:owner):profile.addresses.staking);
+      calls.push(request);assert.equal(request.blockNumber,snapshot.blockNumber);assert.equal(request.allowFailure,false);
+      return request.contracts.map(c=>c.functionName==='depositor'?(wrongDepositor?zeroAddress:owner):wrongCustody?owner:profile.addresses.staking);
     },
+    getBlock:async()=>{throw new Error('no cache in this fixture');},
     request:async request=>{
       calls.push(request);assert.equal(request.method,'eth_getLogs');
-      const [q]=request.params;assert.ok(BigInt(q.toBlock)<=snapshot.blockNumber);
+      const [q]=request.params;assert.ok(BigInt(q.toBlock)<=snapshot.blockNumber);assert.ok(BigInt(q.fromBlock)>=profile.startBlock);
       if(maxRange&&BigInt(q.toBlock)-BigInt(q.fromBlock)+1n>maxRange)throw Object.assign(new Error('JSON-RPC request failed'),{cause:{details:'getLogs request exceeded max allowed range'}});
       if(BigInt(q.toBlock)<snapshot.blockNumber)return [];
       assert.equal(q.topics[0].length,3);assert.equal(q.topics[1],pad(owner));assert.equal(q.topics[2],pad(profile.addresses.nft));
@@ -43,40 +41,27 @@ async function inventory({v6=0n,wallet=0n,power=987654n,historyFail=false,accoun
       return logs??[log('Deposited',{tokenId:1n},0),log('Deposited',{tokenId:2n},1),log('Deposited',{tokenId:3n},2),log('Withdrawn',{tokenId:2n},3)];
     },
   };
-  const counts=await profileBalances(owner,{rpcContext:{client,snapshot:async()=>snapshot,check:async s=>{assert.equal(s,snapshot);if(badFinal)throw new RpcTrustError('Final hash mismatch');guarded=true;}},discoveryCache:createDiscoveryStore(null),accountSource,v9Display});
-  assert.equal(guarded,true);return {counts,calls};
+  const ids=await depositedIds({client,snapshot,profile,owner,store:createDiscoveryStore(null)});
+  return {ids,calls};
 }
 assert.equal(profileFromHash(''),null);assert.equal(profileFromHash('#not-a-profile'),null);
-const only=await inventory();
-assert.equal(only.counts['sepolia'].wallet,'0');assert.equal(only.counts['sepolia'].staked,'2');
+assert.equal(profileFromHash('#sepolia/explore'),'sepolia');assert.equal(profileFromHash('#sepolia-v9/explore'),'sepolia','old links are input aliases only');assert.equal(profileFromHash('#mainnet'),'mainnet');
+assert.equal(canonicalHash('#sepolia-v6/squeeks'),'#sepolia/squeeks');assert.equal(canonicalHash('#sepolia/squeeks'),null);
+const only=await staked();
+assert.deepEqual(only.ids,[1n,3n]);
 assert.equal(only.calls.filter(c=>c.contracts?.[0]?.functionName==='depositor').length,1,'one snapshot multicall confirms depositors and custody');
-assert.equal(chooseProfile('sepolia',only.counts),'sepolia');
-assert.equal(profileCountLabel(only.counts['sepolia']),'0 in wallet · 2 staked');
-const both=await inventory({v6:3n,wallet:3n});assert.equal(chooseProfile('sepolia',both.counts),'sepolia');assert.ok(profileHeld(both.counts['sepolia']));
-assert.equal(profileCountLabel(both.counts['sepolia']),'3 in wallet · 2 staked');
-for(const power of [987654n,0n,null]) {
-  const {counts}=await inventory({power,historyFail:true});
-  assert.equal(counts['sepolia'].staked,power===0n?'0':null);
-  if(power!==0n)assert.match(profileCountLabel(counts['sepolia']),/Staked \(Unknown\)/);
-  assert.equal(chooseProfile('sepolia',counts),power>0n?'sepolia':'sepolia');
-}
-const empty=await inventory({power:0n,historyFail:true,accountSource:async()=>{throw new Error('Zero power must skip the API too');}});
-assert.equal(empty.counts['sepolia'].staked,'0');assert.equal(empty.calls.length,1,'zero power skips history, API and depositor/custody calls');
-await assert.rejects(inventory({power:0n,badFinal:true}),/hash mismatch/,'zero-power fast path still checks the final snapshot');
-const unconfirmed=await inventory({wrongDepositor:true});assert.equal(unconfirmed.counts['sepolia'].staked,null);
-assert.equal(profileHeld({wallet:'0',nftPower:'0',staked:'99'}),false,'hint count must not decide auto-pick');
-await assert.rejects(inventory({badFinal:true}),/hash mismatch/);
-let sourceCalls=0;
-const fast=await inventory({accountSource:async q=>{sourceCalls++;assert.equal(q.custody,'staking');assert.equal(q.snapshot,snapshot);return [1n];}});
-assert.equal(sourceCalls,0,'staking hints cannot prove completeness; do not waste an API read');assert.equal(fast.counts['sepolia'].staked,'2');assert.ok(fast.calls.some(c=>c.method==='eth_getLogs'),'even nonempty hints cannot replace complete history');
-const fallback=await inventory({accountSource:async()=>{throw new Error('API unavailable');}});assert.equal(fallback.counts['sepolia'].staked,'2');
-const apiPage={schemaVersion:2,status:'available',account:owner,chain:{target:'sepolia',chainId:'11155111',safeThroughBlock:String(snapshot.blockNumber),safeBlockHash:snapshot.blockHash},identities:{genesis:profile.addresses.nft},release:{id:'hint-not-authority'},tokens:[{tokenId:'4',custody:'staking'},{tokenId:'5',custody:'wallet'}],nextCursor:null};
+await assert.rejects(staked({historyFail:true}),isRpcAvailabilityError,'unavailable history is Unknown, never a zero staked count');
+assert.deepEqual((await staked({wrongDepositor:true})).ids,[],'an id whose depositor is not the owner is never counted');
+await assert.rejects(staked({wrongCustody:true}),/custody mismatch/,'deposited id not held by staking stops');
+await assert.rejects(staked({logs:[{...log('Deposited',{tokenId:1n},0),removed:true}]}),/Non-canonical/);
+const limited=await staked({maxRange:1n});assert.deepEqual(limited.ids,[1n,3n]);assert.ok(limited.calls.filter(c=>c.method==='eth_getLogs').length<20,'shrink the attempted interval, not a stale 45k target');
 const api=createAccountTokenSource({fetcher:async()=>response(apiPage)});
+const apiPage={schemaVersion:2,status:'available',account:owner,chain:{target:'sepolia',chainId:'11155111',safeThroughBlock:String(snapshot.blockNumber),safeBlockHash:snapshot.blockHash},identities:{genesis:profile.addresses.nft},release:{id:'hint-not-authority'},tokens:[{tokenId:'4',custody:'staking'},{tokenId:'5',custody:'wallet'}],nextCursor:null};
 assert.deepEqual(await api({owner,nft:profile.addresses.nft,custody:'staking',snapshot}),[4n]);
 await assert.rejects(api({owner,nft:profile.addresses.nft,custody:'staking',snapshot:{...snapshot,blockNumber:snapshot.blockNumber+1n}}),/requested snapshot/);
-const limited=await inventory({maxRange:1n});assert.equal(limited.counts['sepolia'].staked,'2');assert.ok(limited.calls.filter(c=>c.method==='eth_getLogs').length<20,'shrink the attempted interval, not a stale 45k target');
-const partialUnavailable=await inventory({historyFail:true,accountSource:async()=>[1n]});assert.equal(partialUnavailable.counts['sepolia'].staked,null,'incomplete hints cannot turn unavailable history into a count');
-console.log('PASS staked-aware selection: same-block balance/power, API hints + indexed history, one depositor/custody multicall, real counts, Unknown and final guard');
+// API hints cannot replace canonical history: the SDK's chain inventory is wired with no account API.
+const sdkSource=fs.readFileSync('sdk/squeekchain.js','utf8');assert.match(sdkSource,/const idsOwned = [^\n]*accountSource:null/);assert.doesNotMatch(fs.readFileSync('sdk/deposits.js','utf8'),/accountSource|fetch\(/);
+console.log('PASS staked inventory: indexed owner/collection history, one depositor/custody multicall, Unknown not zero, custody/canonical stops, adaptive ranges, API hints never authority');
 
 const requests=[{method:'eth_getStorageAt',params:[owner,'0x'+'00'.repeat(32),'0x10']},{method:'eth_getCode',params:[owner,'0x10']}];
 const results=['0x'+'00'.repeat(32),'0x6001'];
@@ -118,20 +103,13 @@ const data=encodeErrorResult({abi:stakingAbi,errorName:'FeeLimitExceeded',args:[
 for(const error of [{cause:{data}},{code:-32000,data:{originalError:{data}}},{cause:{data:{errorName:'FeeLimitExceeded',args:[3n,2n]}}}])assert.deepEqual(feeLimitExceeded(error),{reasonCode:'feeRose',reason:'Fee rose',fee:'3',maxFee:'2'});
 assert.equal(feeLimitExceeded(new Error('FeeLimitExceeded text alone is not decoded evidence')),null);
 const cyclic={};cyclic.cause=cyclic;assert.equal(feeLimitExceeded(cyclic),null);
-const evidence=JSON.parse(fs.readFileSync('docs/pins/v9-identity-2026-11-03.json'));
-const normalize=value=>JSON.stringify(value,(_key,item)=>['string','number','bigint'].includes(typeof item)?String(item).toLowerCase():item);
-for(const peerPins of Object.values(evidence.peers))for(const [name,pin] of Object.entries(profile.identities.pins)) {
-  for(const [key,value] of Object.entries(pin)) {
-    if(key==='wiring')for(const [field,expected] of Object.entries(value))assert.equal(normalize(peerPins[name][field]),normalize(expected),`${name}.${field}`);
-    else assert.equal(normalize(peerPins[name][key]),normalize(value),`${name}.${key}`);
-  }
-  if(pin.implCodeHash)assert.equal(normalize(peerPins[name].implementationCodeAddress),normalize(pin.implSlot));
-  if(name==='core'||name==='issuance')assert.equal(normalize(peerPins[name].proxyAdmin),normalize(pin.adminSlot));
+// The dated v9 identity export was deleted with v9; pins now come from the published record.
+const record=JSON.parse(fs.readFileSync('docs/deployments/core-sepolia-20261103.json','utf8'));
+for(const [name,contract] of Object.entries({core:'SqueekCore',issuance:'SqueekMining',staking:'SqueekStaking',token:'SqueekToken',nft:'SqueekNFT'})){
+  const pin=profile.identities.pins[name],src=record.contracts[contract];assert.equal(pin.address,src.address.toLowerCase(),name);
+  if(src.implementation){assert.equal(pin.implSlot,src.implementation.toLowerCase(),name+' implementation');assert.equal(pin.adminSlot,src.proxyAdmin.toLowerCase(),name+' admin');}
 }
-console.log('PASS FeeLimitExceeded decoded through simulation/wallet envelopes; deployment pins match both peers of committed identity export');
-
-const hiddenByApi=await inventory({v6:1n,wallet:1n,power:0n,v9Display:{wallet:'0',staked:'0',nftPower:'0'}});assert.equal(hiddenByApi.counts['sepolia'].wallet,'1');assert.equal(chooseProfile('sepolia',hiddenByApi.counts),'sepolia');
-console.log('PASS PR review: API display counts cannot replace canonical held-profile balance/power');
+console.log('PASS FeeLimitExceeded decoded through simulation/wallet envelopes; deployment pins match the published deployment record');
 
 for(const kind of ['TypeError','TimeoutError']){
  const original=globalThis.fetch;let batches=0,clock=1000;const cooldowns=new Map();

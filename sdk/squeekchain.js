@@ -20,7 +20,8 @@ export const sqkAmount = value => {
   return { base: String(base), sqk: `${base / 10n ** 18n}.${String(base % 10n ** 18n).padStart(18, '0').replace(/0+$/, '') || '0'}` };
 };
 export function requireBurn(donor, confirm) {
-  if (confirm !== String(donor) && confirm !== `BURN-${donor}` && confirm !== true) throw new Error(`Confirm the donor burn explicitly: type BURN-${donor}`);
+  // Only the exact typed BURN-<donor> confirms a permanent burn (never a bare ID or a boolean).
+  if (!/^\d+$/.test(String(donor)) || BigInt(donor) <= 0n || confirm !== `BURN-${BigInt(donor)}`) throw new Error(`Confirm the donor burn explicitly: type BURN-${donor}`);
   return true;
 }
 const same = (a,b) => String(a).toLowerCase() === String(b).toLowerCase();
@@ -53,7 +54,7 @@ export function createSqueekchain({ profileKey = DEFAULT_PROFILE, rpcUrl, provid
     const schedule = profile.issuanceShape === 'schedule';
     // Keep the emission read concurrent with the rest: public peers batch in flight
     // calls, so splitting it out would add a round trip.
-    const [coreState, issuanceState, emissionRead, cpStatus, tokenSupply, tokenCap, nftSupply, maxLevel, mergesOpen, config] = await Promise.all([
+    const [coreState, issuanceState, emissionRead, cpStatus, tokenSupply, tokenCap, nftSupply, maxLevel, mergesOpen, config, bindingsRead] = await Promise.all([
       read("core", A.core, "state"),
       read("issuance", A.mining, "state"),
       schedule ? read('issuance', A.mining, 'issuanceSchedule') : read('issuance', A.mining, 'curve'),
@@ -64,12 +65,13 @@ export function createSqueekchain({ profileKey = DEFAULT_PROFILE, rpcUrl, provid
       read("nft", A.nft, "MAXIMUM_LEVEL"),
       read("nft", A.nft, "mergesOpen"),
       read("core", A.core, "configuration"),
+      schedule ? read('issuance', A.mining, 'bindings') : null,
     ]);
     const [corePaused, nextRound, roundSettled] = cpStatus;
     // The current graph replaced the v9 gacha curve with a funded issuance schedule:
     // mining.curve() and mining.configuration() do not exist there, so they are never called.
     const emission = schedule
-      ? { schedule: emissionRead, bindings: await read('issuance', A.mining, 'bindings') }
+      ? { schedule: emissionRead, bindings: bindingsRead }
       : { curve: emissionRead };
     const levels=await client.multicall({contracts:Array.from({length:Number(maxLevel)},(_,i)=>i+1).flatMap(level=>[
       {address:addr.nft,abi:A.nft,functionName:'cooldownBlocks',args:[level]},
@@ -146,7 +148,7 @@ export function createSqueekchain({ profileKey = DEFAULT_PROFILE, rpcUrl, provid
     const contracts=tokens.flatMap(({id})=>['level','nextMergeHeight'].map(functionName=>({address:addr.nft,abi:A.nft,functionName,args:[id]})));
     const values=contracts.length?await client.multicall({contracts,allowFailure:false,blockNumber:activeSnapshot.blockNumber}):[];
     const positions=tokens.map(({id,deposited},i)=>({tokenId:String(id),holder:deposited?addr.staking:owner,deposited,custody:deposited?'Staked':'Wallet',level:Number(values[i*2]),nextMergeHeight:String(values[i*2+1]),activeWeight:null,claimable:null}));
-    const value = { profile:profile.key, owner, chainId:11155111, ethBalance:{base:String(eth),eth:formatEther(eth)}, sqkBalance:sqkAmount(balance), squeeks:positions,
+    const value = { profile:profile.key, owner, chainId:profile.chainId, ethBalance:{base:String(eth),eth:formatEther(eth)}, sqkBalance:sqkAmount(balance), squeeks:positions,
       totals:{count:positions.length,deposited:stakedIds.length,power:String(power[0]+power[1]),sharePercent:null,claimable:sqkAmount(claimable),estimatedSqkPerDay:null},
       staking:{principal:sqkAmount(principal[0]),fresh:sqkAmount(principal[1]),mature:BigInt(principal[1])<=BigInt(principal[0])?sqkAmount(principal[0]-principal[1]):null,power:String(power[0]),sqkPower:String(power[1])}, net };
     return { ...value, mergePlan: plan(value) };
@@ -169,7 +171,7 @@ export function createSqueekchain({ profileKey = DEFAULT_PROFILE, rpcUrl, provid
   }
   async function simulate(owner, contract, abi, functionName, args, details={}) {
     const simulation = await client.simulateContract({address:addr[contract],abi,functionName,args,account:owner,blockNumber:activeSnapshot.blockNumber});
-    const tx={to:addr[contract],data:encodeFunctionData({abi,functionName,args}),value:'0',chainId:11155111};
+    const tx={to:addr[contract],data:encodeFunctionData({abi,functionName,args}),value:'0',chainId:profile.chainId};
     return {ok:true,action:functionName,tx,...details,simulatedResult:simulation.result == null ? null : String(simulation.result)};
   }
   async function actionPreview(owner, action, input={}) {

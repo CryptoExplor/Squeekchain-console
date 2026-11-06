@@ -707,7 +707,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       ticket.rpcPending=true;
       // The wallet sets network gas and fees; never forward preview fee/gas overrides.
       const response=Promise.resolve().then(()=>p.request({method:'eth_sendTransaction',params:[{from:owner,to:tx.to,data:tx.data,value:`0x${BigInt(tx.value??0).toString(16)}` }]})).then(result=>{
-        activity.record(result,label,SEPOLIA_CHAIN_ID,load.profileKey,owner);void activity.refresh();
+        activity.record(result,label,getProfile(load.profileKey).chainId,load.profileKey,owner);void activity.refresh();
         if(ticket.cancelled||!isCurrent(load))void followLateHash(result,load.profileKey,owner);
         return result;
       }).finally(()=>{if(outstandingPrompts.get(p)===ticket)outstandingPrompts.delete(p);ticket.notice?.remove();if(!destroyed){renderCheckpointGate();renderHolder(state.status,state.plan);}});

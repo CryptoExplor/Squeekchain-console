@@ -4,7 +4,6 @@ const requestBudgets=JSON.parse(fs.readFileSync(new URL('./budgets.json',import.
 import {spawnSync} from 'node:child_process';
 import {encodeErrorResult,decodeFunctionData,encodeFunctionResult,multicall3Abi,toHex} from 'viem';
 import {nftAbi} from '../sdk/abi-core-20261103.js';
-import {profileBalances} from '../sdk/profile-selection.js';
 import {createRpcContext} from '../sdk/rpc.js';
 import {createDiscoveryStore} from '../sdk/discovery.js';
 import {stakingAbi} from '../sdk/abi-core-20261103.js';
@@ -38,39 +37,11 @@ assert.equal(unstakeQuoteError(new Error('DeadlineExpired text is not decoded ev
 assert.equal(unstakeQuoteError({data:{errorName:'DeadlineExpired',args:[1n]}}),null);
 const cycle={};cycle.cause=cycle;assert.equal(unstakeQuoteError(cycle),null);
 console.log('PASS official zero-argument DeadlineExpired decoded through simulation/wallet causes; text alone is not evidence');
-// Recount the connect-only zero-power path at the actual HTTP envelope boundary.
-const wire=[],realFetch=globalThis.fetch,at=12101024n,hash='0x'+'ab'.repeat(32);
-const same=(a,b)=>a.toLowerCase()===b.toLowerCase();
-function call(to,data) {
- if(same(to,'0xca11bde05977b3631167028862be2a173976ca11')) {
-  const {args}=decodeFunctionData({abi:multicall3Abi,data});
-  assert.equal(args[0].length,3,'one combined balance + NFT-power multicall');
-  return encodeFunctionResult({abi:multicall3Abi,functionName:'aggregate3',result:args[0].map(c=>({success:true,returnData:call(c.target,c.callData)}))});
- }
- const v6=same(to,PROFILES['sepolia'].addresses.nft);
- const abi=same(to,PROFILES['sepolia'].addresses.staking)?stakingAbi:v6?nftAbi:nftAbi;
- const {functionName}=decodeFunctionData({abi,data});assert.ok(['balanceOf','accountPower'].includes(functionName),'no depositor/custody discovery calls');
- return encodeFunctionResult({abi,functionName,result:functionName==='accountPower'?[0n,0n]:v6?2n:0n});
-}
-globalThis.fetch=async(_url,init)=>{
- const payload=JSON.parse(init.body);wire.push(payload);
- const answer=r=>{let result;switch(r.method){
-  case 'eth_chainId':result='0xaa36a7';break;
-  case 'eth_blockNumber':result=toHex(at+12n);break;
-  case 'eth_getBlockByNumber':result={number:r.params[0],hash,timestamp:'0x3e8',transactions:[]};break;
-  case 'eth_call':result=call(r.params[0].to,r.params[0].data);break;
-  default:throw new Error('Unexpected inventory RPC '+r.method);
- }return {jsonrpc:'2.0',id:r.id,result};};
- return new Response(JSON.stringify(Array.isArray(payload)?payload.map(answer):answer(payload)),{headers:{'content-type':'application/json'}});
-};
-try {
- const context=createRpcContext(),options={rpcContext:context,discoveryCache:createDiscoveryStore(null),accountSource:async()=>{throw new Error('Zero power must skip API discovery');}};
- const counts=await profileBalances(owner,options);assert.equal(counts['sepolia'].staked,'0');const cold=wire.length;wire.length=0;
- await profileBalances(owner,options);const warm=wire.length;assert.ok(warm<=requestBudgets.profileInventory.warm);
- const report={operation:'connect-only dual-profile inventory',fixture:'v6 wallet 2 / v9 wallet 0 / v9 NFT power 0',cold,warm,discoveryRequests:0,apiRequests:0,finalSnapshotGuard:true};
- for(const key of ['cold','warm'])assert.ok(report[key]<=requestBudgets.profileInventory[key],key+' inventory budget');for(const key of ['discoveryRequests','apiRequests','finalSnapshotGuard'])assert.equal(report[key],requestBudgets.profileInventory[key]);
- fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/profile-inventory-request-budget.json',JSON.stringify(report,null,2)+'\n');console.log('PASS zero-power actual wire budget: '+JSON.stringify(report));
-}finally{globalThis.fetch=realFetch;}
+// The separate connect-only dual-profile inventory (sdk/profile-selection.js) was deleted with v6/v9.
+// Its invariant (proven zero NFT power reads no deposit history and no account API, at one snapshot)
+// is asserted on walletStatus in test/v9-safety.mjs.
+assert.equal(fs.existsSync('sdk/profile-selection.js'),false);
+assert.match(fs.readFileSync('sdk/squeekchain.js','utf8'),/nftPower===0n\?\[\]:depositedIds\(/,'zero NFT power skips deposit history');
 // Fresh-checkout-safe: dist is ignored; do not rely on artifacts of a prior build.
 const build=spawnSync(process.execPath,['build.mjs'],{encoding:'utf8'});assert.equal(build.status,0,build.stdout+build.stderr);
 assert.ok(fs.existsSync('dist/_headers'));

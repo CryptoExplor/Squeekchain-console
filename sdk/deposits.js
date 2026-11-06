@@ -1,12 +1,12 @@
 import { getAddress, encodeEventTopics, decodeEventLog, pad, toHex } from 'viem';
 import { throwIfAborted } from './cancellation.js';
 import { RpcAvailabilityError, isLogRangeError } from './rpc-errors.js';
-import { stakingAbi, nftAbi } from './abi-core-20261103.js';
+import { stakingAbi as publishedStakingAbi, nftAbi as publishedNftAbi } from './abi-core-20261103.js';
 // Indexed owner events, incremental/reorg-aware like wallet discovery. No API custody trust.
 export async function depositedIds({ client, snapshot, profile, owner, store, signal }) {
   owner = getAddress(owner.toLowerCase());
-  // Published profile ABIs first; the dated v9 set is the legacy fallback.
-  const stakingAbi = profile.abis?.staking ?? stakingAbi, nftAbi = profile.abis?.nft ?? nftAbi;
+  // Profile ABIs first; the published core-sepolia-20261103 ABIs are the fallback.
+  const stakingAbi = profile.abis?.staking ?? publishedStakingAbi, nftAbi = profile.abis?.nft ?? publishedNftAbi;
   const { staking, nft } = profile.addresses, at = snapshot.blockNumber;
   const key = `${profile.identities.release}:deposits:${staking}:${owner}`.toLowerCase();
   let ids = new Set(), cursor = profile.startBlock;

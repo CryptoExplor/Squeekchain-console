@@ -8,7 +8,7 @@ import { multicall3Abi } from 'viem';
 import { PROFILES } from '../sdk/deployments.js';
 import { IMPLEMENTATION_SLOT, ADMIN_SLOT } from '../sdk/verify-chain.js';
 import { createRpcContext } from '../sdk/rpc.js';
-import { coreAbi, issuanceAbi, nftAbi, stakingAbi, tokenAbi } from '../sdk/abi-core-20261103.js';
+import { coreAbi, miningAbi as issuanceAbi, nftAbi, stakingAbi, tokenAbi } from '../sdk/abi-core-20261103.js';
 import { createDiscoveryStore } from '../sdk/discovery.js';
 import { isRpcAvailabilityError, rpcErrorDiagnostics } from '../sdk/rpc-errors.js';
 import { runReadTool, STAKING_ACTIONS } from '../sdk/tool-runtime.js';
@@ -16,16 +16,18 @@ const profile=structuredClone(PROFILES['sepolia']);
 const codes=new Map();let next=1;
 for(const pin of Object.values(profile.identities.pins)) {
  const code='0x60'+(next++).toString(16).padStart(2,'0');codes.set(pin.address.toLowerCase(),code);pin.runtimeCodeHash=keccak256(code);
+ // The published record leaves implementationCodeVersion null (never guessed); pin a synthetic one so the version-mismatch stop stays tested.
+ if(pin.implCodeHash)pin.implementationCodeVersion=String(next);
  if(pin.implCodeHash){const impl='0x60'+(next++).toString(16).padStart(2,'0');codes.set(pin.implSlot.toLowerCase(),impl);pin.implCodeHash=keccak256(impl);}
 }
 const stringify=v=>JSON.stringify(v,(_k,x)=>typeof x==='bigint'?`__bigint:${x}`:x).replace(/"__bigint:(\d+)"/g,'$1n');
-const result=await build({entryPoints:['sdk/v9.js'],bundle:true,write:false,platform:'node',format:'esm',packages:'external',plugins:[{name:'synthetic-record-only',setup(b){b.onLoad({filter:/sdk\/deployments\.js$/},()=>({contents:`const profile=${stringify(profile)};export const PROFILES={'sepolia':profile};export const DEFAULT_PROFILE='sepolia';export const getProfile=()=>profile;`,loader:'js'}));}}]});
+const result=await build({entryPoints:['sdk/squeekchain.js'],bundle:true,write:false,platform:'node',format:'esm',packages:'external',plugins:[{name:'synthetic-record-only',setup(b){b.onLoad({filter:/sdk\/deployments\.js$/},()=>({contents:`const profile=${stringify(profile)};export const PROFILES={'sepolia':profile};export const DEFAULT_PROFILE='sepolia';export const getProfile=()=>profile;export const PUBLISHED_ABIS=profile.abis;`,loader:'js'}));}}]});
 fs.mkdirSync('.cache',{recursive:true});fs.writeFileSync('.cache/v9-safety.mjs',result.outputFiles[0].text);
 const {createSqueekchain}=await import('../.cache/v9-safety.mjs');
 function assertGasFree(value){if(value&&typeof value==='object')for(const[key,item]of Object.entries(value)){assert.ok(!['gas','gasPrice','maxFeePerGas','maxPriorityFeePerGas'].includes(key),'Gas field in preview: '+key);assertGasFree(item);}}
 
 const owner='0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54',other='0x1111111111111111111111111111111111111111';
-const at=12056257n,hash='0x'+'ab'.repeat(32),snapshot={blockNumber:at,blockHash:hash};
+const at=12101024n,hash='0x'+'ab'.repeat(32),snapshot={blockNumber:at,blockHash:hash};
 const same=(a,b)=>String(a).toLowerCase()===String(b).toLowerCase();
 const abis={core:coreAbi,issuance:issuanceAbi,staking:stakingAbi,nft:nftAbi,token:tokenAbi};
 function fake() {
@@ -47,6 +49,7 @@ function fake() {
  if(fn==='configuration')return {genesisTimestamp:0n,roundDuration:600n};
  if(fn==='state')return same(address,profile.addresses.core)?{settledThroughRound:flags.coreRound,blockHeight:100n,blockProgress:0n,workPerThousandBlocks:1000,paused:flags.paused}:{paused:flags.paused,minted:flags.issued,gachaFunded:50n,stakingFunded:50n,processedThroughRound:19n,fundedBlocks:50n};
  if(fn==='curve')return {targetPower:10000n,floorBps:10};
+ if(fn==='issuanceSchedule')return {allowance:1000n,launchBonus:10n,bonusBlocks:100n,halvingBlocks:1000n,firstPeriodRate:5n,startHeight:1n};
  if(fn==='checkpointStatus')return [flags.paused,20n,flags.settled];
  if(fn==='totalSupply')return same(address,profile.addresses.token)?flags.tokenSupply:100n;if(fn==='cap')return 1000n;if(fn==='MAXIMUM_LEVEL')return 10;
  if(fn==='mergesOpen')return flags.mergesOpen;
@@ -172,6 +175,8 @@ for(const [key]of Object.entries(STAKING_ACTIONS)){const inputs={owner,amount:'1
 console.log('PASS v9 offline ABI calldata, every action/approval, fee/deadline guard, actual claim payout, custody, policy, snapshot identity/cache rejection and shared tool dispatch');
 
 // Count actual JSON-RPC requests through viem batching + production snapshot/chain guards.
+// Implementation + admin slot per published pin (5 pins in core-sepolia-20261103).
+const SLOT_READS=2*Object.keys(profile.identities.pins).length;assert.equal(SLOT_READS,10);
 const t=fake(),wire=[],realFetch=globalThis.fetch;
 const abiFor=address=>abis[Object.entries(profile.addresses).find(([key,value])=>abis[key]&&same(value,address))?.[0]];
 function fill(field,value){if(field.type==='tuple')return Object.fromEntries(field.components.map((c,i)=>[c.name,fill(c,value?.[c.name]??value?.[i])]));if(field.type.endsWith('[]'))return value??[];if(value!=null)return field.type.startsWith('uint')?BigInt(value):value;if(field.type.startsWith('uint'))return 0n;if(field.type==='bool')return false;if(field.type==='address')return zeroAddress;if(field.type.startsWith('bytes'))return '0x'+'00'.repeat(Number(field.type.slice(5))||0);return '';}
@@ -198,12 +203,12 @@ const respond=async r=>{const{method,params=[]}=r;let result;
 globalThis.fetch=async(_url,init)=>{const payload=JSON.parse(init.body);wire.push(payload);return new Response(JSON.stringify(Array.isArray(payload)?await Promise.all(payload.map(respond)):await respond(payload)),{headers:{'content-type':'application/json'}});};
 try {
  const x=createSqueekchain({rpcContext:createRpcContext(),discoveryCache:createDiscoveryStore(null),accountSource:null});
- const network=await x.networkStatus();assert.equal(network.snapshot.timestamp,'1000');assert.equal(network.core.roundDuration,'600');const coldNetwork=wire.length;const coldBatches=wire.filter(Array.isArray);assert.equal(coldBatches.length,2);assert.ok(coldBatches.every(batch=>batch.some(r=>r.method==='eth_getCode')&&batch.filter(r=>r.method==='eth_getStorageAt').length===12&&batch.every(r=>r.params.at(-1)===toHex(at))));wire.length=0;
- await x.networkStatus();const warmNetwork=wire.length;assert.equal(wire.filter(Array.isArray).length,2);assert.ok(wire.filter(Array.isArray).every(batch=>batch.length===12&&batch.every(r=>r.method==='eth_getStorageAt')));assert.ok(warmNetwork<=requestBudgets.v9.limit,'warm network '+warmNetwork);wire.length=0;
+ const network=await x.networkStatus();assert.equal(network.snapshot.timestamp,'1000');assert.equal(network.core.roundDuration,'600');const coldNetwork=wire.length;const coldBatches=wire.filter(Array.isArray);assert.equal(coldBatches.length,2);assert.ok(coldBatches.every(batch=>batch.some(r=>r.method==='eth_getCode')&&batch.filter(r=>r.method==='eth_getStorageAt').length===SLOT_READS&&batch.every(r=>r.params.at(-1)===toHex(at))));wire.length=0;
+ await x.networkStatus();const warmNetwork=wire.length;assert.equal(wire.filter(Array.isArray).length,2);assert.ok(wire.filter(Array.isArray).every(batch=>batch.length===SLOT_READS&&batch.every(r=>r.method==='eth_getStorageAt')));assert.ok(warmNetwork<=requestBudgets.v9.limit,'warm network '+warmNetwork);wire.length=0;
  await x.walletStatus(owner);const coldWallet=wire.length;wire.length=0;
  const wallet=await x.walletStatus(owner);const warmWallet=wire.length;assert.equal(wallet.ethBalance.eth,'1');assert.equal(wire.some(r=>r.method==='eth_getBalance'),false,'ETH joins contract reads through Multicall3');assert.equal(wallet.totals.count,4);assert.ok(warmWallet<=requestBudgets.v9.limit,'warm wallet '+warmWallet);
  const v6Budget=requestBudgets.v6;assert.ok(coldNetwork<=v6Budget.coldNetwork+requestBudgets.v9.maxOverV6);assert.ok(coldWallet<=v6Budget.wallet+requestBudgets.v9.maxOverV6);
- for(const [key,value]of Object.entries({coldNetwork,warmNetwork,coldWallet,warmWallet}))assert.ok(value<=requestBudgets.v9[key],key+' exceeded committed budget');
+ for(const [key,value]of Object.entries({coldNetwork,warmNetwork,coldWallet,warmWallet}))assert.ok(value<=requestBudgets.v9[key],key+' exceeded committed budget: '+value+' > '+requestBudgets.v9[key]);
  const budget={profile:'sepolia',fixture:'2 wallet + 2 staked NFTs',coldNetwork,warmNetwork,coldWallet,warmWallet,limit:25};
  fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/v9-request-budget.json',JSON.stringify(budget,null,2)+'\n');console.log('PASS v9 actual wire budget: '+JSON.stringify(budget));
  wire.length=0;const pageSdk=createSqueekchain({rpcContext:createRpcContext()});await pageSdk.squeekStatus('1');await pageSdk.art('1');const pageCold=wire.length;wire.length=0;await pageSdk.squeekStatus('1');const pageWarm=wire.length;assert.ok(pageWarm<=requestBudgets.v9.limit);assert.ok(pageCold<=requestBudgets.v9SqueekPage.cold);assert.ok(pageWarm<=requestBudgets.v9SqueekPage.warm);fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/v9-squeek-page-budget.json',JSON.stringify({profile:'sepolia',scope:'Synthetic actual-HTTP SDK fallback detail+art cold; detail-only with cached art warm. Excludes API and app shell.',cold:pageCold,warm:pageWarm},null,2)+'\n');console.log(`PASS v9 Squeek page fallback SDK HTTP: cold ${pageCold}, warm ${pageWarm}`);
@@ -233,14 +238,14 @@ try {
  const unsupported=createSqueekchain({rpcContext:createRpcContext(),accountSource:null});
  assert.equal((await unsupported.verify()).trusted,true);assert.equal(rejectedPeers.size,2);
  assert.equal(unsupported.rpcDiagnostics().some(item=>item.trust),false);
- assert.equal(wire.filter(r=>r.method==='eth_getStorageAt').length,24);
+ assert.equal(wire.filter(r=>r.method==='eth_getStorageAt').length,2*SLOT_READS);
  assert.ok(rejectedPeers.has('https://sepolia.gateway.tenderly.co'),'default first endpoint is exercised');
  assert.equal(batchRejections,2,'one rejected array per independent peer');
  wire.length=0;
  const nextContext=createSqueekchain({rpcContext:createRpcContext(),accountSource:null});
  assert.equal((await nextContext.verify()).trusted,true,'new adapter retains session batch capability fallback, not cached trust');
  assert.equal(batchRejections,2,'unsupported arrays are not retried after context/profile recreation');
- assert.equal(wire.filter(r=>r.method==='eth_getStorageAt').length,24,'both peers still independently check all slots');
+ assert.equal(wire.filter(r=>r.method==='eth_getStorageAt').length,2*SLOT_READS,'both peers still independently check all slots');
  // A 400 on single reads is NOT a successful fallback or a verified snapshot.
  const fallbackFetch=globalThis.fetch;
  globalThis.fetch=async(url,init)=>{

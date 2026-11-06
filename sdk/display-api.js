@@ -111,14 +111,16 @@ export function createDisplayApi({profile,fetcher=globalThis.fetch,cache=createD
  async function feed(path='/events?category=all&limit=40'){await ensureContext();return request(path,{validator:data=>{validateEconomyEnvelope(data,profile,path.startsWith('/accounts/')?2:3);installation(data);requireData(Array.isArray(data.events??data.activity),'Invalid activity feed');}});}
  async function settlements(){await ensureContext();return request('/settlements',{validator:data=>{requireData(data.schemaVersion===3,'Unsupported settlements schema');if(data.status!=='available')throw new DisplayError('unavailable','Settlements unavailable');installation(data);requirePin(data.chain?.chainId==='11155111'&&data.chain.target==='sepolia'&&data.mining?.economy?.releaseId===profile.identities.release&&same(data.mining?.economy?.mining,profile.addresses.issuance)&&same(data.mining?.economy?.token,profile.addresses.token),'Settlement economy mismatch');requireData(Array.isArray(data.recentSettlements),'Invalid settlements');}});}
  // Both Genesis endpoints are display-only schema v2 and never stored, including on transport failure.
- async function genesis(){await ensureContext();return request('/genesis-launch',{validator:data=>{
+ // The current published deployment has no Genesis launch contract: never fetch or bind it.
+ const requireLaunch=()=>{if(!profile.addresses?.launch||!profile.identities?.pins?.launch)throw new DisplayError('unavailable','Genesis launch is not part of this deployment');};
+ async function genesis(){requireLaunch();await ensureContext();return request('/genesis-launch',{validator:data=>{
   genesisEnvelope(data);if(data.status==='unavailable')return;
   const b=data.bindings,p=profile.addresses;
   for(const [field,expected] of Object.entries({chainId:'11155111',launch:p.launch,launchRuntimeHash:profile.identities.pins.launch.runtimeCodeHash,nft:p.nft,core:p.core,mining:p.issuance,staking:p.staking}))identity(b?.[field],expected,`bindings.${field}`);
   requireData(GENESIS_PHASES.includes(data.state?.phase)&&uint(data.inventory?.totalIssued)&&data.inventory.drawAllocation==='7777'&&data.inventory.fwaAllocation==='1111'&&data.inventory.protocolReserve==='1111','Invalid Genesis display');
  }});}
  async function genesisWallet(owner){
-  requireData(/^0x[0-9a-f]{40}$/i.test(owner??''),'Invalid Genesis wallet');await ensureContext();
+  requireData(/^0x[0-9a-f]{40}$/i.test(owner??''),'Invalid Genesis wallet');requireLaunch();await ensureContext();
   return request(`/genesis-launch/wallet/${owner.toLowerCase()}`,{validator:data=>{
    genesisEnvelope(data);if(data.status==='unavailable')return;
    identity(data.wallet,owner,'wallet');identity(data.launch,profile.addresses.launch,'launch');
