@@ -864,3 +864,21 @@ a { color: var(--sqk-blue); }
 [data-testid="policy-table"] caption { padding: 14px 12px 10px; text-align: left; }
 [data-testid="policy-table"] :is(th, td):not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
 [data-testid="policy-table"] :is(th, td) { padding: 8px 14px; }
+/* Hero (restored from 0843b3d, brand colours) */
+.hero { display: grid; grid-template-columns: 1.25fr 1fr; align-items: center; gap: 24px; padding: 30px 34px; margin-bottom: 28px; border: 1px solid var(--sqk-line); border-radius: 14px; background: radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--brand-yellow) 18%, transparent), transparent 55%), radial-gradient(90% 120% at 0% 100%, color-mix(in srgb, var(--brand-blue) 12%, transparent), transparent 60%), var(--sqk-panel); overflow: hidden; position: relative; }
+.hero .eyebrow { font: 400 10px/1.5 var(--sqk-font-label); letter-spacing: .13em; color: var(--sqk-gray-lit); }
+.hero h1 { font-size: clamp(40px, 4.6vw, 64px); line-height: 1; letter-spacing: -.02em; text-transform: none; font-weight: 500; margin: 14px 0; }
+.hero h1 em { font-style: normal; color: var(--brand-blue); }
+[data-theme="dark"] .hero h1 em { color: var(--brand-yellow); }
+.hero p { color: var(--sqk-gray-lit); font-size: 14px; line-height: 1.7; max-width: 46ch; margin: 0; }
+.hero-actions { display: flex; flex-wrap: wrap; align-items: center; margin: 22px 0 16px; gap: 20px; }
+.hero-actions .btn { text-decoration: none; padding: 12px 18px; }
+.hero .text-link { color: var(--sqk-ink); font-size: 12px; text-decoration: none; }
+.hero .text-link:hover { color: var(--sqk-blue); }
+.hero-footnote { color: var(--sqk-gray); font-size: 11px; }
+.tiny-wheel { font-size: 16px; color: var(--brand-yellow); vertical-align: middle; margin-right: 5px; }
+.hero-art { position: relative; color: var(--sqk-ink); }
+.hero-art svg { width: 100%; max-height: 280px; display: block; }
+.art-annotation { position: absolute; bottom: -6px; left: 25%; font: 9px var(--sqk-font-label); letter-spacing: .14em; color: var(--sqk-gray); }
+.hero h1::before, .hero h2::before { content: none; }
+@media (max-width: 760px) { .hero { grid-template-columns: 1fr; padding: 24px; } .hero h1 { font-size: 40px; } .hero-art { display: none; } }
