@@ -2,7 +2,7 @@
   "name": "wheelhouse",
   "version": "1.0.0",
   "private": false,
-  "description": "Wheelhouse \u2014 static, browser-first Squeekchain holder console. Equal Sepolia v6/v9 profiles, unsigned CLI/MCP.",
+  "description": "Wheelhouse — static, browser-first Squeekchain holder console. Equal Sepolia v6/v9 profiles, unsigned CLI/MCP.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -29,6 +29,7 @@
     "test:fork": "node test/run-guarded.mjs \"npm run build && playwright test --config dev/fork/playwright.config.mjs\""
   },
   "dependencies": {
+    "three": "^0.187.0",
     "viem": "^2.57.14"
   },
   "devDependencies": {

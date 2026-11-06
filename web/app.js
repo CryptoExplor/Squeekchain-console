@@ -1324,6 +1324,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     doc.querySelectorAll('a[href^="#info/"], a[data-info-route]').forEach(link => { const route = link.dataset.infoRoute ?? link.getAttribute('href').slice(1); link.dataset.infoRoute = route; link.href = `#${state.profileKey}/${route}`; });
     el.tabs.forEach(t => { t.setAttribute('aria-selected', String(t.dataset.tab === name)); t.tabIndex = t.dataset.tab === name ? 0 : -1; });
     el.panels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== name || (!deployed && name !== 'info')));
+    if(name==='home')ensureHero3d();
     let hash = special?`#/${state.profileKey}/${route}`:`#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers'].includes(section) ? '/' + section : ''}`;
     if(query&&['squeeks','explore'].includes(name))hash+='?'+query;
     // replaceState avoids hashchange loops, while tab clicks below create history entries.
@@ -1337,6 +1338,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         if(name==='explore'&&!squeekRoute)void ensureExplore().then(e=>e.show()).catch(error=>recordSource('Explore','rpc',error.message));
     if(openHistory)openSheet('activity-drawer');
     if(special&&String(route).startsWith('squeek/')){try{const parsed=holderRoute(hash);void ensureWorkspace().then(w=>w.detail(parsed));}catch(error){routeError(error);}}else workspace?.detail(null);
+  }
+  // Home hero: swap the SVG hamster for the 3D one on wide screens with WebGL. The SVG stays on failure.
+  let hero3d=null;
+  function ensureHero3d(){
+    if(hero3d)return;const host=doc.querySelector('#panel-home .hero-art');
+    if(!host||!win.WebGLRenderingContext||!win.matchMedia||win.matchMedia('(max-width: 760px)').matches)return;
+    try{const probe=doc.createElement('canvas');if(!(probe.getContext('webgl2')||probe.getContext('webgl')))return;}catch{return;}
+    hero3d=import('./hero3d.js').then(m=>m.mount(host,{reducedMotion:win.matchMedia('(prefers-reduced-motion: reduce)').matches})).catch(()=>{host.classList.remove('is-3d');});
   }
   function routeError(error){state.watchOnly=true;resetLoad();state.inspected=null;renderHolder(null);$('holder-route-error').textContent=error.message;$('holder-route-error').classList.remove('hidden');}
   let activeWatchRoute=null;

@@ -920,3 +920,6 @@ a { color: var(--sqk-blue); }
 @media (min-width: 900px) and (max-width: 1199px) { .topbar #btn-connect { max-width: 136px; } }
 #watch-chip { max-width: 100%; white-space: normal; }
 .info-overview-list { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+/* Hero: 3D hamster (hero3d.js) replaces the SVG once its first frame is drawn. */
+.hero-art canvas.hero-3d { display: block; width: 100%; height: 300px; }
+.hero-art.is-3d svg { display: none; }

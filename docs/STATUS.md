@@ -29,4 +29,4 @@ Connected pending reads show Loading; failed reads show Unavailable with Retry w
 
 Live qualification and manual wallet checks remain separate from mocked CI. Fork workflows require explicit loopback setup and suitable holders; discovery is not execution. Accessibility/performance audits beyond the existing mocked checks remain unqualified. Genesis has no launch, claim or refund actions.
 
-Request ceilings live in `test/budgets.json`; build enforces the all-script 250,000-byte gzip cap. Test output goes to ignored `artifacts/` with seven-day CI retention, never into documentation. Current tests and CI—not copied run reports—are the source of validation results. See [CHANGELOG](CHANGELOG.md) for merged PRs.
+Request ceilings live in `test/budgets.json`; build enforces the all-script 500,000-byte gzip cap (raised for the lazy 3D hero). Test output goes to ignored `artifacts/` with seven-day CI retention, never into documentation. Current tests and CI—not copied run reports—are the source of validation results. See [CHANGELOG](CHANGELOG.md) for merged PRs.
