@@ -63,31 +63,6 @@ export function createExploreIndex({profile,store,reader,signal,progress=()=>{},
    state.events.push(...ordered);if(state.events.length>200000)throw new Error('Index history limit reached');state.lastBlock=String(end);state.lastHash=await bounded(()=>withBackoff(()=>reader.hash(end)));cursor=end+1n;await save();notify('logs');
   }
   const network=await bounded(()=>withBackoff(()=>reader.network()));state.network=network;state.totalSupply=String(network.totalSupply);
-  // This used to run AFTER 100% hydration: one serial request per historical
-  // event block, followed by a two-peer header read. Do this explicitly first.
-  // The chart is the only consumer of timestamps during a scan, so only events
-  // inside the last 48 hours are fetched here. Per-Squeek history fills its own
-  // timestamps lazily when that detail page opens (see history()).
-  // Walk distinct event blocks newest-first and stop at the first block older
-  // than the 48h chart window. Timestamps for older events stay unfetched and
-  // are loaded lazily by history() when that Squeek detail page opens.
-  const cutoff=Number(snapshot.timestamp)-historyWindowSeconds;
-  // Only merges need a time during the scan (the 48 h chart); other events get theirs lazily in history().
-  const ordered=[...new Set(state.events.filter(e=>MERGE_EVENTS.has(e.eventName)&&e.timestamp==null&&!e.timeUnknown).map(e=>e.blockNumber))]
-    .sort((a,b)=>BigInt(a)>BigInt(b)?-1:BigInt(a)<BigInt(b)?1:0),blocks=new Map();
-  for(let i=0;i<ordered.length;i+=6){
-    notify('history',{headers:i,headerTotal:ordered.length});
-    const batch=ordered.slice(i,i+6);
-    const values=await Promise.all(batch.map(n=>bounded(()=>withBackoff(()=>reader.block(BigInt(n))))));
-    batch.forEach((n,j)=>blocks.set(n,values[j]));
-    if(values.some(value=>Number(value.timestamp)<cutoff))break;
-  }
-  for(const e of state.events)if(e.timestamp==null&&MERGE_EVENTS.has(e.eventName)){
-    const b=blocks.get(e.blockNumber);
-    if(!b){e.timeUnknown=true;continue;}
-    if(!same(b.hash,e.blockHash))throw new Error('Index history hash mismatch');
-    if(Number(b.timestamp)>=cutoff)e.timestamp=String(b.timestamp);else e.timeUnknown=true;
-  }
   const base=target-64n;state.baseBlock=String(base);state.baseHash=base>=start?await bounded(()=>reader.hash(base)):null;
   const live=Object.values(state.tokens).filter(t=>t.minted&&!t.burned),chunkKey=slot=>indexKey(profile)+':hydration:'+target+':'+slot;
   // A log checkpoint is written once; small independent hydration chunks avoid
@@ -111,6 +86,33 @@ export function createExploreIndex({profile,store,reader,signal,progress=()=>{},
       await bounded(()=>{check();return store.set(chunkKey(slot),{blockHash:snapshot.blockHash,tokens:structuredClone(batch)});});
     }));
     check();notify('hydrate',{tokens:ready(),tokenTotal:live.length,state});
+  }
+  // Holders and power first (Ravi, 2026-11-07): hydration above renders the grid and leaderboard,
+  // then merge timestamps for the 48 h chart fill in. A failed header read leaves times unknown instead of failing the scan.
+  // This used to run AFTER 100% hydration: one serial request per historical
+  // event block, followed by a two-peer header read. Do this explicitly first.
+  // The chart is the only consumer of timestamps during a scan, so only events
+  // inside the last 48 hours are fetched here. Per-Squeek history fills its own
+  // timestamps lazily when that detail page opens (see history()).
+  // Walk distinct event blocks newest-first and stop at the first block older
+  // than the 48h chart window. Timestamps for older events stay unfetched and
+  // are loaded lazily by history() when that Squeek detail page opens.
+  const cutoff=Number(snapshot.timestamp)-historyWindowSeconds;
+  // Only merges need a time during the scan (the 48 h chart); other events get theirs lazily in history().
+  const ordered=[...new Set(state.events.filter(e=>MERGE_EVENTS.has(e.eventName)&&e.timestamp==null&&!e.timeUnknown).map(e=>e.blockNumber))]
+    .sort((a,b)=>BigInt(a)>BigInt(b)?-1:BigInt(a)<BigInt(b)?1:0),blocks=new Map();
+  for(let i=0;i<ordered.length;i+=6){
+    notify('history',{headers:i,headerTotal:ordered.length,tokens:live.length,tokenTotal:live.length,state});
+    const batch=ordered.slice(i,i+6);
+    let values;try{values=await Promise.all(batch.map(n=>bounded(()=>withBackoff(()=>reader.block(BigInt(n))))));}catch(error){check();if(error?.name==='AbortError')throw error;break;}
+    batch.forEach((n,j)=>blocks.set(n,values[j]));
+    if(values.some(value=>Number(value.timestamp)<cutoff))break;
+  }
+  for(const e of state.events)if(e.timestamp==null&&MERGE_EVENTS.has(e.eventName)){
+    const b=blocks.get(e.blockNumber);
+    if(!b){e.timeUnknown=true;continue;}
+    if(!same(b.hash,e.blockHash))throw new Error('Index history hash mismatch');
+    if(Number(b.timestamp)>=cutoff)e.timestamp=String(b.timestamp);else e.timeUnknown=true;
   }
   for(const t of live)t.basePower=network.policy.levels.find(p=>p.level===t.level)?.basePower??null;
   // No historical RPC work is allowed after hydration reaches 100%. The local
