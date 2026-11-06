@@ -34,7 +34,7 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
   root.dataset.phase=p.phase;root.dataset.resumed=String(p.resumed??false);
   if(p.tokenTotal!=null){root.dataset.hydrated=String(p.tokens);root.dataset.hydrationTotal=String(p.tokenTotal);}
   if(p.state){state=p.state;if(p.tokens>0){root.dataset.indexStatus='partial';render(false);}}
-  status.textContent=p.phase==='final'?'Partial · Checking supply and final snapshot…':p.phase==='hydrate'?`Partial · Loading Squeeks: ${p.tokens} of ${p.tokenTotal}`:p.phase==='history'?`Loading merge times: ${p.headers} of ${p.headerTotal}`:`Scanning blocks: ${p.done} of ${p.total}`;
+  status.textContent=p.phase==='final'?'Almost there · checking the latest totals…':p.phase==='hydrate'?`Partial · Loading Squeeks: ${p.tokens} of ${p.tokenTotal}`:p.phase==='history'?`Loading merge times: ${p.headers} of ${p.headerTotal}`:`Reading the chain: ${p.done} of ${p.total}`;
  }
  let autoRetries=0;
  async function sync({restart=false}={}){
@@ -44,7 +44,7 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
    scanController?.abort();scanController=new AbortController();sequence++;scope=key;state=null;failed=false;leaderOrder=[];
    const profile=getProfile(load.profileKey),signal=AbortSignal.any([load.signal,scanController.signal]);
    service=createExploreIndex({profile,store,reader:createExploreReader({...readerOptions(load),signal}),signal,progress:p=>progress(load,key,p)});
-   clear();stats.hidden=false;root.dataset.indexStatus='loading';status.textContent='Scanning blocks…';
+   clear();stats.hidden=false;root.dataset.indexStatus='loading';status.textContent='Reading the chain…';
   }
   const seq=++sequence;busy=true;scan.hidden=true;
   try{
