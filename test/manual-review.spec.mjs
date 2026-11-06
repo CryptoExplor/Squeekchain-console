@@ -58,7 +58,7 @@ test('profile change discards the pending Clear Activity confirmation without re
 test('explicit-profile tool errors retain the serving adapter diagnostics',async({page})=>{
  await installV9Fixture(page);
  const result=await page.evaluate(async()=>{v9.networkError={name:'TypeError',message:'Failed to fetch'};return squeek.callTool('squeek_network_status',{profile:'sepolia'});});
- expect(result.diagnostics.attempts).toEqual([{endpoint:'https://v9-rpc.test',method:'eth_call'}]); // the single Sepolia adapterexpect(await page.getByTestId('profile-select').inputValue()).toBe('sepolia');await page.evaluate(()=>squeek.destroy());
+ expect(result.diagnostics.attempts).toEqual([{endpoint:'https://v9-rpc.test',method:'eth_call'}]);/* the single Sepolia adapter */expect(await page.getByTestId('profile-select').inputValue()).toBe('sepolia');await page.evaluate(()=>squeek.destroy());
 });
 test('another tab cannot restore Activity after Clear, even with an in-flight receipt read',async({page})=>{
  await installV9Fixture(page);
