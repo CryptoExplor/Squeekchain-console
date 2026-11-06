@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {JSDOM} from 'jsdom';
+import {parse,walk,generate} from 'css-tree';
+import {createNetworkStrip} from '../web/network-strip.js';
+const html=fs.readFileSync('web/index.html','utf8'),doc=new JSDOM(html).window.document,$=id=>doc.getElementById(id);
+assert.equal(new Set([...doc.querySelectorAll('[id]')].map(n=>n.id)).size,doc.querySelectorAll('[id]').length,'no duplicate element IDs');assert.equal($('verified-chip').dataset.testid,'verified-chip');
+let clock=Date.now();const strip=createNetworkStrip(doc,{now:()=>clock});
+strip.reset('sepolia');assert.equal($('wheel-state').textContent,'Checking…');assert.ok($('wheel-line').classList.contains('muted'));assert.ok($('wheel-reading').hidden);assert.ok($('strip-block').hidden);
+assert.equal(strip.reading({measurement:null}),false);assert.equal($('wheel-state').textContent,'Checking…','successful source with no first reading is not offline');
+strip.offline();assert.equal($('wheel-state').textContent,'Offline');assert.equal($('wheel-rpm').textContent,'');assert.ok($('wheel-reading').hidden);
+strip.network({core:{blockHeight:'8430',blockProgress:'478838171'}});assert.equal($('strip-height').textContent,'8,430');assert.equal($('strip-percent').textContent,'47.9%');assert.equal($('strip-block').hidden,false);
+const data={measurement:{receivedAt:new Date(clock).toISOString(),freshness:'online',coreStatus:'ACTIVE',rpmMilli:12500,speedMmPerSecond:800,distanceMm:1000000}};
+assert.equal(strip.reading(data),true);assert.equal($('wheel-rpm').textContent,'12.5');assert.ok($('wheel-asof').hidden);
+clock+=21*60000;strip.offline();assert.equal($('wheel-state').textContent,'Running');assert.equal($('wheel-rpm').textContent,'12.5');assert.match($('wheel-asof').textContent,/as of 21 min/);
+assert.equal(strip.reading({measurement:null}),false);assert.equal($('wheel-rpm').textContent,'12.5');
+strip.reading({measurement:{...data.measurement,receivedAt:new Date(clock).toISOString(),rpmMilli:0}});assert.equal($('wheel-state').textContent,'Resting');assert.equal($('wheel-rpm').textContent,'0.0');assert.equal($('wheel-reading').hidden,false);assert.ok($('wheel-asof').hidden);
+strip.network({core:{blockHeight:'0',blockProgress:'0'}});assert.equal($('strip-height').textContent,'0');assert.equal($('strip-percent').textContent,'0.0%');
+for(const core of [{},{blockHeight:null},{blockHeight:'Unknown'},{blockHeight:'1',blockProgress:'1000000001'},{blockHeight:'1',blockProgress:'-1'}]){strip.network({core});assert.ok($('strip-next').hidden);}
+strip.reset('mainnet');assert.ok($('wheel-line').hidden,'a network with no published API hides the device line');strip.reset('sepolia');strip.offline();assert.equal($('wheel-state').textContent,'Offline','no cross-profile device reuse');
+assert.deepEqual([...doc.querySelectorAll('nav [data-tab]')].map(node=>node.textContent),['Home','Squeeks','Playground','Network','Info']);
+assert.equal(doc.querySelector('#panel-activity'),null);assert.equal($('network-events'),null,'removed incorrect public round/checkpoint list');assert.ok($('activity-drawer').contains($('account-activity')));assert.equal(doc.querySelector('#activity-panel > p'),null);
+assert.ok(doc.querySelector('.network-strip').contains($('genesis-row')));assert.equal(doc.querySelector('.network-strip').lastElementChild,$('genesis-row'));
+assert.doesNotMatch(html,new RegExp(['Unknown','RPM'].join(' ')));
+// Audit shared Phase 5 selectors by effective at-rule context, including split media blocks.
+const ast=parse(fs.readFileSync('web/styles.css','utf8')),stack=[],seen=new Set(),duplicates=[];let baseStrip=0,selectors=0;
+const phase5=/#watch-row\b|\.(?:address-view-row|holder-empty-layout)\b|\.(?:network-strip|squeek-grid|squeek-card|squeek-image|card-actions|browse-[\w-]+|pairs-chip|level-[\w-]+|card-state|explore-[\w-]+|hour-bars)\b/;
+walk(ast,{enter(node){if(node.type==='Atrule')stack.push(`${node.name}:${node.prelude?generate(node.prelude).replace(/\s/g,''):''}`);if(node.type!=='Rule'||node.prelude.type!=='SelectorList')return;node.prelude.children.forEach(selector=>{const text=generate(selector);if(!phase5.test(text))return;selectors++;if(!stack.length&&text==='.network-strip')baseStrip++;const key=stack.join('/')+'|'+text;if(seen.has(key))duplicates.push(key);seen.add(key);});},leave(node){if(node.type==='Atrule')stack.pop();}});
+assert.equal(baseStrip,1);assert.deepEqual(duplicates,[]);
+const report={unknownRpmMatches:0,networkStripBaseRules:baseStrip,phase5SelectorsAudited:selectors,duplicateSelectorsPerResponsiveContext:duplicates.length};fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/phase5-strip-audit.json',JSON.stringify(report,null,2)+'\n');
+console.log('PASS strip: loading/offline/last-good age/recovery/real zero/profile isolation; drawer-only Activity; '+JSON.stringify(report));

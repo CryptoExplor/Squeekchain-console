@@ -1,6 +1,5 @@
 import { DEFAULT_PROFILE } from './deployments.js';
 import { createSqueekchain } from './squeekchain.js';
-import { createSqueek9 } from './v9.js';
 import { createDiscoveryStore } from './discovery.js';
 import { runReadTool, toolProfile } from './tool-runtime.js';
 const PUBLIC_READS=new Set(['squeek_network_status','squeek_verify','squeek_wallet_status','squeek_merge_plan','squeek_art']);
@@ -8,7 +7,7 @@ function publicAdapter(profile) {
   // Deliberately fresh, public-only context: no wallet/provider, custom RPC, saved
   // profile, session verifier/chain cache, or persisted discovery from the UI.
   const discoveryCache=createDiscoveryStore(null);
-  return profile.abiSet==='v9'?createSqueek9({profileKey:profile.key,discoveryCache}):createSqueekchain({addresses:profile.addresses,discoveryCache});
+  return createSqueekchain({profileKey:profile.key,discoveryCache});
 }
 export async function runPublicReadTool(name,args={}, {createAdapter=publicAdapter}={}) {
   if(!PUBLIC_READS.has(name))return {error:'Cross-origin tools allow public reads only; previews, prepares and wallet requests are forbidden'};

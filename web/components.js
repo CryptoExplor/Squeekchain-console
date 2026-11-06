@@ -1,5 +1,5 @@
 // Small DOM components; no framework, signing, RPC or authority over capabilities.
-export const UNKNOWN = 'Unknown';
+export const UNKNOWN = '—';
 export function valueText(value) {
   if (value == null || (typeof value === 'number' && !Number.isFinite(value))) return UNKNOWN;
   const text = String(value).trim();
@@ -12,14 +12,14 @@ export function formatNumber(value, digits = 0) {
   return Number.isFinite(number) ? number.toLocaleString('en-US', { maximumFractionDigits: digits }) : UNKNOWN;
 }
 export function formatAmount(amount) {
-  const value = formatNumber(amount?.sqk, 4);
+  const value = formatNumber(amount?.sqk, 2);
   return value === UNKNOWN ? UNKNOWN : `${value} SQK`;
 }
 export function Skeleton(node, busy) {
   node.dataset.component = 'Skeleton';
   const loading = Boolean(busy && valueText(node.textContent) === UNKNOWN);
   node.classList.toggle('is-skeleton', loading);
-  if (loading) node.setAttribute('aria-label', 'Loading; value Unknown');
+  if (loading) node.setAttribute('aria-label', 'Loading');
   else node.removeAttribute('aria-label');
 }
 export function Panel(node) {
@@ -76,7 +76,7 @@ export function TokenCard({ doc, item, onOpen }) {
   card.append(image, label); card.onclick = onOpen;
   return card;
 }
-export function Toast({ doc, host, message, kind = '', timeout = kind === 'err' ? 0 : 6000, action, onAction }) {
+export function Toast({ doc, host, message, kind = '', timeout = kind === 'err' ? 15000 : 6000, action, onAction }) {
   const node = doc.createElement('div'); node.dataset.component = 'Toast';
   node.className = `toast ${kind}`; node.setAttribute('role', kind === 'err' ? 'alert' : 'status');node.setAttribute('aria-atomic','true');
   const text=doc.createElement('span');text.className='toast-message';text.textContent=message;node.append(text);

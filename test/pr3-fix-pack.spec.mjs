@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
 import {encodeErrorResult} from 'viem';
-import {staking9Abi} from '../sdk/abi-v9.js';
+import {stakingAbi} from '../sdk/abi-core-20261103.js';
 import {installV9Fixture} from './v9-fixture.mjs';
 test.setTimeout(60_000);
 const other='0x1111111111111111111111111111111111111111';
@@ -31,7 +31,7 @@ for(const theme of ['light','dark'])for(const width of [1280,390])test(`non-owne
  await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({animations:'disabled'});const name=`claim-recipient-${theme}-${width}.png`;await info.attach(name,{body:image,contentType:'image/png'});fs.mkdirSync('artifacts/screenshots',{recursive:true});fs.writeFileSync('artifacts/screenshots/'+name,image);
  await page.getByTestId('btn-modal-cancel').click();await page.evaluate(()=>squeek.destroy());
 });
-const expired=encodeErrorResult({abi:staking9Abi,errorName:'DeadlineExpired',args:[]});
+const expired=encodeErrorResult({abi:stakingAbi,errorName:'DeadlineExpired',args:[]});
 for(const source of ['simulation','wallet'])test(`DeadlineExpired from ${source}: Quote expired and explicit Re-quote`,async({page})=>{
  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.locator(`[data-action="${'unstake'}"]`).first().click();await page.getByTestId('v9-amount').fill('1');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeVisible();
  await page.evaluate(({source,data})=>{if(source==='simulation')v9.simulationError={cause:{data}};else v9.sendError={code:-32000,data:{originalError:{data}}};},{source,data:expired});
@@ -65,7 +65,7 @@ test('Cloudflare strict CSP is enforced without breaking external styles/modules
  await page.addInitScript(()=>{window.cspViolations=[];document.addEventListener('securitypolicyviolation',e=>cspViolations.push(e.violatedDirective));});
  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.getByTestId('btn-claim').click();await expect(page.getByTestId('modal')).toBeVisible();await page.getByTestId('btn-modal-cancel').click();
  await page.getByTestId('settings-open').click();await expect(page.getByTestId('settings-sheet')).toBeVisible();await page.keyboard.press('Escape');
- await page.getByTestId('tab-info').click();await page.getByTestId('info-link-developers').click();await page.getByTestId('btn-copy-manifest').click();
+ await page.getByTestId('tab-info').click();await page.getByTestId('info-link-developers').click();await page.locator('#agent-setup>summary').click();await page.getByTestId('btn-copy-manifest').click();
  expect(await page.evaluate(()=>cspViolations)).toEqual([]);
  const headers=(await page.request.get('/')).headers();expect(headers['content-security-policy']).toContain("frame-ancestors 'none'");
  await page.evaluate(()=>{window.inlineRan=false;const script=document.createElement('script');script.textContent='window.inlineRan=true';document.body.append(script);});

@@ -3,7 +3,7 @@ import {installV9Fixture} from './v9-fixture.mjs';
 import {getProfile} from '../sdk/deployments.js';
 
 for(const width of [390,1280])for(const action of ['approveAll','approveNft','approveSqk'])test(`approval review capture ${action} ${width}`,async({page})=>{
- const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.setViewportSize({width,height:960});await installV9Fixture(page);const {staking,nft,token}=getProfile('sepolia-v9').addresses;
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.setViewportSize({width,height:960});await installV9Fixture(page);const {staking,nft,token}=getProfile('sepolia').addresses;
  await page.evaluate(async({action,staking,nft,token})=>{
   await squeek.connect();const read=squeek.adapter.actionPreview;
   squeek.adapter.actionPreview=async(...args)=>{const preview=await read(...args);return {...preview,tx:{...preview.tx,to:action==='approveSqk'?token:nft},recipient:undefined,amount:action==='approveSqk'?'1000000000000000000':undefined,spender:staking,scope:action==='approveAll'?'collection':action==='approveNft'?'token':'exact amount',...(action==='approveNft'?{tokenId:'87'}:{}),...(action==='approveSqk'?{amount:'1000000000000000000'}:{}),warning:action==='approveAll'?'Allow staking to transfer ALL current and future NFTs. Broad approval can be revoked in your wallet.':action==='approveNft'?'Allow staking to transfer NFT #87':'Allow staking to spend exactly this SQK amount'};};

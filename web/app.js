@@ -3,22 +3,22 @@
  *
  * Profile-driven: each deployment profile maps onto an adapter with the same surface
  * (verify / networkStatus / walletStatus / capability-driven actions / art).
- *   sepolia-v9   → pinned issuance v9 + staking + NFT graph (guarded reads/actions)
- *   sepolia-v6   → the published SqueekMining v6 graph        (reads + checkpoint/claim/merge)
+ *   sepolia  → the current published deployment (guarded reads/actions)
+ *   mainnet  → not deployed: no reads and no actions
  *   mainnet      → no deployment
  *
  * Every action is simulated first and signed in the user's wallet. No key ever reaches this code.
  */
+import { createNetworkView } from './network.js';
+import { createNetworkStrip } from './network-strip.js';
 import {
   createDisplayApi, createDisplayCache, displayKey, apiNetwork, apiWallet, createWheelPoller, DAY, DISPLAY_TTL,
   createSqueekchain,
-  createSqueek9,
   PROFILES,
   DEFAULT_PROFILE,
   getProfile,
   TOOL_SPECS,
   buildManifest,
-  CHAIN,
   abortable,
   createDiscoveryStore,
   createRpcContext,
@@ -26,17 +26,20 @@ import {
   ACTION_REASONS,
   PUBLIC_RPC_ENDPOINTS,
   readToolResult, runPublicReadTool, toolProfile, settlementStatus, requireBurn,
-  profileBalances, chooseProfile, profileFromHash, profileInput, parseEther, formatEther, profileHeld, profileCountLabel, unstakeQuoteError,
+  profileFromHash, profileInput, canonicalHash, parseEther, formatEther, unstakeQuoteError, SQUEEKS_POLICY,
 } from "./bundle.js";
 
 import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
+
+// Sepolia is the only chain Wheelhouse talks to; the profile decides the rest.
+const SEPOLIA_CHAIN_ID = 11155111;
 import {holderRoute,watchAddress,watchHash} from './holder-routes.js';
 import {createHoldings} from './holdings.js';
-import {wheelFeed,formingBlock} from './wheel-feed.js';
+import {formingBlock} from './wheel-feed.js';
 import {createWallet} from './wallet.js';
 import {createImages} from './images.js';
 import { createActivity } from "./activity.js";
-import { createTelemetry, telemetryView } from "./telemetry.js";
+import { createTelemetry } from "./telemetry.js";
 
 // EIP-1193 prompts outlive view cancellation and even remounts in this page.
 const outstandingPrompts=new WeakMap();
@@ -58,7 +61,6 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     panels: [...doc.querySelectorAll("[data-panel]")],
     net: {
       chain: $("net-chain"),
-      kind: $("net-kind"),
       round: $("net-round"),
       blocks: $("net-blocks"),
       lag: $("net-lag"),
@@ -120,10 +122,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
 
   let networkRequest=null;
+  // Old links (#sepolia-v9/..., #sepolia-v6/...) are rewritten in place to the one Sepolia route.
+  {const fixed=canonicalHash(win.location.hash);if(fixed)win.history.replaceState(win.history.state,'',fixed);}
   const wallet=createWallet({win,storage:store,pick:pickWallet});
   const state = {
     profileKey: profileFromHash(win.location.hash) ?? profileInput(store.get("squeekchain:profile")),
-    profileCounts: {},
     adapter: null,
     get account(){return wallet.get().account;},
     get chainId(){return wallet.get().chainId;},
@@ -159,25 +162,35 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
   const hideBanner = () => {readBanner=false;el.banner.classList.add('hidden');};
   const clearReadBanner=()=>{if(readBanner)hideBanner();};
+  // The chip and the banner are ONE state. Never let a green "Verified" chip sit
+  // above a stale "Can't verify right now" banner.
+  function trustDisplay({kind,chipText,bannerKind=null,title=''}) {
+    const chip=$('profile-status');
+    chip.textContent=chipText;
+    chip.className=`chip ${kind==='verified'?'ok':kind==='unavailable'?'warn':'bad'}`;
+    chip.title=el.verified.title=title;
+    $('trust-checklist').dataset.state=kind==='verified'?'verified':kind==='unavailable'?'unknown':'stopped';
+    if(kind==='verified')clearReadBanner();
+    else showBanner(BANNER_READ_FAILURE,bannerKind??(kind==='unavailable'?'warn':'bad'));
+  }
+  const BANNER_READ_FAILURE="Can't verify right now";
   function showReadFailure(error,scope) {
     const failure=rpcToolError(error,state.adapter?.rpcDiagnostics?.()??[]);
     state.lastReadFailure={scope,profile:state.profileKey,...failure};
     const availability=failure.diagnostics.availability;
-    const message=availability?'RPC unavailable. Verified reads need two independent Sepolia peers. Nothing was signed.':'Network or contract checks could not be completed. Actions are stopped. Nothing was signed.';
     el.verified.textContent=availability?'Unavailable':'Stopped';
-    $('profile-status').textContent=availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Unverified';
-    $('profile-status').className=`chip ${availability?'warn':'bad'}`;
-    $('profile-status').title=el.verified.title='';
-    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent=UNKNOWN;$('trust-result').textContent=(availability?'Unavailable':failure.diagnostics.trust?'Stopped':'Unverified')+' — '+errorMessage(error);
-    showBanner(message,availability?'warn':'bad');readBanner=true;
+    trustDisplay({kind:availability?'unavailable':'mismatch',chipText:availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Unverified'});
+    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent=UNKNOWN;$('trust-result').textContent=BANNER_READ_FAILURE;$('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
+    readBanner=true;
   }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
   const num = formatNumber;
   const sqk = formatAmount;
-  const setStat = (node, value, formatter = valueText) => Stat(node.closest('.stat')).set(value, formatter);
+  const setStat = (node, value, formatter = valueText) => {const stat=node.closest('.stat');if(stat)Stat(stat).set(value,formatter);else node.textContent=valueText(formatter(value));};
   const json = (v) => JSON.stringify(v, null, 2);
   const actionNames={merge:'Merge Squeeks',mergeDeposited:'Merge deposited',deposit:'Deposit',withdraw:'Withdraw',claim:'Claim',claimAndStake:'Claim and stake',stake:'Stake',unstake:'Unstake',approveNft:'Approve one Squeek',approveAll:'Approve all Squeeks',approveSqk:'Approve SQK'};
-  const technical=value=>JSON.stringify(value,(_key,v)=>typeof v==='string'&&v.includes(getProfile('sepolia-v9').identities?.release??'\u0000')?'[internal deployment]':v,2);
+  const hiddenDeployments=()=>Object.values(PROFILES).flatMap(profile=>[profile.identities?.release,profile.identities?.key].filter(Boolean));
+  const technical=value=>JSON.stringify(value,(_key,v)=>typeof v==='string'&&hiddenDeployments().some(secret=>v.includes(secret))?'[internal deployment]':v,2);
   const showOut = (node,value) => {
     if(node.id==='tool-result'){node.textContent=technical(value);node.classList.remove('hidden');return;}
     node.replaceChildren();const title=doc.createElement('p');title.textContent=value.ok?'Simulation passed':value.reason?errorMessage({message:value.reason}):'Preview unavailable';node.append(title);
@@ -188,7 +201,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
   const errorMessage = err => {
     const message=String(err?.message??err);
-    return err?.revert||/\b(?:storage|slots?|digest|revision|release|runtime)\b|\w+\(/i.test(message)||message.includes(getProfile('sepolia-v9').identities.release)
+    return err?.revert||/\b(?:storage|slots?|digest|revision|release|runtime)\b|\w+\(/i.test(message)||hiddenDeployments().some(secret=>message.includes(secret))
       ? 'The network or contract check failed. Actions are stopped. See Info › Developers for technical details.' : message;
   };
   const provider = () => wallet.provider();
@@ -235,7 +248,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     // API rows are display hints, NEVER a transaction ID/eligibility source.
     if(!adapterFactory&&['mergePreview','claimPreview','actionPreview'].includes(method)){
       const action=method==='mergePreview'?'merge':method==='claimPreview'?'claim':args[1];
-      const needsIds=['merge','mergeDeposited','deposit','withdraw','approveNft'].includes(action)||(action==='claim'&&getProfile(load.profileKey).abiSet!=='v9'&&args[1]?.length);
+      const needsIds=['merge','mergeDeposited','deposit','withdraw','approveNft'].includes(action);
       if(needsIds){const live=await load.adapter.walletStatus(args[0]);assertCurrent(load);const owned=id=>{const found=live.squeeks.find(item=>String(item.tokenId)===String(id));if(!found)throw new Error('Token not in fresh on-chain inventory');return found.tokenId;};
         if(method==='mergePreview')args=[args[0],owned(args[1]),owned(args[2]),args[3]];
         else if(method==='claimPreview')args=[args[0],args[1].map(owned)];
@@ -246,51 +259,50 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const verification=method==='verify'?value:value?.verification;if(verification)renderVerification(verification);
     return value;
   });
-  function resetLoad(){state.holderReadState='idle';workspace?.clear();state.claimQuote=null;verifiedForGeneration=null;loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
+  function resetLoad(){networkView.reset(getProfile(state.profileKey));displaySources.clear();$('display-sources').replaceChildren();state.holderReadState='idle';workspace?.clear();state.claimQuote=null;verifiedForGeneration=null;loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
   const displayCache=createDisplayCache(win.indexedDB),lastGood=new Map();let apiScope;
-  function displayApi(load){if(adapterFactory||load.profileKey!=='sepolia-v9')return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
-  function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000)),text=`${source.kind==='api'?'API · 12 blocks behind':'RPC display snapshot'}${age?` · as of ${age} min`:''}`;for(const node of doc.querySelectorAll('.stat'))node.title=text;$('display-age').textContent=age?`as of ${age} min`:'';}
+  const displaySources=new Map();
+  function recordSource(panel,kind,reason){
+    displaySources.set(panel,{kind,reason:reason==='launch_unconfigured'?'Genesis not open':reason});
+    $('display-sources').replaceChildren(...[...displaySources].map(([name,value])=>{const li=doc.createElement('li');li.textContent=`${name} — Source: ${value.kind==='api'?'API':'RPC'}${value.reason?` · ${value.reason}`:''}`;return li;}));
+  }
+  const networkView=createNetworkView({doc,source:recordSource,current:isCurrent,visible:()=>!$('panel-squeeks').classList.contains('hidden'),readContext:()=>{const load=captureLoad();return {load,api:displayApi(load)};}});
+  function refreshNetworkExtras(){const load=captureLoad();return networkView.refresh(load,displayApi(load),state.account);}
+
+  function displayApi(load){if(adapterFactory||!getProfile(load.profileKey).apiBase)return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
+  function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000));$('display-age').textContent=age?`as of ${age} min`:'';}
+
   function displayVerification(value){
     if(!value.source||value.source.kind==='rpc'){if(value.verification)renderVerification(value.verification);return;}
     if(state.lastReadFailure?.profile===state.profileKey)return;
     if(verifiedForGeneration){renderVerification(verifiedForGeneration);return;}
     renderTrust(null);$('trust-block').textContent=UNKNOWN;
-    $('trust-result').textContent='Checking… No contract verification has completed. API data is display only; fresh independent checks run before actions.';
+    $('trust-result').textContent=UNKNOWN;
     $('profile-status').textContent='Checking…';$('profile-status').className='chip';
     $('profile-status').title='Awaiting contract verification. Display data is not transaction authority. Open Info › Trust for details.';
     el.verified.textContent='Checking…';
   }
+  const chainFirst=new Map();
   async function displayRead(load,kind,owner,{force=false}={}){
     if(adapterFactory)return readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
-    const profile=getProfile(load.profileKey),key=displayKey(profile,kind+':'+(owner??'')),ttl=profile.abiSet==='v6'&&kind==='network'?DAY:DISPLAY_TTL;
-    let saved=lastGood.get(key);if(!saved&&profile.abiSet==='v6'&&kind==='network')saved=await displayCache.get(key);assertCurrent(load);
-    if(!force&&profile.abiSet==='v6'&&kind==='network'&&saved&&Date.now()-saved.at<ttl)return {...saved.value,source:{kind:'cached-rpc',at:saved.at}};
+    const profile=getProfile(load.profileKey),key=displayKey(profile,kind+':'+(owner??'')),ttl=DISPLAY_TTL;
+    let saved=lastGood.get(key);assertCurrent(load);
     try{let value;const api=displayApi(load);
-      if(api){if(kind==='network'){const economy=await api.economy(),core=await api.core();value=apiNetwork(core,economy);}
+      if(api&&kind==='wallet'&&owner&&(chainFirst.get(owner.toLowerCase())??0)>Date.now()){const chain=await readFor(load,'walletStatus',owner);value={...chain,earnings:chain.earnings??saved?.value?.earnings,rewards:chain.rewards??saved?.value?.rewards};}
+      else if(api){if(kind==='network'){const economy=await api.economy(),core=await api.core();value=apiNetwork(core,economy);}
         else {const net=!force&&state.net?.source?.kind==='api'?state.net:await displayRead(load,'network',null,{force});value=apiWallet(await api.account(owner),net,owner);}
       }else value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
-      assertCurrent(load);if(!value.source)value={...value,source:{kind:'rpc',at:Date.now()}};const entry={value,at:value.source.at};lastGood.set(key,entry);if(profile.abiSet==='v6'&&kind==='network')await displayCache.set(key,entry);return value;
+      assertCurrent(load);if(!value.source)value={...value,source:{kind:'rpc',at:Date.now()}};const entry={value,at:value.source.at};lastGood.set(key,entry);return value;
     }catch(error){assertCurrent(load);if(error.name==='TypeError'&&!error.kind)throw error;if(error.name==='RpcTrustError'||error.kind==='mismatch'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
       if(error.kind==='unavailable'||error.kind==='schema'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
       if(saved&&Date.now()-saved.at<ttl&&(error.kind==='transport'||error.name==='TypeError'))return {...saved.value,source:{...saved.value.source,kind:saved.value.source?.kind==='api'?'api':'cached-rpc',at:saved.at,stale:true}};
       // Unavailable API is not zero. Only the fresh guarded SDK may supply fallback.
-      if(displayApi(load)){const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);return {...value,source:{kind:'rpc',at:Date.now()}};}
+      if(displayApi(load)){for(const panel of kind==='network'?['Network']:['Squeeks'])recordSource(panel,'rpc',error.message);const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);return {...value,source:{kind:'rpc',at:Date.now(),reason:error.message}};}
       throw error;
     }
   }
-  let wheelEvents=[],wheelSettlements=[],feedLimit=5;
-  function feedRows(id,rows){const root=$(id);root.replaceChildren(...rows.map(row=>{const li=$('wheel-feed-item').content.firstElementChild.cloneNode(true),icon=li.querySelector('.feed-icon'),text=li.querySelector('.feed-text');icon.textContent={round:'◷',sqk:'↗',squeek:'◇'}[row.icon]??'◇';text.textContent=row.text;return li;}));root.title='API · 12 blocks behind';}
-  function renderWheelFeed(){const rows=wheelFeed(wheelEvents,wheelSettlements);feedRows('network-events',rows.slice(0,feedLimit));$('wheel-show-more').classList.toggle('hidden',rows.length<=feedLimit);$('wheel-show-more').setAttribute('aria-expanded',String(feedLimit>5));}
-  $('wheel-show-more').onclick=()=>{feedLimit+=5;renderWheelFeed();};
-  async function readWheelEvents(){const load=captureLoad(),api=displayApi(load);const result=await api.feed();assertCurrent(load);wheelEvents=result.data.events;renderWheelFeed();return result;}
-  async function displayFeeds(load){const api=displayApi(load);if(!api)return;
-    for(const [kind,read] of [['events',()=>api.feed()],['settlements',()=>api.settlements()],]){
-      try{const result=await read();assertCurrent(load);if(kind==='events')wheelEvents=result.data.events;else if(kind==='settlements')wheelSettlements=result.data.recentSettlements;else feedRows('account-activity',wheelFeed(result.data.events??result.data.activity));renderWheelFeed();}
-      catch(error){if(!isCurrent(load))return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);return;}if(error.kind&&error.kind!=='transport'){if(kind==='events')wheelEvents=[];else if(kind==='settlements')wheelSettlements=[];else $('account-activity').replaceChildren();renderWheelFeed();}}
-    }
-  }
-  function clearWheelFeed(){wheelEvents=[];wheelSettlements=[];feedLimit=5;renderWheelFeed();for(const id of ['account-activity','provisional-blocks'])$(id).replaceChildren();$('provisional-blocks').classList.add('hidden');}
-  function clearDisplayMismatch(error){wheelGoodAt=0;lastGood.clear();state.net=null;state.holderReadState='unavailable';renderNetworkPlaceholder();renderHolder(null);for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';clearWheelFeed();showReadFailure(error,'API identity');}
+  function clearWheelFeed(){for(const id of ['account-activity','provisional-blocks'])$(id).replaceChildren();$('provisional-blocks').classList.add('hidden');}
+  function clearDisplayMismatch(error){lastGood.clear();state.net=null;state.holderReadState='unavailable';renderNetworkPlaceholder();renderHolder(null);networkStrip.invalidate();for(const id of ['wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;clearWheelFeed();recordSource('Display validation','api',error.message);showReadFailure(Object.assign(new Error('Display source does not match this network.'),{name:'RpcTrustError',kind:'mismatch'}),'Display validation');}
 
   let destroyed = false;
   const telemetry = createTelemetry({ fetcher });
@@ -318,7 +330,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!state.account) renderWalletChip();
     $('activity-empty').classList.toggle('hidden', items.length !== 0);
     const pending = items.filter(item => !['confirmed', 'reverted'].includes(item.status)).length;
-    for(const item of items){const key=item.hash.toLowerCase(),before=activityNotices.get(key);if(activityReady&&before!==item.status){if(!before)toast(`${item.label} submitted.`, '', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='confirmed')toast(`${item.label} confirmed.`, 'ok', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='reverted')toast(`${item.label} failed.`, 'err', {action:'View',onAction:()=>openSheet('activity-drawer')});}activityNotices.set(key,item.status);}
+    for(const item of items){const key=item.hash.toLowerCase(),before=activityNotices.get(key);const fresh=Date.now()-Date.parse(item.time||0)<120000;if(activityReady&&before!==item.status&&(before||fresh)){if(!before)toast(`${item.label} submitted.`, '', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='confirmed')toast(`${item.label} confirmed.`, 'ok', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='reverted')toast(`${item.label} failed.`, 'err', {action:'View',onAction:()=>openSheet('activity-drawer')});}activityNotices.set(key,item.status);}
     activityReady=true;workspace?.localChanged();
     $('pending-count').textContent = String(pending);
     $('pending-count').classList.toggle('hidden', !pending);
@@ -341,27 +353,22 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const profile = getProfile(profileKey);
     if (!profile.addresses) return null;
     if (adapterFactory) return adapterFactory(profileKey, { signal: loadController.signal, generation });
-    return profile.abiSet === "v9"
-      ? createSqueek9({ profileKey, cache: store, verificationCache, chainCache, discoveryCache, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null })
-      : createSqueekchain({ addresses: profile.addresses, cache: store, verificationCache, chainCache, discoveryCache, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null });
+    return createSqueekchain({ profileKey, cache: store, verificationCache, chainCache, discoveryCache, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null });
   }
 
   function renderProfileOptions() {
-    el.profileSelect.replaceChildren(
-      ...Object.values(PROFILES).map((p) => {
-        const option = doc.createElement("option");
-        option.value = p.key;
-        const count = state.profileCounts[p.key];
-        option.textContent = p.label + (state.account && p.addresses ? ` · ${profileCountLabel(count)}` : "");
-        // Mainnet remains selectable as an honest launch-status view.
-        return option;
-      }),
-    );
+    // Two networks only: the published Sepolia deployment and mainnet, which is
+    // listed as not deployed and never gets guessed addresses.
+    el.profileSelect.replaceChildren(...Object.values(PROFILES).map(profile => {
+      const option = doc.createElement("option");
+      option.value = profile.key;
+      option.textContent = profile.label;
+      return option;
+    }));
     el.profileSelect.value = state.profileKey;
     const badge = $('profile-status');
-    badge.setAttribute('aria-label', 'Live verification: open Info Trust');
-    $('profile-choice').classList.toggle('hidden', !state.account || !(profileHeld(state.profileCounts['sepolia-v6']) && profileHeld(state.profileCounts['sepolia-v9'])));
-    $('profile-choice').textContent = `v6: ${profileCountLabel(state.profileCounts['sepolia-v6'])}. v9: ${profileCountLabel(state.profileCounts['sepolia-v9'])}. Choose either profile in the selector.`;
+    badge.removeAttribute('aria-label');
+    $('profile-choice').classList.add('hidden');
   }
 
   async function switchProfile(profileKey, { preserveWallet = false, syncWallet = false } = {}) {
@@ -385,7 +392,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     state.lastReadFailure=null;state.holderReadState='idle';
 
     state.receipts = [];
-    wheelGoodAt=0;clearWheelFeed();
+    wheelOffline=false;clearWheelFeed();
     state.art.clear();
     state.artifactsLoaded = false;
     el.art.grid.replaceChildren();
@@ -413,15 +420,18 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     renderDeploymentVisibility();
     state.adapter = buildAdapter(state.profileKey);
     renderToolOptions();
-    void refreshTelemetry();
-    const selectedProfile=state.profileKey;
-    if(syncWallet)await requestProfileChain();
-    if(selectedProfile!==state.profileKey||destroyed)return;
-    if (!state.adapter) {
-      if (state.busy) showBanner("A prior wallet request may still complete; check that wallet before retrying.", "warn");
-      return;
-    }
-    await refreshAll();
+    const primary={generation,pending:true};primary.promise=new Promise(resolve=>primary.resolve=resolve);profileRead=primary;
+    try {
+      void refreshTelemetry();
+      const selectedProfile=state.profileKey;
+      if(syncWallet)await requestProfileChain();
+      if(selectedProfile!==state.profileKey||destroyed)return;
+      if (!state.adapter) {
+        if (state.busy) showBanner("A prior wallet request may still complete; check that wallet before retrying.", "warn");
+        return;
+      }
+      await refreshAll();
+    } finally {primary.pending=false;primary.resolve();}
   }
 
   function renderDeploymentVisibility() {
@@ -430,14 +440,21 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $("not-deployed").classList.toggle("hidden", deployed);
     $("not-deployed-note").textContent = deployed ? "" : getProfile(state.profileKey).notes;
     el.refresh.classList.toggle("hidden", !deployed);
+    $("checkpoint-panel").classList.toggle("hidden",!deployed);
     el.verified.classList.remove('hidden');
     selectTab(currentRoute());
   }
 
+  const networkStrip = createNetworkStrip(doc,{wheelEnabled:key=>Boolean(getProfile(key).apiBase)});
+  let wheelOffline=false,profileRead;
   const capabilities = () => ({...getProfile(state.profileKey).capabilities,reasons:ACTION_REASONS});
 
   function renderNetworkPlaceholder() {
     const profile = getProfile(state.profileKey);
+    networkView.reset(profile);
+    networkStrip.reset(state.profileKey);
+    networkStrip.network(null);
+    for(const id of ['net-progress','net-squeeks','net-paused'])$(id).textContent=UNKNOWN;
     $("holder-rewards-notice").textContent = ""; $("holder-rewards-notice").classList.add("hidden");
     $("settlement-status").textContent = "";
     el.net.settlement.textContent = "";
@@ -457,8 +474,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     renderPolicy(null);
     renderContracts(profile);
     renderCapabilities(profile);
-    el.net.chain.textContent = profile.chainId === CHAIN.id ? "Sepolia" : "Ethereum";
-    el.net.kind.textContent = profile.kind;
+    el.net.chain.textContent = profile.chainId === SEPOLIA_CHAIN_ID ? "Sepolia" : "Ethereum";
     el.net.release.textContent = profile.addresses?`${profile.short.toUpperCase()} · Sepolia`:"Not deployed";
     el.net.notice.textContent = profile.addresses?"Test network. Use test funds only.":"Not deployed on Ethereum.";
     el.net.notice.className = `notice ${profile.addresses ? "" : "warn"}`;
@@ -479,24 +495,33 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderContracts(profile) {
     $('contracts-release').textContent = profile.addresses?`${profile.short.toUpperCase()} contracts`:'Not deployed';
     $('contracts-list').replaceChildren(...Object.entries(profile.addresses ?? {}).map(([name, address]) => {
-      const row = doc.createElement('li'), link = doc.createElement('a');
-      link.textContent = `${name}: ${address}`; link.href = `${EXPLORER}/address/${address}`;
-      link.target = '_blank'; link.rel = 'noopener noreferrer'; row.append(link); return row;
+      const row = doc.createElement('li'), label = doc.createElement('span'), link = doc.createElement('a'), copy = doc.createElement('button');
+      label.className = 'contract-name'; label.textContent = name.length <= 3 ? name.toUpperCase() : name.charAt(0).toUpperCase() + name.slice(1);
+      link.className = 'mono'; link.textContent = `${address.slice(0, 6)}…${address.slice(-4)}`; link.title = address; link.setAttribute('aria-label', `${name} contract ${address}`);
+      link.href = `${EXPLORER}/address/${address}`; link.target = '_blank'; link.rel = 'noopener noreferrer';
+      copy.type = 'button'; copy.className = 'btn btn-small'; copy.textContent = 'Copy'; copy.setAttribute('aria-label', `Copy ${name} address`);
+      copy.addEventListener('click', () => { navigator.clipboard?.writeText(address).then(() => { copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); }, () => {}); });
+      row.append(label, link, copy); return row;
     }));
   }
 
   let lastVerificationTime = null;
   function updateTrustAge() {
-    $('trust-time').textContent=lastVerificationTime==null?UNKNOWN:new Date(lastVerificationTime).toISOString();
+    $('trust-time').textContent=lastVerificationTime==null?UNKNOWN:new Date(lastVerificationTime).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'});$('trust-time').title=lastVerificationTime==null?'':new Date(lastVerificationTime).toISOString();
   }
   function renderTrust(v) {
+    if(v?.ok&&v?.trusted)clearReadBanner();
     lastVerificationTime=v?Date.now():null;
-    $('trust-block').textContent=valueText(v?.blockNumber ?? state.net?.snapshot?.blockNumber);
-    $('trust-result').textContent=v ? v.ok && v.trusted ? 'Verified' : capabilities().reasons.mismatch : UNKNOWN;
+    $('trust-block').textContent=formatNumber(v?.blockNumber ?? state.net?.snapshot?.blockNumber);
+    if(v?.ok||!v&&!state.lastReadFailure)$('rpc-diagnostics').textContent='';
+    $('trust-result').textContent=v?.ok&&v?.trusted?'Verified':v?"Can't verify right now":UNKNOWN;
+    for(const id of ['trust-block','trust-time'])$(id).parentElement.hidden=!(v?.ok&&v?.trusted);
+    $('trust-checklist').hidden=!(v?.ok&&v?.trusted);
     updateTrustAge();
     $('trust-checklist').dataset.state=v ? v.ok && v.trusted ? 'verified' : 'stopped' : 'unknown';
     doc.querySelectorAll('[data-trust-check]').forEach(node=>{node.textContent=v ? v.ok && v.trusted ? 'Checked' : 'Stopped' : UNKNOWN;});
     $('core-pause-note').classList.toggle('hidden',state.net?.core?.paused!==true);
+    $('info-reward-status').hidden=state.net?.core?.settledThroughRound==null;
     $('info-reward-status').textContent=el.net.settlement.textContent || (state.net?.core?.paused===true?capabilities().reasons.paused:state.net?.core?.settledThroughRound != null ? `Settled through round ${state.net.core.settledThroughRound}.` : UNKNOWN);
     const peers = [...(store.get('wheelhouse:rpc')?['Custom RPC']:[]),...PUBLIC_RPC_ENDPOINTS.map(peer=>new URL(peer.url).hostname)];
     const checked=state.net?.snapshot?.peers??[];
@@ -512,31 +537,50 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }));
   }
 
-  let wheelGoodAt=0;const errorIsTransient=error=>error.name!=='RpcTrustError'&&(!error.kind||error.kind==='transport');
+  let offlineNetworkFlight;
+  async function offlineNetwork(load) {
+    if(offlineNetworkFlight?.generation===load.generation)return offlineNetworkFlight.promise;
+    const flight={generation:load.generation};offlineNetworkFlight=flight;
+    flight.promise=(async()=>{
+      try {
+        // Reuse the profile/wallet snapshot already in progress. A device failure
+        // must not start parallel chain reads or repaint a half-switched profile.
+        const primary=profileRead?.generation===load.generation?profileRead:null;
+        const refresh=refreshFlight?.generation===load.generation?refreshFlight:null;
+        const waited=primary?.pending||Boolean(refresh);
+        if(primary)await primary.promise;
+        if(refresh)await refresh.promise;
+        assertCurrent(load);
+        // The primary read already diagnosed a failed RPC snapshot. Do not
+        // immediately retry those same peers just because telemetry also failed.
+        if(waited&&!state.net&&state.lastReadFailure?.profile===load.profileKey&&state.lastReadFailure.scope!=='Display validation')return;
+        const current=state.net,source=current?.source;
+        if(current&&source?.kind!=='api'&&(!source||source.kind==='rpc'&&Date.now()-source.at<30000)) {
+          networkStrip.network(current);recordSource('Block height','rpc');return;
+        }
+        const net=await readFor(load,'networkStatus');assertCurrent(load);
+        const value={...net,source:{kind:'rpc',at:Date.now(),reason:'Wheel API unavailable; guarded chain read'}};
+        recordSource('Block height','rpc');renderNetwork(value);displayVerification(value);displayStamp(value);
+      } catch(error) { if(isCurrent(load))showReadFailure(error,'Network'); }
+      finally {if(offlineNetworkFlight===flight)offlineNetworkFlight=null;}
+    })();return flight.promise;
+  }
+  function wheelFailure(load) {
+    wheelOffline=true;networkStrip.offline();
+    if(state.net?.source?.kind==='api')networkStrip.network(null);
+    void offlineNetwork(load);
+  }
+  function wheelReading(load,data,result={}) {
+    networkStrip.reading(data,result);wheelOffline=result.stale===true;
+    if(result.stale===true)wheelFailure(load);
+    else if(state.net)networkStrip.network(state.net);
+  }
   async function refreshTelemetry({ reset = true } = {}) {
-    const load = captureLoad();
-    const enabled = state.profileKey === "sepolia-v9";
-    if (reset || !enabled) {
-      for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = UNKNOWN;
-      $("wheel-state").textContent = enabled ? "Loading" : "Unavailable";
-      $("wheel-note").textContent = enabled ? "Reading official device telemetry…" : "Device telemetry belongs to the live Sepolia deployment only.";
-    }
-    if (!enabled) return;
-    try {
-      const api=displayApi(load);const result=await viewAwait(load,()=>api?api.status():telemetry.read({signal:load.signal}));const data=api?result.data:result;const view=telemetryView(data);
-      if (!isCurrent(load)) return;
-      $("wheel-state").textContent = view.state;
-      $("wheel-rpm").textContent = view.rpm;
-      $("wheel-speed").textContent = view.speed;
-      $("wheel-distance").textContent = view.distance;
-      $("wheel-note").textContent = view.note;wheelGoodAt=result.at??Date.now();
-    } catch (err) {
-      if (!isCurrent(load)) return;
-      if(errorIsTransient(err)&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL){$("wheel-note").textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;return;}
-      for (const id of ["wheel-rpm", "wheel-speed", "wheel-distance"]) $(id).textContent = UNKNOWN;
-      $("wheel-state").textContent = "Unknown";
-      $("wheel-note").textContent = `${err.message} No live reading to display.`;
-    }
+    const load=captureLoad(),enabled=Boolean(getProfile(state.profileKey).apiBase);
+    if(reset){networkStrip.loading();for(const id of ['wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-note').textContent=enabled?'Waiting for a device reading.':'No live device reading for this profile.';}
+    if(!enabled)return;
+    try{const api=displayApi(load);const result=await viewAwait(load,()=>api?api.status():telemetry.read({signal:load.signal}));assertCurrent(load);wheelReading(load,api?result.data:result,api?result:{});}
+    catch(error){if(!isCurrent(load))return;recordSource('Wheel','api',error.message);if(error.name==='RpcTrustError')clearDisplayMismatch(error);wheelFailure(load);}
   }
 
   // ── wallet ────────────────────────────────────────────────────────────────
@@ -548,7 +592,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     try {
       await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: profile.hexChainId }] });
     } catch (err) {
-      if ((err?.code === 4902 || /Unrecognized chain/i.test(err?.message ?? "")) && profile.chainId === CHAIN.id) {
+      if ((err?.code === 4902 || /Unrecognized chain/i.test(err?.message ?? "")) && profile.chainId === SEPOLIA_CHAIN_ID) {
         if(!currentRequest())return;
         await p.request({
           method: "wallet_addEthereumChain",
@@ -557,7 +601,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
               chainId: profile.hexChainId,
               chainName: "Sepolia",
               nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-              rpcUrls: CHAIN.rpcUrls,
+              rpcUrls: PUBLIC_RPC_ENDPOINTS.map(endpoint => typeof endpoint === "string" ? endpoint : endpoint.url),
               blockExplorerUrls: [EXPLORER],
             },
           ],
@@ -569,7 +613,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(currentRequest()&&String(await p.request({method:'eth_chainId'})).toLowerCase()!==profile.hexChainId)throw new Error('Wallet network did not change. Try switching again.');
   }
 
-  function watching(){return Boolean(state.watchOnly||state.inspected&&state.inspected.toLowerCase()!==state.account?.toLowerCase());}
+  function watching(){return Boolean(win.history.state?.exploreReadOnly||state.watchOnly||state.inspected&&state.inspected.toLowerCase()!==state.account?.toLowerCase());}
   let walletWork=Promise.resolve();
   // Only explicit local Connect/profile/menu actions may open a network prompt.
   async function requestProfileChain(){
@@ -591,11 +635,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const load=captureLoad(),account=state.account;
     if(!account||!state.adapter||state.chainId!==11155111)return;
     try{
-      const counts=await viewAwait(load,()=>profileBalanceReader?profileBalanceReader(account):profileBalances(account,{rpcUrl:store.get('wheelhouse:rpc')||undefined,provider,chainCache,discoveryCache,signal:load.signal}));
-      assertCurrent(load);state.profileCounts=counts;renderProfileOptions();
-      const chosen=state.watchOnly||/\/squeek\//.test(win.location.hash)?state.profileKey:chooseProfile(state.profileKey,counts);
-      if(chosen!==state.profileKey){await switchProfile(chosen,{preserveWallet:true});return;}
-    }catch(error){if(!isCurrent(load))return;state.profileCounts={};renderProfileOptions();}
+      if(profileBalanceReader)await viewAwait(load,()=>profileBalanceReader(account));
+      assertCurrent(load);renderProfileOptions();
+    }catch(error){if(!isCurrent(load))return;renderProfileOptions();}
     await refreshAll();
   }
   function onWallet(next,previous,reason){
@@ -604,8 +646,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const changed=next.account?.toLowerCase()!==previous.account?.toLowerCase()||next.chainId!==previous.chainId||next.providerInfo?.rdns!==previous.providerInfo?.rdns;
     if(!changed||(!next.account&&!previous.account&&next.chainId===previous.chainId))return;
     const wasWatch=state.watchOnly||state.inspected&&state.inspected.toLowerCase()!==previous.account?.toLowerCase();
-    resetLoad();chainCache.clear();dialog.close();state.lastReadFailure=null;closeWalletMenu();state.profileCounts={};
-    if(previous.account&&next.account?.toLowerCase()!==previous.account.toLowerCase())pendingSwitchNotice();
+    resetLoad();chainCache.clear();dialog.close();state.lastReadFailure=null;closeWalletMenu();    if(previous.account&&next.account?.toLowerCase()!==previous.account.toLowerCase())pendingSwitchNotice();
     if(!wasWatch)state.inspected=next.account;
     renderHolder(null);renderProfileOptions();renderCheckpointGate();renderActivity(activity.list());
     if(!getProfile(state.profileKey).addresses)return;
@@ -644,6 +685,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
   async function sendTransaction(tx, label, owner = state.account, load = captureLoad()) {
     assertCurrent(load);
+    // The display API trails the chain by several minutes. After this wallet sends a tx, read it from chain for 15 min.
+    if(owner)chainFirst.set(owner.toLowerCase(),Date.now()+15*60e3);
     if(watching())throw new Error('Viewing only');
     const p = provider();
     if (!p || !state.account) throw new Error("connect a wallet to sign");
@@ -664,7 +707,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       ticket.rpcPending=true;
       // The wallet sets network gas and fees; never forward preview fee/gas overrides.
       const response=Promise.resolve().then(()=>p.request({method:'eth_sendTransaction',params:[{from:owner,to:tx.to,data:tx.data,value:`0x${BigInt(tx.value??0).toString(16)}` }]})).then(result=>{
-        activity.record(result,label,CHAIN.id,load.profileKey,owner);void activity.refresh();
+        activity.record(result,label,getProfile(load.profileKey).chainId,load.profileKey,owner);void activity.refresh();
         if(ticket.cancelled||!isCurrent(load))void followLateHash(result,load.profileKey,owner);
         return result;
       }).finally(()=>{if(outstandingPrompts.get(p)===ticket)outstandingPrompts.delete(p);ticket.notice?.remove();if(!destroyed){renderCheckpointGate();renderHolder(state.status,state.plan);}});
@@ -688,25 +731,35 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const unknownHoldings=Boolean(state.inspected) && (state.status?.owner?.toLowerCase()!==state.inspected.toLowerCase() || num(state.status?.totals?.count)===UNKNOWN);
     el.cp.button.disabled=state.watchOnly || state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
   }
+  let liveSupply=null,explorePrefetched=false,artSampled=false,lastTabHash=null;
+  const closeSqueek=()=>{if(!$('squeek-modal')||$('squeek-modal').classList.contains('hidden'))return;const tab=[...el.tabs].find(t=>t.getAttribute('aria-selected')==='true')?.dataset.tab??'squeeks';win.location.hash=lastTabHash??(state.watchOnly&&state.inspected?`#/${state.profileKey}/address/${state.inspected}/${tab}`:`#${state.profileKey}/${tab}`);};
+  if($('squeek-modal-close'))$('squeek-modal-close').onclick=closeSqueek;
+  $('squeek-modal')?.addEventListener('click',e=>{if(e.target===$('squeek-modal'))closeSqueek();});
+  doc.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('squeek-modal')&&!$('squeek-modal').classList.contains('hidden')&&!doc.querySelector('#modal:not(.hidden)'))closeSqueek();});
   function renderNetwork(net) {
     const previous = observedRounds.get(state.profileKey);
     const round = net.core?.settledThroughRound;
     if (/^\d+$/.test(String(round))) observedRounds.set(state.profileKey, BigInt(round));
     state.net = net;
+    if(!wheelOffline||!net.source||net.source.kind==='rpc')networkStrip.network(net);
     const core=net.core??{},mining=net.mining??{},checkpoint=net.checkpoint??{};
     setStat(el.net.round,core.settledThroughRound);
     const hasRound=/^\d+$/.test(String(round));
     const advancement=hasRound&&previous!=null&&BigInt(round)>previous&&core.paused!==true?' Mining live: rounds advanced.':'';
     const stalled=settlementStatus(net).stalled===true;
     const notice=stalled?`Rewards paused: settlement stopped at round ${round}.`:'';
-    for (const node of [el.net.settlement,$('holder-rewards-notice')]) { node.textContent=notice; node.classList.toggle('hidden',!stalled); }
+    for (const node of [el.net.settlement,$('holder-rewards-notice')]) { node.textContent=notice;node.classList.toggle('hidden',!notice); }
     $('settlement-status').textContent=advancement.trim();
     setStat(el.net.blocks, core.blockHeight, num);
     setStat(el.net.lag, mining.lagRounds, value => num(value) === UNKNOWN ? UNKNOWN : `${num(value)} ${BigInt(value)===1n?'round':'rounds'}`);
-    const v9=getProfile(state.profileKey).abiSet==='v9';
-    setStat(el.net.issued,v9?mining.issued:mining.minted,sqk);
+    const v9=Boolean(getProfile(state.profileKey).addresses);
+    setStat(el.net.issued,net.supply?.issued??(v9?mining.issued:mining.minted),sqk);
+    setStat($('net-progress'),core.blockProgress,value=>/^\d+$/.test(String(value))&&BigInt(value)<=1000000000n?`${(Number(value)/10000000).toFixed(1)}%`:UNKNOWN);
+    for(const panel of ['Network'])recordSource(panel,net.source?.kind==='api'?'api':'rpc',net.source?.reason??(net.source?.stale?'Cached response; live request unavailable':net.source?.kind==='cached-rpc'?'24-hour display cache':null));
     $('net-issued-label').textContent='SQK issued';
-    setStat(el.net.squeeks, net.nft?.totalSupply, num);
+    setStat(el.net.squeeks, net.nft?.totalSupply, num);liveSupply=net.nft?.totalSupply??liveSupply;explore?.supply(liveSupply);
+    // Chain data loads without a wallet: warm the Explore index in the background once the chain verifies.
+    if(!explorePrefetched&&getProfile(state.profileKey).addresses){explorePrefetched=true;win.setTimeout(()=>{void ensureExplore().then(e=>{e.supply(liveSupply);return e.prefetch();}).catch(error=>recordSource('Explore','rpc',error.message));},1500);}
     setStat(el.net.paused, core.paused, value => value === true ? 'yes' : value === false ? 'no' : UNKNOWN);
     el.net.paused.parentElement.className = `stat ${core.paused === true ? 'bad' : core.paused === false ? 'ok' : ''}`;
 
@@ -729,7 +782,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
 
   function columnsForProfile() {
-    const isV9 = getProfile(state.profileKey).abiSet === "v9";
+    const isV9 = Boolean(getProfile(state.profileKey).addresses);
     return isV9
       ? [
           { key: "tokenId", label: "token" },
@@ -752,7 +805,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderWatchMode() {
     const viewing=watching();
     $('watch-mode').classList.toggle('hidden',!viewing);
-    $('watch-chip').textContent=viewing?`Viewing ${short(state.inspected)}`:'';
+    $('watch-chip').textContent=viewing?`Viewing ${short(state.inspected)} · view only, actions need this wallet connected`:'';
     $('watch-chip').title=viewing?state.inspected:'';
     el.holder.watchRow.classList.remove('hidden');
   }
@@ -774,12 +827,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     workspace?.sync(status);if(status&&!workspace)void ensureWorkspace().then(w=>{if(state.status===status)w.sync(status);});
     renderCheckpointGate();
     const caps = capabilities();
-    const isV9 = getProfile(state.profileKey).abiSet === 'v9';
+    const isV9 = Boolean(getProfile(state.profileKey).addresses);
     el.holder.power.parentElement.querySelector('.label').textContent = isV9 ? 'Deposited' : 'Power';
     const inspected=status?.owner??state.inspected??state.account;
     el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);
     el.holder.refresh.disabled=!state.adapter||!inspected;
-    $('holder-copy-link').classList.toggle('hidden',!inspected);$('btn-planner').disabled=!(status?.squeeks?.length);$('holder-history-link').href=state.watchOnly&&state.inspected?`${watchHash(state.profileKey,state.inspected)}/activity`:`#${state.profileKey}/activity`;
+    $('holder-copy-link').classList.toggle('hidden',!inspected);$('btn-planner').disabled=!(status?.squeeks?.length);$('btn-planner').hidden=!status?.squeeks?.some(token=>Number.isInteger(token.level)&&token.level>0&&token.level<state.net?.policy?.maximumLevel);
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
     if (!status) {
@@ -795,7 +848,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const signerOwns = Boolean(!watching()&&(state.chainId==null||state.chainId===11155111) && state.account && status.owner?.toLowerCase() === state.account.toLowerCase());
     setStat(el.holder.count, totals.count, num);
     setStat(el.holder.power, isV9 ? totals.deposited : totals.power, num);
-    setStat(el.holder.share, totals.sharePercent, value => num(value, 4) === UNKNOWN ? UNKNOWN : `${num(value, 4)}%`);
+    // Share is rarely published; fall back to total power so the summary never shows a blank slot.
+    const showShare=num(totals.sharePercent,4)!==UNKNOWN;$('holder-share-label').textContent=showShare?'Share':'Power';
+    if(showShare)setStat(el.holder.share, totals.sharePercent, value => `${num(value, 4)}%`);else setStat(el.holder.share, totals.power, value => {const text=String(value??'');if(!/^\d+$/.test(text))return UNKNOWN;const big=BigInt(text);/* Staking power is 18-decimal fixed point; no real wallet reaches 1e18 unscaled. */return num(String(big>=10n**18n?big/10n**18n:big));});
     setStat(el.holder.claimable, totals.claimable, sqk);
     el.holder.claim.disabled = state.busy || state.walletPromptPending || num(totals.count) === UNKNOWN || (!has && !isV9) || !signerOwns || !caps.claim;
     $("btn-custom-merge").disabled = state.busy || state.walletPromptPending || !has || !signerOwns || !caps.merge;
@@ -840,10 +895,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       verifiedForGeneration=v;state.lastReadFailure=null;
       renderTrust(v);
       el.verified.textContent = v.ok && v.trusted ? "Verified" : "Stopped";
-      el.verified.className = "sr-only"; $("profile-status").className = `chip ${v.ok && v.trusted ? "ok" : "bad"}`;
-      $("profile-status").textContent = v.ok && v.trusted ? "Verified" : "Mismatch: stop";
-      el.verified.title = v.ok && v.trusted ? `Network and contract checks passed at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; latest check at block ${v.blockNumber ?? "unknown"}. Two independent connections agree.` : "Network or contract checks did not match. Actions are stopped.";
-      $("profile-status").title = el.verified.title;
+      el.verified.className = "sr-only";
+      trustDisplay({kind:v.ok&&v.trusted?'verified':'mismatch',chipText:v.ok&&v.trusted?'Verified':'Mismatch: stop',
+        title:v.ok&&v.trusted?`Network and contract checks passed at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; latest check at block ${v.blockNumber ?? "unknown"}. Two independent connections agree.`:"Network or contract checks did not match. Actions are stopped."});
   }
 
   async function refreshNetwork(options={}) {
@@ -855,6 +909,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       const v = net.source?null:net.verification ?? await readFor(load,"verify");
       if (!isCurrent(load)) return null;
       renderNetwork(net);
+      void refreshNetworkExtras();
       if(net.source){displayVerification(net);displayStamp(net);}else renderVerification(v);
       clearReadBanner();
       return net;
@@ -986,7 +1041,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for (const batch of preview.batches) {
       if (!isCurrent(load) || state.account?.toLowerCase() !== owner.toLowerCase()) throw new Error("Wallet or profile changed. Stopped.");
       const fresh = await readFor(load, "claimPreview", owner, batch.tokenIds);
-      const v9=getProfile(load.profileKey).abiSet==='v9';
+      const v9=Boolean(getProfile(load.profileKey).addresses);
       if (!fresh.ok || fresh.batches.length!==1 || (v9?BigInt(fresh.batches[0].amount.base)<BigInt(batch.amount.base):fresh.batches[0].amount.base!==batch.amount.base) || recipientOf(fresh,owner)!==recipientOf(preview,owner))throw new Error('Claim outcome changed. Review a fresh preview; no automatic retry.');
       if(v9&&BigInt(fresh.batches[0].amount.base)>BigInt(batch.amount.base)){showClaimIncrease(batch.amount,fresh.batches[0].amount);showOut(el.holder.claimOut,fresh);}
       receipts.push(await sendTransaction(fresh.batches[0].tx, 'Claim SQK', owner, load));
@@ -1046,7 +1101,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     try{return await requestActionInner(action,input);}
     catch(error){const quoteError=action==='unstake'?unstakeQuoteError(error):null;if(quoteError)return showFeeRose(action,input,load,quoteError.reason);throw error;}
   }
-  async function requestActionInner(action, input = {}) {
+  async function requestActionInner(action, input = {}, opts = {}) {
     if (!capabilities().deposit) throw new Error(capabilities().reasons.unavailable);
     const load = captureLoad(), owner = state.account;
     if (!owner || owner.toLowerCase() !== state.inspected?.toLowerCase()) throw new Error('Connect the inspected owner wallet');
@@ -1058,6 +1113,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     const preview = await readFor(load,'actionPreview',owner,action,input);
     showOut($('v9-result'),preview);
+    if (!preview.ok&&action==='stake'&&preview.approvalRequired&&!opts.autoApproved) {
+      // ERC-20: staking can only pull SQK after an approval. Ask for the exact amount, then continue to Stake.
+      showBanner('Step 1 of 2: approve exactly this SQK amount, then confirm the stake.','warn');
+      const approved=await requestActionInner('approveSqk',{amount:input.amount});
+      if(approved?.ok===false)return approved;
+      assertCurrent(load);hideBanner();
+      return requestActionInner('stake',input,{autoApproved:true});
+    }
     if (!preview.ok) {if(['feeRose','quoteExpired'].includes(preview.reasonCode))return showFeeRose(action,input,load,preview.reason); showBanner(preview.reason,'warn'); return preview; }
     const mergeLabel=action==='mergeDeposited'?`Keep #${input.survivor} · burn #${input.donor}`:null;
     const body=mergeLabel?`${mergeLabel}. #${input.donor} is BURNED permanently and cannot be restored. #${input.survivor} survives at level ${preview.nextLevel}.`:action==='unstake'?'The quoted exit fee is burned.':`${actionNames[action]??'Review action'}. ${preview.amount?.sqk?'Rewards: '+preview.amount.sqk+' SQK.':''}`;
@@ -1233,41 +1296,54 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // Routes are display-only; legacy API tab names remain aliases for integrations.
   function currentRoute() {
-    const parts = win.location.hash.replace(/^#\/?/,'').split('/');
+    const parts = win.location.hash.split('?')[0].replace(/^#\/?/,'').split('/');
     if (profileFromHash(win.location.hash)) parts.shift();
     const hash = parts.join('/');
-    return /^(squeeks|squeek|address|activity|art|network|info)(\/|$)/.test(hash) ? hash : (state.account || state.inspected ? 'squeeks' : 'network');
+    return /^(home|squeeks|squeek|address|activity|art|explore|network|info)(\/|$)/.test(hash) ? hash+(win.location.hash.includes('?')?'?'+win.location.hash.split('?')[1]:'') : (state.account?'squeeks':'home');
   }
   function selectTab(route) {
-    const aliases = { overview: 'network', holdings: 'squeeks', agent: 'info/developers' };
-    route = aliases[route] ?? route;
+    const aliases = { overview: 'squeeks', holdings: 'squeeks', playground: 'squeeks', art: 'explore', agent: 'info/developers' };
+    const query=String(route).split('?')[1]??(win.location.hash.split('?')[0].endsWith('/'+String(route))?win.location.hash.split('?')[1]:'');route=String(route).split('?')[0];route = aliases[route] ?? route;
     const special=/^(address|squeek)\//.test(route);
-    let [name, section] = String(route).split('/');if(special)name=String(route).startsWith('address/')?(String(route).split('/')[2]??'squeeks'):'squeeks';
-    if (!['squeeks', 'activity', 'art', 'network', 'info'].includes(name)) name = state.account || state.inspected ? 'squeeks' : 'network';
+    const squeekRoute=special&&String(route).startsWith('squeek/');
+    // A Squeek opens as a popup over whichever tab is showing (Squeeks or Playground).
+    const shownTab=[...el.tabs].find(t=>t.getAttribute('aria-selected')==='true')?.dataset.tab;
+    let [name, section] = String(route).split('/');if(special)name=String(route).startsWith('address/')?(String(route).split('/')[2]??'squeeks'):(['squeeks','explore'].includes(shownTab)?shownTab:'squeeks');
+    const openHistory=name==='activity';if(openHistory)name='squeeks';
+    if(name==='art')name='explore';
+    if(name==='info'&&section==='about'){name='home';section=undefined;}
+    if (!['home', 'squeeks', 'explore', 'network', 'info'].includes(name)) name = 'squeeks';
     const deployed = Boolean(getProfile(state.profileKey).addresses);
     if(!deployed)name='info';
+    const sections=['how-it-works','trust','status','contracts','developers'];
+    if(name==='info'){if(!sections.includes(section))section='how-it-works';for(const node of doc.querySelectorAll('#panel-info .info-section'))node.hidden=node.id!==`info-${section}`;}
     doc.querySelectorAll('a[href^="#info/"], a[data-info-route]').forEach(link => { const route = link.dataset.infoRoute ?? link.getAttribute('href').slice(1); link.dataset.infoRoute = route; link.href = `#${state.profileKey}/${route}`; });
     el.tabs.forEach(t => { t.setAttribute('aria-selected', String(t.dataset.tab === name)); t.tabIndex = t.dataset.tab === name ? 0 : -1; });
     el.panels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== name || (!deployed && name !== 'info')));
-    const hash = special?`#/${state.profileKey}/${route}`:`#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers', 'about'].includes(section) ? '/' + section : ''}`;
+    let hash = special?`#/${state.profileKey}/${route}`:`#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers'].includes(section) ? '/' + section : ''}`;
+    if(query&&['squeeks','explore'].includes(name))hash+='?'+query;
     // replaceState avoids hashchange loops, while tab clicks below create history entries.
     if (win.location.hash !== hash) win.history.replaceState(null, '', hash);
+    if(!squeekRoute)lastTabHash=hash;
     if(special&&String(route).startsWith('squeek/')){try{rememberWatch(holderRoute(hash),state.watchOnly?activeWatchRoute:null);}catch{/* Invalid routes are reported below. */}}
-    if (name === 'info' && section) $("info-" + section)?.scrollIntoView?.({ block: 'start' });
-    $('holder-overview').hidden=special&&String(route).startsWith('squeek/');$('squeek-page').hidden=!$('holder-overview').hidden;
-    if(name==='activity')void ensureWorkspace().then(w=>w.history());
+    for(const link of doc.querySelectorAll('.info-links a')){if(name==='info'&&link.hash.endsWith('/'+section))link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+    $('holder-overview').hidden=false;$('squeek-modal')?.classList.toggle('hidden',!squeekRoute);doc.body.classList.toggle('modal-open',squeekRoute);
+    if(name==='squeeks'&&state.adapter){holdings.refresh();if(!query)void refreshNetworkExtras();}
+    if(name==='network'&&state.adapter)void refreshNetworkExtras();
+        if(name==='explore'&&!squeekRoute)void ensureExplore().then(e=>e.show()).catch(error=>recordSource('Explore','rpc',error.message));
+    if(openHistory)openSheet('activity-drawer');
     if(special&&String(route).startsWith('squeek/')){try{const parsed=holderRoute(hash);void ensureWorkspace().then(w=>w.detail(parsed));}catch(error){routeError(error);}}else workspace?.detail(null);
   }
   function routeError(error){state.watchOnly=true;resetLoad();state.inspected=null;renderHolder(null);$('holder-route-error').textContent=error.message;$('holder-route-error').classList.remove('hidden');}
   let activeWatchRoute=null;
   // Session-history display scope only; never an account or transaction authority.
   function watchScope(route){if(route?.kind==='address')return route.address;if(route?.kind!=='squeek')return null;const saved=win.history.state?.holderWatch;if(saved?.profile===route.profile&&saved?.id===route.id)return saved.address==null?null:watchAddress(saved.address);return state.watchOnly?activeWatchRoute:null;}
-  function rememberWatch(route,address){if(route?.kind==='squeek')win.history.replaceState({holderWatch:{profile:route.profile,id:route.id,address}},'',win.location.hash);}
-  const onHashChange = async () => {try{const key=profileFromHash(win.location.hash),route=holderRoute(win.location.hash),watched=watchScope(route);let leftWatch=false;$('holder-route-error').classList.add('hidden');rememberWatch(route,watched);
-    if(watched){const changed=!state.watchOnly||state.inspected?.toLowerCase()!==watched.toLowerCase();state.watchOnly=true;activeWatchRoute=watched;state.inspected=watched;if(changed){resetLoad();state.net=state.status=state.plan=null;renderHolder(null);}}
+  function rememberWatch(route,address){if(route?.kind==='squeek')win.history.replaceState({...win.history.state,holderWatch:{profile:route.profile,id:route.id,address}},'',win.location.hash);}
+  const onHashChange = async () => {try{const key=profileFromHash(win.location.hash),route=holderRoute(win.location.hash),watched=watchScope(route);let leftWatch=false,watchChanged=false;$('holder-route-error').classList.add('hidden');rememberWatch(route,watched);
+    if(watched){const changed=!state.watchOnly||state.inspected?.toLowerCase()!==watched.toLowerCase();state.watchOnly=true;activeWatchRoute=watched;state.inspected=watched;if(changed){watchChanged=true;resetLoad();state.net=state.status=state.plan=null;renderHolder(null);}}
     else if(activeWatchRoute||state.watchOnly){leftWatch=true;activeWatchRoute=null;state.watchOnly=false;state.inspected=state.account;resetLoad();renderHolder(null);}
     if(key&&key!==state.profileKey)await switchProfile(key);else selectTab(currentRoute());
-    if(route?.kind==='address'||leftWatch)await refreshWallet();
+    if(route?.kind==='address'&&(watchChanged||!state.status)||leftWatch)await refreshWallet();
   }catch(error){routeError(error);}};
   win.addEventListener('hashchange', onHashChange);
   for (const tab of el.tabs) {
@@ -1291,6 +1367,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     closeWalletMenu(); closeSheet(); sheetFocus = doc.activeElement.closest('#wallet-menu') ? el.connect : doc.activeElement;
     activeSheet = $(id); activeSheet.classList.remove('hidden');
     activeSheet.querySelector('[data-close-sheet]').focus();
+    if(id==='activity-drawer')void ensureWorkspace().then(w=>w.history());
   }
   for (const sheet of doc.querySelectorAll('.sheet-overlay')) {
     sheet.querySelector('[data-close-sheet]').onclick = closeSheet;
@@ -1335,12 +1412,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     try { await win.navigator.clipboard.writeText(state.account); toast('Address copied', 'ok'); } catch { toast('Clipboard unavailable; copy the address from your wallet', 'warn'); }
     closeWalletMenu(); el.connect.focus();
   };
-  $('btn-open-activity').onclick = () => openSheet('activity-drawer');
+  $('btn-open-activity').onclick = $('holder-history-link').onclick = () => openSheet('activity-drawer');
   $('btn-disconnect').onclick = () => {
     const p=provider();wallet.disconnect();void p?.request({method:'wallet_revokePermissions',params:[{eth_accounts:{}}]}).catch(()=>{});
-    $('account-activity').replaceChildren();closeWalletMenu();selectTab('network');el.connect.focus();
+    $('account-activity').replaceChildren();closeWalletMenu();selectTab('squeeks');el.connect.focus();
   };
-  el.refresh.onclick = () => {void refreshTelemetry({reset:false});void displayFeeds(captureLoad());return viewTask(()=>refreshAll({force:true}));};
+  el.refresh.onclick = () => {void refreshTelemetry({reset:false});return viewTask(()=>refreshAll({force:true}));};
   el.cp.button.onclick = () => viewTask(requestCheckpoint);
   el.holder.claim.onclick = () => viewTask(() => {
     const raw = $("claim-ids").value.trim();
@@ -1416,11 +1493,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     await settingsReady; if (!destroyed) openSheet('settings-sheet');
   }
   const images=createImages({cache:displayCache,fetcher,win});
-  async function loadHolderImage(token,load=captureLoad()){let item;try{item=await images.load({profile:getProfile(load.profileKey),token,api:displayApi(load)??state.adapter?.holderApi,fallback:()=>readFor(load,'art',token.tokenId),signal:load.signal});}catch(error){if(isCurrent(load)&&error.name==='RpcTrustError')clearDisplayMismatch(error);throw error;}assertCurrent(load);state.art.set(String(token.tokenId),item);return item;}
-  const canUseHolder=()=>Boolean(!watching()&&!state.busy&&!state.walletPromptPending&&state.account&&state.chainId===11155111);
+  async function loadHolderImage(token,load=captureLoad(),stage=0){let item;try{item=await images.load({profile:getProfile(load.profileKey),token,stage,api:displayApi(load)??state.adapter?.holderApi,fallback:()=>readFor(load,'art',token.tokenId),signal:load.signal});}catch(error){if(isCurrent(load)&&error.name==='RpcTrustError')clearDisplayMismatch(error);throw error;}assertCurrent(load);state.art.set(String(token.tokenId),item);return item;}
+  const canUseHolder=()=>Boolean(!watching()&&!state.busy&&!state.walletPromptPending&&!win.history.state?.exploreReadOnly&&state.account&&state.chainId===11155111);
   async function selectPlannerStep(step,load){try{assertCurrent(load);if(!canUseHolder())return;const fresh=await readFor(load,'walletStatus',state.account);assertCurrent(load);if(step.kind==='custody'){const token=fresh.squeeks.find(t=>String(t.tokenId)===step.tokenId);if(!token||Boolean(token.deposited)!==(step.action==='withdraw'))throw new Error('Pair changed');renderHolder(fresh,fresh.mergePlan);holdings.selectAction(step.action,[token.tokenId]);return;}const a=fresh.squeeks.find(t=>String(t.tokenId)===step.survivor),b=fresh.squeeks.find(t=>String(t.tokenId)===step.donor);if(!a||!b||a.level!==b.level||Boolean(a.deposited)!==Boolean(b.deposited))throw new Error('Pair changed');renderHolder(fresh,fresh.mergePlan);holdings.selectPair(a.tokenId,b.tokenId);if(a.deposited){$('v9-action').value='mergeDeposited';renderActionFields();}else{$('v9-action').value='merge';renderActionFields();}$('merge-selection').scrollIntoView?.({block:'center'});}catch(error){toast(errorMessage(error),'err');}}
-  async function ensureWorkspace(){workspaceReady??=import('./holder-workspace.js').then(({initHolderWorkspace})=>workspace=initHolderWorkspace({doc,win,state,captureLoad,isCurrent,read:readFor,getApi:load=>displayApi(load)??state.adapter?.holderApi,loadImage:loadHolderImage,canAct:canUseHolder,onPair:selectPlannerStep,onAction:async(action,id)=>{if(!canUseHolder())return;selectTab('squeeks');if(action==='claim')return viewTask(()=>requestClaim([id]));const load=captureLoad(),fresh=await readFor(load,'walletStatus',state.account);if(!fresh.squeeks.some(t=>String(t.tokenId)===id))return;renderHolder(fresh,fresh.mergePlan);holdings.selectAction(action,[id]);},onOverview:()=>{win.location.hash=`${state.profileKey}/squeeks`;selectTab('squeeks');},onError:error=>{if(error.name==='RpcTrustError')clearDisplayMismatch(error);},local:()=>activity.list(),quote:!adapterFactory?(load,owner)=>readFor(load,'claimPreview',owner):state.adapter?.holderClaimPreview?(load,owner)=>viewAwait(load,()=>load.adapter.holderClaimPreview(owner)):null}));return workspaceReady;}
-  const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();$('v9-review').focus();},loadImage:loadHolderImage});
+  let explore,exploreReady;
+  async function ensureExplore(){exploreReady??=import('./explore.js').then(({createExploreView})=>explore=createExploreView({doc,win,root:$('explore-content'),capture:captureLoad,current:isCurrent,readerOptions:load=>({profile:getProfile(load.profileKey),rpcUrl:store.get('wheelhouse:rpc')||undefined,signal:load.signal,chainCache,verificationCache}),loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),source:recordSource,onTrustError:clearDisplayMismatch}));return exploreReady;}
+  async function ensureWorkspace(){workspaceReady??=import('./holder-workspace.js').then(({initHolderWorkspace})=>workspace=initHolderWorkspace({doc,win,state,captureLoad,isCurrent,read:readFor,getApi:load=>displayApi(load)??state.adapter?.holderApi,loadImage:loadHolderImage,canAct:canUseHolder,getIndexedHistory:id=>win.history.state?.exploreReadOnly?(explore?.history(id)??Promise.resolve({unknown:true,rows:[]})):null,onPair:selectPlannerStep,onAction:async(action,id)=>{if(!canUseHolder())return;selectTab('squeeks');if(action==='claim')return viewTask(()=>requestClaim([id]));const load=captureLoad(),fresh=await readFor(load,'walletStatus',state.account);if(!fresh.squeeks.some(t=>String(t.tokenId)===id))return;renderHolder(fresh,fresh.mergePlan);holdings.selectAction(action,[id]);},onOverview:()=>{win.location.hash=`${state.profileKey}/squeeks`;selectTab('squeeks');},onError:error=>{if(error.name==='RpcTrustError')clearDisplayMismatch(error);},local:()=>activity.list(),quote:!adapterFactory?(load,owner)=>readFor(load,'claimPreview',owner):state.adapter?.holderClaimPreview?(load,owner)=>viewAwait(load,()=>load.adapter.holderClaimPreview(owner)):null}));return workspaceReady;}
+  const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();if(action==='claimAndStake'&&!$('v9-review').disabled)$('v9-review').click();else $('v9-review').focus();},loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),onPairs:()=>ensureWorkspace().then(w=>w.planner())});
   $('btn-planner').onclick=()=>ensureWorkspace().then(w=>w.planner());
   $('sqk-claim-host').append($('btn-claim'),$('claim-ids'),$('holder-rewards-notice'));
   // ── boot ──────────────────────────────────────────────────────────────────
@@ -1438,18 +1517,26 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   void activity.refresh();
   let provisionalResult,liveMeasurement;
   function renderProvisional(result=provisionalResult){provisionalResult=result;const active=liveMeasurement?.freshness==='online'&&liveMeasurement.coreStatus==='ACTIVE'&&Date.now()-Date.parse(liveMeasurement.receivedAt)<120000;const text=formingBlock(result?.data,active);$('provisional-blocks').textContent=text??'';$('provisional-blocks').classList.toggle('hidden',!text);}
-  const poller=createWheelPoller({enabled:()=>state.profileKey==='sepolia-v9',doc,setTimer:win.setTimeout.bind(win),clearTimer:win.clearTimeout.bind(win),
+  const poller=createWheelPoller({enabled:()=>Boolean(getProfile(state.profileKey).apiBase),doc,setTimer:win.setTimeout.bind(win),clearTimer:win.clearTimeout.bind(win),
     contextKey:()=>`${generation}:${state.profileKey}`,
-    readStatus:async()=>{const load=captureLoad();if(load.profileKey!=='sepolia-v9')throw new Error('No v6 wheel poll');const api=displayApi(load);const result=api?await api.status():{data:await telemetry.read({signal:load.signal})};assertCurrent(load);return result;},
-    readEvents:adapterFactory?null:readWheelEvents,
+    readStatus:async()=>{const load=captureLoad();if(!getProfile(load.profileKey).apiBase)throw new Error('No wheel reading for this profile');const api=displayApi(load);const result=api?await api.status():{data:await telemetry.read({signal:load.signal})};assertCurrent(load);return result;},
     readBlocks:adapterFactory?null:async()=>displayApi(captureLoad()).blocks(),
     frontier:()=>({settled:state.net?.core?.settledThroughRound,processed:state.net?.mining?.processedThroughRound}),
-    onStatus:async(data,result)=>{workspace?.updatePace(result.stale?null:data);liveMeasurement=result.stale?null:data.measurement;renderProvisional();const view=telemetryView(data);if(result.stale)view.note=`as of ${Math.max(1,Math.floor((Date.now()-result.at)/60000))} min`;for(const [id,value] of [['wheel-state',view.state],['wheel-rpm',view.rpm],['wheel-speed',view.speed],['wheel-distance',view.distance],['wheel-note',view.note]])$(id).textContent=value;wheelGoodAt=result.at??Date.now();},
-    onFrontier:async()=>{const net=await refreshNetwork();if(!net||net.source?.stale)return false;await refreshAll();if(state.inspected&&!state.status)return false;if(provisionalResult)renderProvisional(provisionalResult);await displayFeeds(captureLoad());if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();return true;},
+    onStatus:async(data,result)=>{void explore?.tick();recordSource('Wheel','api',result.stale?'Cached response; live request unavailable':null);void refreshNetworkExtras();workspace?.updatePace(result.stale?null:data);liveMeasurement=result.stale?null:data.measurement;renderProvisional();wheelReading(captureLoad(),data,result);},
+    onFrontier:async()=>{const net=await refreshNetwork();if(!net||net.source?.stale)return false;await refreshAll();if(state.inspected&&!state.status)return false;if(provisionalResult)renderProvisional(provisionalResult);if(activity.list().some(item=>!['confirmed','reverted'].includes(item.status)))void activity.refresh();return true;},
     onBlocks:renderProvisional,
-    onError:(error,scope)=>{if(error.name==='AbortError'||state.profileKey!=='sepolia-v9')return;if(error.name==='RpcTrustError'){clearDisplayMismatch(error);}else if(scope==='status'&&wheelGoodAt&&Date.now()-wheelGoodAt<DISPLAY_TTL&&errorIsTransient(error))$('wheel-note').textContent=`as of ${Math.max(1,Math.floor((Date.now()-wheelGoodAt)/60000))} min`;else if(scope==='status'){liveMeasurement=null;renderProvisional();for(const id of ['wheel-rpm','wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;$('wheel-state').textContent='Unknown';$('wheel-note').textContent='No available device reading.';}}
+    onError:(error,scope)=>{
+      if(scope==='status')void explore?.tick();
+      if(error.name==='AbortError'||!getProfile(state.profileKey).apiBase)return;
+      recordSource(scope==='status'?'Wheel':'Live wheel','api',error.message);
+      if(error.name==='RpcTrustError'){
+        if(state.net?.source?.kind!=='rpc'||state.net.verification?.trusted!==true)clearDisplayMismatch(error);
+        recordSource(scope==='status'?'Wheel':'Live wheel','api',error.message);clearWheelFeed();
+      }
+      if(scope==='status'){liveMeasurement=null;renderProvisional();wheelFailure(captureLoad());}
+    }
   });
-  if(adapterFactory)poller.start();else void poller.tick();void displayFeeds(captureLoad());
+  if(adapterFactory)poller.start();else void poller.tick();
 
   const unsubscribeWallet=wallet.subscribe(onWallet);
   void wallet.init();
@@ -1476,7 +1563,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { workspace?.destroy();unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
+    destroy: () => { explore?.destroy();workspace?.destroy();unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
   };
 }
 

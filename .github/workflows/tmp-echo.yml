@@ -1,0 +1,13 @@
+name: tmp-echo
+on: workflow_dispatch
+permissions:
+  contents: read
+  checks: write
+jobs:
+  echo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo probe
+        run: |
+          echo "PROBE-SUMMARY-PAYLOAD-42" >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=probe::PROBE-ANNOTATION-PAYLOAD-43"

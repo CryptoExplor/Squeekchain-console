@@ -31,3 +31,40 @@ jobs:
           path: artifacts/
           retention-days: 7
           if-no-files-found: ignore
+  browser-readonly-evidence:
+    # This explicitly scoped job is separate from offline qualification. It never
+    # installs a wallet, injects an adapter, mocks responses or calls signing tools.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'arena/ba7ca559-squeekchain-console'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Wait for the exact-head automatic preview
+        run: node test/wait-preview.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QA_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          QA_REPOSITORY: ${{ github.repository }}
+      - name: Real browser public reads and captures — no wallet or signing
+        run: node test/browser-readonly-qa.mjs
+        env:
+          QA_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-readonly-evidence
+          path: artifacts/live-browser-qa/
+          retention-days: 7
+          if-no-files-found: warn

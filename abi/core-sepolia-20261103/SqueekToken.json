@@ -3,7 +3,7 @@
     "type": "constructor",
     "inputs": [
       {
-        "name": "miningProxy",
+        "name": "bindingTimelock",
         "type": "address",
         "internalType": "address"
       },
@@ -11,6 +11,23 @@
         "name": "supplyCap_",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "premint",
+        "type": "tuple[]",
+        "internalType": "struct ISqueekToken.PremintAllocation[]",
+        "components": [
+          {
+            "name": "recipient",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
       }
     ],
     "stateMutability": "nonpayable"
@@ -24,6 +41,19 @@
         "name": "",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_PREMINT_RECIPIENTS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -97,6 +127,32 @@
   },
   {
     "type": "function",
+    "name": "bindMining",
+    "inputs": [
+      {
+        "name": "candidate",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "burn",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "cap",
     "inputs": [],
     "outputs": [
@@ -167,6 +223,19 @@
   {
     "type": "function",
     "name": "mining",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "miningBindingAuthority",
     "inputs": [],
     "outputs": [
       {
@@ -285,6 +354,45 @@
         "name": "",
         "type": "string",
         "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalBurned",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalMinted",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalPreminted",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -413,6 +521,19 @@
   },
   {
     "type": "event",
+    "name": "MiningBound",
+    "inputs": [
+      {
+        "name": "mining",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Transfer",
     "inputs": [
       {
@@ -435,6 +556,11 @@
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "BindingCallFailed",
+    "inputs": []
   },
   {
     "type": "error",
@@ -626,7 +752,59 @@
   },
   {
     "type": "error",
+    "name": "InvalidMiningBindingAuthority",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidPremintAllocation",
+    "inputs": [
+      {
+        "name": "index",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidProxyAdmin",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidProxyRuntime",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidShortString",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidSupplyCap",
+    "inputs": [
+      {
+        "name": "supplied",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "MiningAlreadyBound",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "MiningBootstrapFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoMiningAllowance",
     "inputs": []
   },
   {
@@ -643,6 +821,11 @@
   {
     "type": "error",
     "name": "UnauthorizedMining",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "UnauthorizedMiningBindingAuthority",
     "inputs": []
   }
 ]

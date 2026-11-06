@@ -3,30 +3,32 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
-import {DEPLOYMENT,SQUEEKS_POLICY} from '../sdk/record.js';
+import {DEPLOYMENT,SQUEEKS_POLICY} from './fixtures/graph.mjs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { PROFILES } from '../sdk/deployments.js';
-import { coreAbi, miningAbi, nftAbi, tokenAbi } from '../sdk/abi.js';
+import { coreAbi, miningAbi, nftAbi, tokenAbi, stakingAbi } from '../sdk/abi-core-20261103.js';
 import { createSqueekchain } from '../sdk/squeekchain.js';
 import { TOOL_SPECS, buildManifest } from '../sdk/tools.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const pinBytes=fs.readFileSync(new URL('../docs/pins/v9-identity-2026-11-03.json',import.meta.url));
-assert.equal(createHash('sha256').update(pinBytes).digest('hex'),'fbedcbe2979cf650ff42b1e0f35c679b3afce08da4d13f7b21efe9361e286979','identity export must remain byte-identical');
-const evidence=JSON.parse(pinBytes),lower=value=>String(value).toLowerCase(),documented=PROFILES['sepolia-v6'];
-const published={core:'0x74665dAecA35A2303e767E76a2FF1FB6F93e119f',mining:'0x3beE588fC20dE788Bac17d33b41Da7346cb27EC4',nft:'0x0eAF3E0d40A0a8E5a6Ac030b2459E9FB0B7905c6',token:'0x6872bfa5ccc3e9e440c6c16e5ffdabb8dba4cc76'};
-assert.equal(documented.chainId,11155111);
-for(const [key,address] of Object.entries(published))assert.equal(lower(documented.addresses[key]),lower(address),'published v6 '+key);
-assert.equal(DEPLOYMENT.versions.mining,6);assert.equal(SQUEEKS_POLICY.length,10);
-assert.notEqual(lower(documented.addresses.core),lower(PROFILES['sepolia-v9'].addresses.core));
-assert.equal(evidence.peersAgree,true);
-for(const peer of Object.values(evidence.peers))for(const [contract,pin] of Object.entries({core:'core',mining:'issuance',staking:'staking',nft:'nft',token:'token',launch:'launch'}))assert.equal(lower(PROFILES['sepolia-v9'].addresses[contract]),lower(peer[pin].address),'v9 '+contract+' matches independent pin export');
-console.log('PASS published v6 constants, both-peer v9 pin provenance and byte-identical identity SHA-256');
+const recordBytes=fs.readFileSync(new URL('../docs/deployments/core-sepolia-20261103.json',import.meta.url));
+assert.equal(createHash('sha256').update(recordBytes).digest('hex'),'219ef9a6fe40d483b43a82ff5e445313af2a3b88f0b324622ab528769a97d095','published record copy must remain byte-identical');
+const record=JSON.parse(recordBytes),lower=value=>String(value).toLowerCase(),documented=PROFILES['sepolia'];
+assert.equal(record.release,'core-sepolia-20261103');assert.equal(record.revision,7);assert.equal(record.chainId,11155111);
+assert.equal(documented.chainId,11155111);assert.equal(documented.identities.release,record.release);assert.equal(documented.identities.revision,record.revision);
+const published={core:'SqueekCore',issuance:'SqueekMining',mining:'SqueekMining',staking:'SqueekStaking',token:'SqueekToken',nft:'SqueekNFT'};
+for(const [key,name] of Object.entries(published))assert.equal(lower(documented.addresses[key]),lower(record.contracts[name].address),'published '+key);
+assert.equal(lower(documented.addresses.nft),'0xc4c7982657f00509548f3a3a41db7fa439a6856b');assert.equal(lower(documented.addresses.staking),'0x50fd1780526c3186a0c037c7622203bc4fb611ca');
+for(const old of ['0x0eaf3e0d40a0a8e5a6ac030b2459e9fb0b7905c6','0xcb98','0x4b67','0x74665daeca35a2303e767e76a2ff1fb6f93e119f'])assert.ok(Object.values(documented.addresses).every(a=>!lower(a).startsWith(old)),'retired address '+old);
+for(const [name,pin] of [['token','SqueekToken'],['nft','SqueekNFT']])assert.equal(lower(documented.identities.pins[name].runtimeCodeHash),lower(record.contracts[pin].runtimeHash),name+' runtime hash pin');
+for(const [name,pin] of [['core','SqueekCore'],['issuance','SqueekMining'],['staking','SqueekStaking']]){const p=documented.identities.pins[name],c=record.contracts[pin];assert.equal(lower(p.implSlot),lower(c.implementation));assert.equal(lower(p.adminSlot),lower(c.proxyAdmin));assert.equal(lower(p.implCodeHash),lower(c.implementationRuntimeHash));}
+assert.equal(SQUEEKS_POLICY.length,10);
+console.log('PASS published record core-sepolia-20261103 rev 7: byte-identical copy, profile addresses, proxy/impl/runtime pins; no retired v6/v9 addresses');
 
 // Local parity only. A complete remote ABI comparison remains an audit exit gate.
-for (const [name, exported] of Object.entries({ SqueekCore: coreAbi, SqueekMining: miningAbi, SqueekNFT: nftAbi, SqueekToken: tokenAbi })) {
-  const local = JSON.parse(fs.readFileSync(new URL(`../abi/${name}.json`, import.meta.url), 'utf8'));
+for (const [name, exported] of Object.entries({ SqueekCore: coreAbi, SqueekMining: miningAbi, SqueekNFT: nftAbi, SqueekToken: tokenAbi, SqueekStaking: stakingAbi })) {
+  const local = JSON.parse(fs.readFileSync(new URL(`../abi/core-sepolia-20261103/${name}.json`, import.meta.url), 'utf8'));
   assert.deepEqual(exported, local, `${name}: sdk export matches checked-in ABI`);
 }
 const sdk = createSqueekchain(); // Constructor only; no network and no skipVerification.
@@ -58,7 +60,7 @@ function listTools(profile) {
   return replies.find(reply => reply.id === 2).result.tools;
 }
 
-for (const profile of ['sepolia-v9', 'sepolia-v6']) {
+for (const profile of ['sepolia', 'sepolia']) {
   const tools = listTools(profile);
   assert.ok(tools.some(tool => tool.name === 'squeek_network_status'));
   assert.ok(tools.every(tool => !tool.name.includes('submit') && !tool.name.includes('request')), 'default stdio has no submit or wallet-popup tool');

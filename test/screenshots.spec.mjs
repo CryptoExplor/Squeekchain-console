@@ -22,11 +22,9 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
       await page.evaluate(() => window.squeek.connect());
       await expect(page.getByTestId('panel-squeeks')).toBeVisible();
       await expect(page.getByTestId('holder-count')).toHaveText('3');
-      await expect(page.getByTestId('squeek-cards')).toContainText('Unknown');
+      await expect(page.getByTestId('squeek-cards')).toContainText('—');
       if (width === 390) {
-        const cells = await page.getByTestId('squeek-cards').locator('article').first().locator('dd').evaluateAll(nodes => nodes.map(node => ({ label: node.dataset.label, left: node.getBoundingClientRect().left, right: node.getBoundingClientRect().right, display: getComputedStyle(node).display })));
-        expect(cells).toHaveLength(4);
-        for (const cell of cells) { expect(cell.left).toBeGreaterThanOrEqual(0); expect(cell.right).toBeLessThanOrEqual(width); expect(cell.display).toBe('block'); }
+        const box=await page.locator('#squeek-cards article').first().boundingBox();expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);await expect(page.locator('#squeek-cards article img').first()).toHaveAttribute('width','144');
       }
     }
     if (view === 'info') {
@@ -34,7 +32,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
       await expect(page.getByTestId('panel-info')).toBeVisible();
       const rows=page.getByTestId('policy-table').locator('tbody tr');await expect(rows).toHaveCount(10);
       for(let i=0;i<10;i++)await expect(rows.nth(i).locator('td')).toHaveText([String(i+1),String((i+1)*1000),String(i===9?0:2*(i+1))]);
-      await expect(page.getByTestId('trust-block')).toHaveText('12101024');
+      await expect(page.getByTestId('trust-block')).toHaveText('12,101,024');
     }
     if (view === 'settings') await page.getByTestId('settings-open').click();
     if (view === 'merge') {
@@ -51,15 +49,15 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
       await expect(page.getByTestId('tab-info')).toHaveAttribute('aria-selected','true');
       await expect(page.getByTestId('panel-info')).toBeVisible();
       await expect(page.locator('[role=tab][aria-selected=true]')).toHaveCount(1);
-      await expect(page.getByTestId('trust-block')).toHaveText('Unknown');
+      await expect(page.getByTestId('trust-block')).toHaveText('—');
       await expect(page.getByTestId('deployment-content')).toBeHidden();
       await expect(page.getByTestId('wallet-button')).toBeVisible();
       await expect(page.getByTestId('btn-menu-connect')).toBeHidden();
       await expect(page.getByTestId('verified-chip')).toHaveText('Not deployed');
     }
-    await expect(page.locator('.hero, .page-intro, .network-strip, .action-grid, .eyebrow')).toHaveCount(0);
+    await expect(page.locator('.hero, .page-intro, .action-grid, .eyebrow')).toHaveCount(0);
     await expect(page.getByTestId('activity-drawer')).toBeHidden();
-    await expect(page.getByTestId('capability-grid'))[['info','mainnet'].includes(view) ? 'toBeVisible' : 'toBeHidden']();
+    await expect(page.getByTestId('capability-grid')).toBeHidden();
     await expect(page.getByRole('contentinfo')).toContainText('Independent community console · not affiliated with Squeekchain · Sepolia only · not investment advice');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.evaluate(() => window.reviewCounters)).toEqual({ simulations: 0, sends: 0 });
@@ -122,7 +120,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
 for (const width of [900, 1024]) test(`header: single desktop row at ${width}px, connected across profiles`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 }); await installReviewFixture(page);
   await assertCompactHeader(page, width, false); await page.evaluate(() => window.squeek.connect()); await assertCompactHeader(page, width, true);
-  await page.getByTestId('profile-select').selectOption('sepolia-v9');
+  await page.getByTestId('profile-select').selectOption('sepolia');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
   await expect(page.getByTestId('verified-chip')).toHaveAttribute('title', /Network and contract checks passed at block 12101025; latest check at block 12101024/);
@@ -131,17 +129,17 @@ for (const width of [900, 1024]) test(`header: single desktop row at ${width}px,
 
 test('structure: hash navigation, Trust shortcut, Info and watch address', async ({ page }) => {
   await installReviewFixture(page);
-  await expect(page).toHaveURL(/#sepolia-v6\/network$/);
-  await page.getByTestId('network-how-link').click();
-  await expect(page).toHaveURL(/#sepolia-v6\/info\/how-it-works$/);
+  await expect(page).toHaveURL(/#sepolia\/squeeks$/);
+  await page.getByTestId('tab-info').click();await page.getByTestId('info-link-how-it-works').click();
+  await expect(page).toHaveURL(/#sepolia\/info\/how-it-works$/);
   await page.getByTestId('tab-info').click();
-  await expect(page).toHaveURL(/#sepolia-v6\/info$/);
+  await expect(page).toHaveURL(/#sepolia\/info\/how-it-works$/);
   await page.getByTestId('info-link-developers').click();
-  await expect(page).toHaveURL(/#sepolia-v6\/info\/developers$/);
-  await expect(page.getByTestId('tool-call')).toBeVisible();
+  await expect(page).toHaveURL(/#sepolia\/info\/developers$/);
+  await expect(page.getByTestId('tool-call')).toBeHidden();await page.locator('#agent-setup>summary').click();await expect(page.getByTestId('tool-call')).toBeVisible();
   await page.getByTestId('profile-status').click();
-  await expect(page).toHaveURL(/#sepolia-v6\/info\/trust$/);
-  await expect(page.getByTestId('trust-block')).toBeVisible();
+  await expect(page).toHaveURL(/#sepolia\/info\/trust$/);
+  await expect(page.getByTestId('trust-block')).toBeVisible();await page.getByTestId('info-link-status').click();await expect(page.getByTestId('capability-grid')).toBeVisible();await page.getByTestId('info-link-how-it-works').click();
   await page.evaluate(async () => { window.reviewNetwork.core.paused = true; await window.squeek.refresh(); });
   await expect(page.getByTestId('info-reward-status')).toContainText(ACTION_REASONS.paused);
   await page.getByTestId('tab-squeeks').click();
@@ -207,7 +205,7 @@ test('structure: wallet menu copy, pending dot, Activity drawer and confirmed cl
   await expect(page.getByTestId('settings-sheet')).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByTestId('wallet-button').click(); await page.getByTestId('btn-disconnect').click();
-  await expect(page).toHaveURL(/#sepolia-v6\/network$/);
+  await expect(page).toHaveURL(/#sepolia\/squeeks$/);
   await expect(page.getByTestId('wallet-chip')).toHaveCount(0);
   await page.evaluate(() => window.squeek.destroy());
 });
@@ -215,20 +213,20 @@ test('structure: wallet menu copy, pending dot, Activity drawer and confirmed cl
 test('structure: RPC test is diagnostic only, save/remove and log cache clear', async ({ page }) => {
   await installReviewFixture(page);
   const methods = [];
-  await page.route('https://custom-rpc.test/**', route => {
+  await page.route('https://0xrpc.io/custom-test/**', route => {
     const request = route.request().postDataJSON(); methods.push(request.method);
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ jsonrpc: '2.0', id: request.id, result: request.method === 'eth_chainId' ? '0xaa36a7' : '0x64' }) });
   });
   await page.evaluate(() => { window.reviewRpcTest = true; });
   await page.getByTestId('settings-open').click();
-  await page.getByTestId('rpc-url').fill('https://custom-rpc.test/');
+  await page.getByTestId('rpc-url').fill('https://0xrpc.io/custom-test/');
   await page.getByTestId('btn-test-rpc').click();
   await expect(page.getByTestId('rpc-test-result')).toContainText('chainId 11155111 · block 100');
   expect(methods).toEqual(['eth_chainId', 'eth_blockNumber']);
   expect(await page.evaluate(() => localStorage.getItem('wheelhouse:rpc'))).toBeNull();
   await page.getByTestId('btn-save-rpc').click();
   await expect(page.getByTestId('settings-sheet')).toBeHidden();
-  expect(await page.evaluate(() => localStorage.getItem('wheelhouse:rpc'))).toBe('https://custom-rpc.test/');
+  expect(await page.evaluate(() => localStorage.getItem('wheelhouse:rpc'))).toBe('https://0xrpc.io/custom-test/');
   await page.getByTestId('settings-open').click();
   await page.getByTestId('btn-remove-rpc').click();
   expect(await page.evaluate(() => localStorage.getItem('wheelhouse:rpc'))).toBe('');
@@ -238,7 +236,7 @@ test('structure: RPC test is diagnostic only, save/remove and log cache clear', 
     await new Promise((resolve, reject) => { const tx = db.transaction('discovery', 'readwrite'); tx.objectStore('discovery').put({ ids: ['41'] }, 'test-clear'); tx.oncomplete = resolve; tx.onerror = reject; }); db.close();
   });
   await page.getByTestId('btn-clear-cache').click();
-  await expect(page.getByTestId('cache-result')).toContainText('Log cache cleared');
+  await expect(page.getByTestId('cache-result')).toContainText('Saved data cleared');
   expect(await page.evaluate(async () => {
     const db = await new Promise(resolve => { const r = indexedDB.open('wheelhouse', 1); r.onsuccess = () => resolve(r.result); });
     const count = await new Promise(resolve => { const r = db.transaction('discovery').objectStore('discovery').count(); r.onsuccess = () => resolve(r.result); }); db.close(); return count;
@@ -248,10 +246,10 @@ test('structure: RPC test is diagnostic only, save/remove and log cache clear', 
 
 test('structure: direct Info hash survives reload and Mainnet retains Info without chain panels', async ({ page }) => {
   await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
-  await page.goto('/#sepolia-v6\/info/trust');
+  await page.goto('/#sepolia\/info/trust');
   await expect(page.getByTestId('panel-info')).toBeVisible();
   await page.reload();
-  await expect(page).toHaveURL(/#sepolia-v6\/info\/trust$/);
+  await expect(page).toHaveURL(/#sepolia\/info\/trust$/);
   await expect(page.getByTestId('panel-info')).toBeVisible();
   await page.getByTestId('profile-select').selectOption('mainnet');
   await expect(page.getByTestId('panel-info')).toBeVisible();

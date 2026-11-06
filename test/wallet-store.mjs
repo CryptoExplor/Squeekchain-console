@@ -9,7 +9,7 @@ const html=fs.readFileSync('web/index.html','utf8'),dom=new JSDOM(html,{url:'htt
 // guard below for indirect element IDs. Deliberately exercise the regression.
 const ids=[...fs.readdirSync('web').filter(p=>p.endsWith('.js')&&p!=='bundle.js').flatMap(file=>[...fs.readFileSync('web/'+file,'utf8').matchAll(/(?:\$|getElementById)\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m=>m[1]))];
 for(const id of ids)assert.ok(win.document.getElementById(id),`Missing static app element #${id}`);
-assert.ok(win.document.getElementById('wheel-feed-item').content.querySelector('.feed-text'));
+assert.equal(win.document.getElementById('wheel-feed-item'),null,'public round list removed, never confused with owner Activity');
 function mock(name){let accounts=[owner],chain='0xaa36a7';const calls=[],listeners=new Map();return {info:{name,rdns:'test.'+name},calls,listeners,
  request:async({method})=>{calls.push(method);if(method==='eth_accounts'||method==='eth_requestAccounts')return accounts;if(method==='eth_chainId')return chain;if(method==='eth_getBalance')return '0x1bc16d674ec8000';throw new Error('Signing forbidden');},
  on(type,fn){if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type).add(fn);},removeListener(type,fn){listeners.get(type)?.delete(fn);},

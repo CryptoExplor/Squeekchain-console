@@ -12,10 +12,10 @@ export async function installReviewFixture(page,{built=false}={}) {
   await page.evaluate(async () => {
     localStorage.setItem('wheelhouse:disconnected','true');
     const { mount } = await import('/app.js');
-    localStorage.setItem('squeekchain:profile','sepolia-v6'); history.replaceState(null,'','#sepolia-v6/network');
+    localStorage.setItem('squeekchain:profile','sepolia'); history.replaceState(null,'','#sepolia/network');
     const owner = '0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54';
     const verification = { ok: true, trusted: true, blockNumber: '12101024', fullVerificationBlockNumber: '12101024', problems: [] };
-    const verificationFor=key=>({...verification,fullVerificationBlockNumber:key==='sepolia-v9'?'12101025':'12101024'});
+    const verificationFor=key=>({...verification,fullVerificationBlockNumber:key==='sepolia'?'12101025':'12101024'});
     const network = {
       core: { settledThroughRound: '2048', blockHeight: '8192', paused: false },
       mining: { lagRounds: '0', minted: { sqk: '12500000' } }, nft: { totalSupply: '512' },
@@ -42,13 +42,13 @@ export async function installReviewFixture(page,{built=false}={}) {
       if (method === 'eth_sendTransaction') counters.sends++;
       throw new Error(`Offline review forbids wallet method ${method}`);
     }, on() {}, removeListener() {} };
-    window.squeek = mount({ profileBalanceReader: async () => ({"sepolia-v6":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia-v9":{"wallet":"0","staked":"0","nftPower":"0"}}),
+    window.squeek = mount({ profileBalanceReader: async () => ({"sepolia":{"wallet":"0","staked":"0","nftPower":"0"},"sepolia":{"wallet":"0","staked":"0","nftPower":"0"}}),
       adapterFactory: profileKey => ({
         networkStatus: async () => ({...network,verification:verificationFor(profileKey)}), verify: async () => verificationFor(profileKey), walletStatus: async owner => ({...wallet,owner,net:{...network,verification:verificationFor(profileKey)},verification:verificationFor(profileKey)}), mergePlan: async () => plan,
         mergePreview: async () => { counters.simulations++; throw new Error('Screenshot must stop before simulation or wallet submission'); },
         art: async tokenId => ({ tokenId, name: `Mock Squeek #${tokenId}`, attributes: [], image: 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="#fff6dd"/><path d="M2 2h4v4H2z" fill="#8a6a10"/><path d="M3 3h1v1H3zM5 3h1v1H5z" fill="#292b26"/></svg>') }),
       }),
-      fetcher: async (url, options) => { if (window.reviewRpcTest && url === 'https://custom-rpc.test/') return fetch(url, options); throw new Error('No API in offline review'); },
+      fetcher: async (url, options) => { if (window.reviewRpcTest && url === 'https://0xrpc.io/custom-test/') return fetch(url, options); throw new Error('No API in offline review'); },
       activityReader: async item => {const status=window.reviewReceipts?.[item.hash];if(status)return {receipt:{transactionHash:item.hash,status,blockNumber:123n,blockHash:'0x'+'ab'.repeat(32)},confirmations:12n};throw new Error('No receipt reads in offline review'); },
     });
     await window.squeek.refresh();

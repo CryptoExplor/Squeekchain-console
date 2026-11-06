@@ -1,11 +1,11 @@
 // Explicit opt-in local-fork tests ONLY. This file is not part of test:live or production.
 import {test,expect} from '@playwright/test';
-import {createSqueek9} from '../../sdk/v9.js';
+import {createSqueekchain} from '../../sdk/squeekchain.js';
 import {createDisplayApi} from '../../sdk/display-api.js';
 import {getProfile} from '../../sdk/deployments.js';
 import {forkContext} from './context.mjs';
 const endpoint=process.env.FORK_URL;
-const profile=getProfile('sepolia-v9');
+const profile=getProfile('sepolia');
 let context,sdk,holder,snapshot;
 const json=value=>JSON.parse(JSON.stringify(value,(_,v)=>typeof v==='bigint'?String(v):v));
 async function rpc(method,params=[]){return context.client.request({method,params});}
@@ -16,7 +16,7 @@ async function execute(action,input={}){const p=await preview(action,input);awai
 async function move(token,deposited){if(token.deposited===deposited)return;if(deposited){await execute('approveNft',{tokenId:token.tokenId});await execute('deposit',{tokenIds:[token.tokenId]});}else await execute('withdraw',{tokenIds:[token.tokenId]});}
 test.beforeAll(async()=>{
  if(!endpoint)throw new Error('Explicit FORK_URL=http://127.0.0.1:8545 required. Start npm run fork:start separately.');
- context=forkContext(endpoint);if(await context.client.getChainId()!==11155111)throw new Error('Local fork must use Sepolia chain id');sdk=createSqueek9({rpcContext:context});
+ context=forkContext(endpoint);if(await context.client.getChainId()!==11155111)throw new Error('Local fork must use Sepolia chain id');sdk=createSqueekchain({rpcContext:context});
  const api=createDisplayApi({profile}),events=await api.feed('/events?category=players&limit=100');const candidates=[...new Set(events.data.events.filter(e=>e.type==='nft.deposited').map(e=>e.payload?.account).filter(a=>/^0x[\da-f]{40}$/i.test(a??'')))];
  for(const candidate of candidates.slice(0,10)){const status=await sdk.walletStatus(candidate);if(status.squeeks.length>=2){holder=candidate;break;}}
  if(!holder)throw new Error('No current canonical v9 holder with two NFTs among deposited-event candidates. No fabricated IDs/funding.');
@@ -26,7 +26,7 @@ test.beforeEach(async({page})=>{
  await page.exposeFunction('forkWallet',async request=>{if(['eth_accounts','eth_requestAccounts'].includes(request.method))return[holder];if(request.method==='eth_chainId')return'0xaa36a7';if(request.method==='wallet_revokePermissions')return null;if(request.method==='eth_sendTransaction'){const tx=request.params[0];if(tx.from.toLowerCase()!==holder.toLowerCase()||!Object.values(profile.addresses).some(a=>a.toLowerCase()===tx.to.toLowerCase()))throw new Error('Fork wallet address boundary');}return rpc(request.method,request.params);});
  await page.exposeFunction('forkRead',async({method,args})=>json(await sdk[method](...args)));
  await page.addInitScript(()=>{window.__squeekMounted=true;});await page.goto('/');
- await page.evaluate(async holder=>{const{mount}=await import('/app.js');history.replaceState(null,'','#sepolia-v9/network');window.ethereum={request:request=>window.forkWallet(request),on(){}};const methods=['networkStatus','walletStatus','verify','mergePlan','mergePreview','claimPreview','checkpointPreview','actionPreview','art','artBatch'];window.squeek=mount({adapterFactory:()=>Object.fromEntries(methods.map(method=>[method,(...args)=>window.forkRead({method,args})])),profileBalanceReader:async()=>({'sepolia-v6':{wallet:'0',staked:'0',nftPower:'0'},'sepolia-v9':{wallet:'1',staked:'0',nftPower:'1'}})});await window.squeek.connect();},holder);
+ await page.evaluate(async holder=>{const{mount}=await import('/app.js');history.replaceState(null,'','#sepolia/network');window.ethereum={request:request=>window.forkWallet(request),on(){}};const methods=['networkStatus','walletStatus','verify','mergePlan','mergePreview','claimPreview','checkpointPreview','actionPreview','art','artBatch'];window.squeek=mount({adapterFactory:()=>Object.fromEntries(methods.map(method=>[method,(...args)=>window.forkRead({method,args})])),profileBalanceReader:async()=>({'sepolia':{wallet:'0',staked:'0',nftPower:'0'},'sepolia':{wallet:'1',staked:'0',nftPower:'1'}})});await window.squeek.connect();},holder);
  await expect(page.getByTestId('holder-count')).not.toHaveText('Unknown');
 });
 test.afterEach(async()=>{if(snapshot)await rpc('evm_revert',[snapshot]);});

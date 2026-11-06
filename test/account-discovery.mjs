@@ -3,7 +3,7 @@ import { createAccountTokenSource } from '../sdk/account-discovery.js';
 import { createDiscoveryStore, discoverOwnedIds } from '../sdk/discovery.js';
 import { RpcTrustError } from '../sdk/rpc.js';
 import { retryAfterMs } from '../sdk/retry-after.js';
-import { nftAbi } from '../sdk/abi.js';
+import { nftAbi } from '../sdk/abi-core-20261103.js';
 
 const owner = '0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54';
 const other = '0x0000000000000000000000000000000000000001';

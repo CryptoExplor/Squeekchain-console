@@ -3,13 +3,14 @@ import { encodeEventTopics, toHex } from 'viem';
 import { createRpcContext, PUBLIC_RPCS, PUBLIC_RPC_ENDPOINTS, RpcTrustError } from '../sdk/rpc.js';
 import { isRpcAvailabilityError, isLogRangeError, rpcErrorDiagnostics } from '../sdk/rpc-errors.js';
 import { createDiscoveryStore, discoverOwnedIds } from '../sdk/discovery.js';
-import { DEPLOYMENT } from '../sdk/record.js';
-import { nftAbi } from '../sdk/abi.js';
-import { IMPLEMENTATION_SLOT } from '../sdk/verify.js';
+import { DEPLOYMENT } from './fixtures/graph.mjs';
+import { nftAbi } from '../sdk/abi-core-20261103.js';
+import { IMPLEMENTATION_SLOT } from '../sdk/verify-chain.js';
 import { probeEndpoint } from '../src/rpc-probe.mjs';
 
 const [first, second, third] = PUBLIC_RPCS;
-assert.deepEqual(PUBLIC_RPCS,['https://sepolia.gateway.tenderly.co','https://ethereum-sepolia-rpc.publicnode.com','https://0xrpc.io/sep']);
+const [logFirst,logSecond]=[...PUBLIC_RPC_ENDPOINTS].sort((a,b)=>a.logOrder-b.logOrder).map(item=>item.url);
+assert.deepEqual(PUBLIC_RPCS,['https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.gateway.tenderly.co','https://0xrpc.io/sep']);
 assert.deepEqual(PUBLIC_RPC_ENDPOINTS.filter(item=>item.roles.includes('logs')).map(item=>item.url),PUBLIC_RPCS);
 assert.deepEqual(PUBLIC_RPC_ENDPOINTS.filter(item=>item.roles.includes('state')).map(item=>item.url),PUBLIC_RPCS);
 const hash = `0x${'ab'.repeat(32)}`, word = `0x${'0'.repeat(24)}${DEPLOYMENT.implementations.mining.slice(2)}`;
@@ -48,9 +49,10 @@ try {
     assert.equal(await client.getStorageAt({ address: DEPLOYMENT.mining, slot: IMPLEMENTATION_SLOT, blockNumber: 45_000n }), word);
     assert.deepEqual(calls.filter(call => call.method === 'eth_getStorageAt').map(call => call.url), [first, second]);
     calls = [];
+    route=call=>call.url===logFirst&&call.method!=='eth_chainId'?{error}:null;
     await client.getContractEvents({ address: DEPLOYMENT.nft, abi: nftAbi, eventName: 'Transfer', fromBlock: 1n, toBlock: 45_000n });
     const scans = calls.filter(call => call.method === 'eth_getLogs');
-    assert.deepEqual(scans.map(call => call.url), [first, second]);
+    assert.deepEqual(scans.map(call => call.url), [logFirst, logSecond]);
     assert.deepEqual(scans[0].params, scans[1].params, 'fail over at the exact same range before shrinking');
   }
   console.log('PASS RPC availability payloads: 4444/pruned history, historical state, range too large, free plan and forbidden; role-based state/log failover');
@@ -69,7 +71,7 @@ try {
   const logRequest = client => client.getContractEvents({ address: DEPLOYMENT.nft, abi: nftAbi, eventName: 'Transfer', fromBlock: 1n, toBlock: 45_000n });
   const rateLimited = () => createRpcContext({ rpcCooldowns: cooldowns, now: () => clock }).client;
   await assert.rejects(logRequest(rateLimited()), /rate limited|429|Retry-After|cooldown/);
-  assert.deepEqual(calls.filter(call => call.method === 'eth_getLogs').map(call => call.url), [first,second,third]);
+  assert.deepEqual(calls.filter(call => call.method === 'eth_getLogs').map(call => call.url), [logFirst,logSecond,third]);
   assert.equal(cooldowns.get(new URL(third).href), clock + 7_000);
   await assert.rejects(logRequest(rateLimited()), error => isLogRangeError(error), 'terminal 429/cooldown preserves earlier range failure for discovery shrinking');
   const initialFinality = calls.filter(call => call.url === third).length;
@@ -119,7 +121,7 @@ try {
     return success(method, params);
   };
   await walletContext.client.getContractEvents({ address: DEPLOYMENT.nft, abi: nftAbi, eventName: 'Transfer', fromBlock: 1n, toBlock: 45_000n });
-  assert.deepEqual(calls.filter(call => call.method === 'eth_getLogs').map(call => call.url), [first]);
+  assert.deepEqual(calls.filter(call => call.method === 'eth_getLogs').map(call => call.url), [logFirst]);
   calls = [];
   const offChain = createRpcContext({ provider: () => ({ request: async () => '0x1' }) });
   await offChain.client.getBlockNumber();
@@ -166,7 +168,7 @@ try {
   const firstSmall = scans.findIndex(call => BigInt(call.params[0].toBlock) - BigInt(call.params[0].fromBlock) + 1n <= 22_500n);
   assert.equal(firstSmall, 6, 'two owner filters try all three log endpoints at 45k before shrinking');
   assert.deepEqual(scans.slice(0, firstSmall).map(call => call.url).sort(), [first,first,second,second,third,third].sort());
-  assert.ok(scans.slice(firstSmall).every(call => call.url === first));
+  assert.ok(scans.slice(firstSmall).every(call => call.url === logFirst));
   console.log('PASS discovery shrinks only after all three requested providers reject the original range');
 } finally { globalThis.fetch = realFetch; }
 

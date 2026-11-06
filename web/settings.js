@@ -10,7 +10,7 @@ export function initSettings({$,state,store,fetcher,captureLoad,assertCurrent,is
   $('rpc-url').oninput=warnSecrets;warnSecrets();
   function customRpcValue() {
     const value = $('rpc-url').value.trim();warnSecrets();
-    if (value) { const url = new URL(value); if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Use an HTTPS RPC URL without embedded credentials'); }
+    if (value) { const url = new URL(value); if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Use an HTTPS RPC URL without embedded credentials'); if (!['https://sepolia.gateway.tenderly.co','https://ethereum-sepolia-rpc.publicnode.com','https://0xrpc.io'].includes(url.origin)) throw new Error('Custom RPC must use a CSP-listed host: sepolia.gateway.tenderly.co, ethereum-sepolia-rpc.publicnode.com, or 0xrpc.io.'); }
     return value;
   }
   $('btn-test-rpc').onclick = async () => {
@@ -43,8 +43,8 @@ export function initSettings({$,state,store,fetcher,captureLoad,assertCurrent,is
       if (!isCurrent(load)) return;
       state.adapter = buildAdapter(state.profileKey);
       await refreshAll();
-      if (isCurrent(load)) $('cache-result').textContent = 'Log cache cleared. Ownership rechecked onchain where available.';
-    } catch { if (isCurrent(load)) { state.adapter = buildAdapter(state.profileKey); $('cache-result').textContent = 'Could not clear the log cache. No ownership or trust checks were bypassed.'; } }
+      if (isCurrent(load)) $('cache-result').textContent = 'Saved data cleared. Fresh checks still apply.';
+    } catch { if (isCurrent(load)) { state.adapter = buildAdapter(state.profileKey); $('cache-result').textContent = 'Could not clear saved data.'; } }
   };
   $('btn-clear-activity').onclick = async () => {
     const load=captureLoad();
@@ -59,7 +59,7 @@ export function initSettings({$,state,store,fetcher,captureLoad,assertCurrent,is
     const value = customRpcValue();
     store.set("wheelhouse:rpc", value);
     await switchProfile(state.profileKey);
-    } catch (err) { $("rpc-test-result").textContent = "Use an HTTPS RPC URL without embedded credentials."; showBanner(errorMessage(err), "bad"); }
+    } catch (err) { $("rpc-test-result").textContent = errorMessage(err); showBanner(errorMessage(err), "bad"); }
   };
 
 

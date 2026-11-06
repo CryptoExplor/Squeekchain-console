@@ -5,7 +5,16 @@ const support = new Map();
 let nextId = 0;
 export async function readIdentityBatch(peer, requests, { signal, fetcher = globalThis.fetch, capabilities = support, onResponse } = {}) {
   if (!requests.length) return [];
-  const single = () => Promise.all(requests.map(request => peer.request(request)));
+  const single = async () => {
+    const values=[];
+    // Storage/code cannot be safely replaced by contract multicall reads. Keep
+    // native calls at the exact snapshot block, with at most two in flight.
+    for(let i=0;i<requests.length;i+=2) {
+      throwIfAborted(signal);
+      values.push(...await Promise.all(requests.slice(i,i+2).map(request=>peer.request(request))));
+    }
+    return values;
+  };
   const url = peer.identityUrl;
   if (!url || capabilities.get(url) === false) return single();
   throwIfAborted(signal);
@@ -18,8 +27,9 @@ export async function readIdentityBatch(peer, requests, { signal, fetcher = glob
   throwIfAborted(deadline.signal);
   const httpError=()=>new RpcAvailabilityError(Object.assign(new Error('Identity batch HTTP failure'),{status:response.status}),{endpoint:url,method:requests[0].method,status:response.status,kind:'http'});
   if(!response.ok&&[429,503,401].includes(response.status))throw httpError();
-  const rejectedEntries=Array.isArray(body)&&body.length>0&&body.every(item=>[-32600,-32601].includes(item?.error?.code));
-  const unsupported = rejectedEntries || [400,403,404,405,413,415,422,501].includes(response.status) || (response.ok && !Array.isArray(body) && [-32600,-32601].includes(body?.error?.code)) || /batch.*(?:not supported|disabled|not allowed)/i.test(body?.error?.message??'');
+  const rejectsBatch=error=>[-32600,-32601].includes(error?.code)||/batch.*(?:not supported|disabled|not allowed|limit|size|too (?:many|large))|(?:limit|maximum).*batch/i.test(error?.message??'');
+  const rejectedEntries=Array.isArray(body)&&body.length>0&&body.every(item=>rejectsBatch(item?.error));
+  const unsupported = rejectedEntries || [400,403,404,405,413,415,422,501].includes(response.status) || (response.ok && !Array.isArray(body) && [-32600,-32601].includes(body?.error?.code)) || /batch.*(?:not supported|disabled|not allowed|limit|size|too (?:many|large))|(?:limit|maximum).*batch/i.test(body?.error?.message??'');
   if (unsupported) { capabilities.set(url,false); return single(); }
   // Transient batch HTTP failure can still leave checked single calls usable.
   // Respect rate-limit cooldowns; never fan out after 429/503. Do not mark a

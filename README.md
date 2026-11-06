@@ -19,11 +19,12 @@ Open the URL printed by the static server (default port 5173). `HOST` and `PORT`
 
 | Profile | Support |
 | --- | --- |
-| `sepolia-v9` (default) | Verified holdings, NFT deposits/withdrawals, SQK staking/unstaking, claims, approvals and merges. |
-| `sepolia-v6` | Verified holdings, claims, checkpoints and wallet-held NFT merges; no staking or claim-and-stake. |
+| `sepolia-core-20261103` (default) | The current graph: [published record](docs/deployments/core-sepolia-20261103.json) `core-sepolia-20261103` revision 7, deploymentBlock 12057556. Implementation, implementation runtime hash, storage layout digest and ProxyAdmin are pinned from that record, and the calls use the published ABIs in `abi/core-sepolia-20261103/`. |
+| Legacy · `sepolia-v9` | Previous graph, kept for historical inspection. Not the default and never offered as the current deployment. |
+| Legacy · `sepolia-v6` | Oldest graph, frozen cache, wallet-held merges only. Historical inspection. |
 | `mainnet` | Not deployed. No deployment reads or actions. |
 
-Both Sepolia profiles have the same safety requirements. Saved/profile-qualified links retain context; connection checks holdings across both profiles. Explicit Connect and profile selection can request the matching wallet network; confirmation remains in the wallet. Silent restore and read-only watch navigation do not open network prompts.
+Every Sepolia profile has the same safety requirements, and every operation proves the pinned identities at the same block on two independent peers. Saved/profile-qualified links retain context; connection checks holdings across both profiles. Explicit Connect and profile selection can request the matching wallet network; confirmation remains in the wallet. Silent restore and read-only watch navigation do not open network prompts.
 
 Squeeks has separate NFT and SQK views, a merge planner, token detail pages, shareable read-only address links, Activity and available earnings. A planned step only selects the next action; it never signs or runs a whole merge path automatically. Missing data is **Unknown**, not zero. Loading, failed reads, empty portfolios and disconnection are different states.
 

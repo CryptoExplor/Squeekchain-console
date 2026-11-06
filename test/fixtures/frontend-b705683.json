@@ -20,5 +20,7 @@
     "#btn-clear-activity": "<button class=\"btn\" id=\"btn-clear-activity\" data-testid=\"btn-clear-activity\">Clear Activity list</button>",
     "#info-developers .section-heading": "<div class=\"section-heading\"><div><h2>Build with Squeekchain<span class=\"brand-dot\">.</span></h2></div></div>",
     "#info-developers .panel-head": "<div class=\"panel-head\">\n            <h2>Agent / SDK console</h2>\n            <span class=\"panel-note\">same registry as MCP + window.squeek + postMessage</span>\n          </div>"
-  }
+  },
+  "stylesPrefixEndAnchor": "; }\n  .sheet { padding: 20px 16px; }\n  .info-section .table-wrap { max-width: 100%; }\n  .info-section table { min-width: 0; }\n}\n",
+  "stylesExceptNetworkStripSha256": "1c00295f8433cc6f85805204f1ad5799371227bfbe8594635454bff82cac6340"
 }
