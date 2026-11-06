@@ -40,7 +40,9 @@ test('agent requests reject cross-origin messages and profile changes; same-orig
   await page.evaluate(names=>{for(const name of names)window.dispatchEvent(new MessageEvent('message',{origin:'https://other.example',source:window,data:{type:'squeek.tool',name:`squeek_request_${name}`,args:{survivor:'41',donor:'42',confirm:'BURN-42'}}}));},Object.keys(actions));
   await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,30)));
   expect(await page.evaluate(()=>({previews:v9.previews.length,sends:v9.sends}))).toEqual({previews:0,sends:0});
-  expect((await page.evaluate(()=>squeek.callTool('squeek_request_checkpoint',{profile:'sepolia'}))).error).toContain('Select the requested profile');
+  // Only 'sepolia' and 'mainnet' remain: a request for the other profile must be refused before any preview or wallet prompt.
+  expect((await page.evaluate(()=>squeek.callTool('squeek_request_checkpoint',{profile:'mainnet'}))).error).toMatch(/Select the requested profile|Mainnet is not deployed/);
+  expect(await page.evaluate(()=>({previews:v9.previews.length,sends:v9.sends}))).toEqual({previews:0,sends:0});
   await page.evaluate(()=>{window.agentReply=null;window.addEventListener('message',event=>{if(event.data?.type==='squeek.result'&&event.data.id==='same-origin')window.agentReply=event.data;});window.postMessage({type:'squeek.tool',id:'same-origin',name:'squeek_request_claim',args:{}},location.origin);});
   await expect(page.getByTestId('modal')).toBeVisible();expect(await page.evaluate(()=>v9.previews.length)).toBe(1);
   await page.getByTestId('btn-modal-cancel').click();await page.waitForFunction(()=>window.agentReply!==null);
@@ -67,11 +69,11 @@ async function seedPending(page) {
 test('pending activity persists across switches; warning is a conditional View toast, never permanent header text',async({page})=>{
   await seedPending(page);await installReviewFixture(page);
   await expect(page.locator('#profile-pending-notice')).toHaveCount(0);await expect(page.locator('.toast')).toHaveCount(0);
-  await page.getByTestId('profile-select').selectOption('sepolia');await expect(page.locator('.toast').last()).toContainText("1 transaction still pending. Switching won't cancel it.");expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);
-  await page.getByTestId('profile-select').selectOption('mainnet');expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);
+  await page.getByTestId('profile-select').selectOption('mainnet');await expect(page.locator('.toast').last()).toContainText("1 transaction still pending. Switching won't cancel it.");expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);
+  await page.getByTestId('profile-select').selectOption('sepolia');expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);
   await page.locator('.toast').last().getByRole('button',{name:'View',exact:true}).click();await expect(page.getByTestId('activity-drawer')).toBeVisible();await page.getByTestId('activity-drawer').locator('[data-close-sheet]').click();
   await page.getByTestId('settings-open').click();await page.getByTestId('btn-clear-activity').click();await page.getByTestId('btn-modal-confirm').click();await page.getByTestId('settings-sheet').locator('[data-close-sheet]').click();
-  for(const button of await page.locator('.toast-close').all())await button.click();await page.getByTestId('profile-select').selectOption('sepolia');await expect(page.locator('.toast')).toHaveCount(0);await page.evaluate(()=>squeek.destroy());
+  for(const button of await page.locator('.toast-close').all())await button.click();await page.getByTestId('profile-select').selectOption('mainnet');await expect(page.locator('.toast')).toHaveCount(0);await page.evaluate(()=>squeek.destroy());
 });
 
 test('Trust checklist tracks verified, stopped and unknown; Developers wallet permissions are accurate',async({page})=>{
@@ -95,7 +97,7 @@ for(const theme of ['light','dark'])for(const width of [1280,390])for(const view
   if(view==='stall-squeeks')await expect(page.getByTestId('holder-rewards-notice')).toBeVisible();
   // Sepolia shows a stall as the shared Rewards-paused notice (the v6 frozen strip is gone).
   if(view==='stall-network')await expect(page.getByTestId('settlement-notice')).toHaveText('Rewards paused: settlement stopped at round 1973.');
-  if(view==='pending'){await page.getByTestId('profile-select').selectOption('sepolia');await expect(page.locator('.toast').last()).toContainText('1 transaction still pending');}
+  if(view==='pending'){await page.getByTestId('profile-select').selectOption('mainnet');await expect(page.locator('.toast').last()).toContainText('1 transaction still pending');}
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({fullPage:true,animations:'disabled'});const name=`${view}-${theme}-${width}.png`;await info.attach(name,{body:image,contentType:'image/png'});fs.mkdirSync('artifacts/screenshots',{recursive:true});fs.writeFileSync('artifacts/screenshots/'+name,image);
   await page.evaluate(()=>squeek.destroy());

@@ -18,7 +18,8 @@ for(const action of ['deposit','withdraw','approveNft','approveAll','approveSqk'
  if(['deposit','withdraw'].includes(action))await page.getByTestId('v9-ids').fill(action==='withdraw'?'41':'87');
  if(action==='approveNft')await page.getByTestId('v9-token').fill('87');
  if(['approveSqk','stake','unstake'].includes(action))await page.getByTestId('v9-amount').fill('1');
- await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal')).toBeVisible();expect(await page.evaluate(()=>v9.sends)).toBe(0);
+ if(action!=='claimAndStake')await page.getByTestId('v9-review').click(); // claimAndStake opens its review automatically
+ await expect(page.getByTestId('modal')).toBeVisible();expect(await page.evaluate(()=>v9.sends)).toBe(0);
  await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('banner')).toContainText('Mock wallet stops');
  const h=await page.evaluate(()=>({previews:v9.previews,sends:v9.sends}));expect(h.previews).toHaveLength(2);expect(h.previews.every(p=>p.action===action)).toBe(true);expect(h.sends).toBe(1);
  if(action==='unstake'){expect(h.previews[1].input.maxFee).toBe('10000000000000000');expect(h.previews[1].input.deadline).toBe('1900000000');}

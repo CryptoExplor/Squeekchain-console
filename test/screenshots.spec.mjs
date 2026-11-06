@@ -55,7 +55,8 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
       await expect(page.getByTestId('btn-menu-connect')).toBeHidden();
       await expect(page.getByTestId('verified-chip')).toHaveText('Not deployed');
     }
-    await expect(page.locator('.hero, .page-intro, .action-grid, .eyebrow')).toHaveCount(0);
+    // The Home hero is deliberate (#7); no other panel may carry hero/marketing chrome.
+    await expect(page.locator('[data-panel]:not([data-panel="home"]) :is(.hero, .page-intro, .action-grid, .eyebrow)')).toHaveCount(0);
     await expect(page.getByTestId('activity-drawer')).toBeHidden();
     await expect(page.getByTestId('capability-grid')).toBeHidden();
     await expect(page.getByRole('contentinfo')).toContainText('Independent community console · not affiliated with Squeekchain · Sepolia only · not investment advice');

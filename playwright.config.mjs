@@ -6,7 +6,7 @@ export default defineConfig({
   // Every offline spec runs on mocked data; the slowest green test is ~7s.
   // A hung spec must fail fast instead of eating the 15-minute CI job.
   timeout: 30_000,
-  expect: { timeout: 15_000 },
+  expect: { timeout: 10_000 },
   retries: 0,
   workers: 1,
   reporter: 'list',

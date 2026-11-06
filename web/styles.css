@@ -825,7 +825,7 @@ body.modal-open { overflow: hidden; }
 .topbar { border-bottom: 3px solid transparent; border-image: linear-gradient(90deg, var(--brand-yellow), var(--brand-blue) 55%, var(--brand-pink)) 1; }
 .tab[aria-selected="true"] { color: var(--sqk-blue); border-bottom: 3px solid var(--brand-blue); }
 [data-theme="dark"] .tab[aria-selected="true"] { color: #fff; }
-.btn:not(.btn-primary):not(:disabled):hover { border-color: var(--brand-blue); color: var(--sqk-blue); }
+.btn:not(.btn-primary):not(.btn-danger):not(:disabled):hover { border-color: var(--brand-blue); color: var(--sqk-blue); }
 .btn[aria-pressed="true"] { background: var(--sqk-blue-soft); border-color: var(--brand-blue); color: var(--sqk-blue); }
 h2::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 10px; border-radius: 2px; background: var(--brand-yellow); vertical-align: 2px; }
 .panel h2::before, .modal-card h2::before { background: var(--brand-blue); }

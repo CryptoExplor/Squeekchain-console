@@ -8,10 +8,10 @@ for(const width of [1280,390])for(const mode of ['no-wallet','connected','api-bl
   await expect(page.locator('#wheel-state')).toHaveText(mode==='api-blocked'?'Offline':'Running');
   if(mode!=='api-blocked')await expect(page.locator('#wheel-rpm')).toHaveText('12.5');
   await expect(page.locator('#strip-block')).toHaveText('Squeek blocks: 8,192 · next one 50.0% done');
-  await expect(page.locator('.network-strip')).not.toContainText('Unknown');await expect(page.locator('#genesis-row')).toHaveText('Genesis sale: not open yet');
+  await expect(page.locator('.network-strip')).not.toContainText('Unknown');await expect(page.locator('#genesis-row')).toBeHidden(); // no launch contract on the Sepolia graph
   expect(await page.locator('nav [data-tab]').allTextContents()).toEqual(['Home','Squeeks','Playground','Network','Info']);
   const positions=await page.locator('.network-strip').evaluate(root=>{const rect=id=>{const r=root.querySelector(id).getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left};};return {wheel:rect('#wheel-line'),block:rect('#strip-block'),link:rect('a'),genesis:rect('#genesis-row'),font:[root.querySelector('#wheel-line'),root.querySelector('#genesis-row')].map(n=>getComputedStyle(n).fontSize)};});
-  expect(positions.font[0]).toBe(positions.font[1]);if(width===390){expect(positions.block.top).toBeGreaterThanOrEqual(positions.wheel.bottom);expect(positions.link.top).toBeGreaterThanOrEqual(positions.block.bottom);expect(positions.genesis.top).toBeGreaterThanOrEqual(positions.link.bottom);}
+  expect(positions.font[0]).toBe(positions.font[1]);if(width===390){expect(positions.block.top).toBeGreaterThanOrEqual(positions.wheel.bottom);expect(positions.link.top).toBeGreaterThanOrEqual(positions.block.bottom);}
   if(mode==='api-blocked'){await expect(page.locator('#display-sources')).toContainText('Block height — Source: RPC');expect(await page.evaluate(()=>v9.networkCalls)).toBeGreaterThan(0);await expect(page.locator('#wheel-reading')).toBeHidden();}
   await page.evaluate(async()=>{await document.fonts.ready;window.scrollTo({top:0,left:0,behavior:'instant'});});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);expect(await page.evaluate(()=>v9.sends)).toBe(0);
@@ -25,7 +25,7 @@ test('strip keeps last good RPM with visible age on failure, then recovers witho
 // The v6 legacy-freeze strip assertion was removed with the v6 profile; the drawer and CSP-host checks stay.
 test('Activity only opens drawer; unlisted custom RPC is rejected before persistence',async({page})=>{
   await installV9Fixture(page,{telemetry:true});
-  await page.locator('#holder-history-link').click();await expect(page.getByTestId('activity-drawer')).toBeVisible();expect(await page.locator('#activity-panel > p').count()).toBe(0);await page.getByTestId('activity-drawer').getByTestId('sheet-close').click();
+  await page.getByTestId('tab-squeeks').click();await page.locator('#holder-history-link').click();await expect(page.getByTestId('activity-drawer')).toBeVisible();expect(await page.locator('#activity-panel > p').count()).toBe(0);await page.getByTestId('activity-drawer').getByTestId('sheet-close').click();
   await page.getByTestId('settings-open').click();await page.getByTestId('rpc-url').fill('https://ethereum-sepolia-rpc.publicnode.com.evil.invalid/');await page.getByTestId('btn-save-rpc').click();await expect(page.getByTestId('rpc-test-result')).toContainText('CSP-listed host');expect(await page.evaluate(()=>localStorage.getItem('wheelhouse:rpc'))).toBeNull();expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
 test('before the first device reading: successful empty status stays dash, actual status failure shows offline',async({page})=>{
