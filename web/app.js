@@ -330,7 +330,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!state.account) renderWalletChip();
     $('activity-empty').classList.toggle('hidden', items.length !== 0);
     const pending = items.filter(item => !['confirmed', 'reverted'].includes(item.status)).length;
-    for(const item of items){const key=item.hash.toLowerCase(),before=activityNotices.get(key);if(activityReady&&before!==item.status){if(!before)toast(`${item.label} submitted.`, '', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='confirmed')toast(`${item.label} confirmed.`, 'ok', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='reverted')toast(`${item.label} failed.`, 'err', {action:'View',onAction:()=>openSheet('activity-drawer')});}activityNotices.set(key,item.status);}
+    for(const item of items){const key=item.hash.toLowerCase(),before=activityNotices.get(key);const fresh=Date.now()-Date.parse(item.time||0)<120000;if(activityReady&&before!==item.status&&(before||fresh)){if(!before)toast(`${item.label} submitted.`, '', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='confirmed')toast(`${item.label} confirmed.`, 'ok', {action:'View',onAction:()=>openSheet('activity-drawer')});if(item.status==='reverted')toast(`${item.label} failed.`, 'err', {action:'View',onAction:()=>openSheet('activity-drawer')});}activityNotices.set(key,item.status);}
     activityReady=true;workspace?.localChanged();
     $('pending-count').textContent = String(pending);
     $('pending-count').classList.toggle('hidden', !pending);
