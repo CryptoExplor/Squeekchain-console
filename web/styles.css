@@ -801,7 +801,7 @@ body.modal-open { overflow: hidden; }
 .explore-sort { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .explore-sort select { width: auto; margin: 0; }
 /* Earnings: compact 7-day bars, labels under each bar */
-.earnings-chart { max-width: 560px; }
+.earnings-chart { max-width: none; }
 .earnings-labels { align-items: end; text-align: center; border-bottom: 0; }
 .earnings-col { height: 96px; display: flex; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--sqk-line); margin-bottom: 6px; }
 .earnings-bar { display: block; width: min(28px, 70%); background: var(--sqk-gold); border-radius: 4px 4px 0 0; }
@@ -848,3 +848,6 @@ h2::before { content: ""; display: inline-block; width: 10px; height: 10px; marg
 .status-dot { background: var(--brand-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-green) 25%, transparent); }
 a { color: var(--sqk-blue); }
 .modal-card { border-top: 4px solid var(--brand-yellow); }
+.btn-primary:disabled { background: var(--sqk-panel-alt); border-color: var(--sqk-line); color: var(--sqk-gray); opacity: 1; }
+.earnings-bar.empty { background: color-mix(in srgb, var(--sqk-gray) 45%, transparent); min-height: 3px; }
+.stat.accent strong { color: var(--sqk-ink); }
