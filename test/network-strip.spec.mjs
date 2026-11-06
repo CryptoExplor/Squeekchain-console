@@ -5,10 +5,10 @@ for(const width of [1280,390])for(const mode of ['no-wallet','connected','api-bl
   const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.setViewportSize({width,height:900});
   await installV9Fixture(page,{telemetry:mode!=='api-blocked'});
   await page.evaluate(async mode=>{v9.net.core.blockProgress='500000000';if(mode==='connected')await squeek.connect();await squeek.refresh();},mode);await page.getByTestId('tab-network').click();
-  await expect(page.locator('#wheel-state')).toHaveText(mode==='api-blocked'?'Wheel offline':'Running');
+  await expect(page.locator('#wheel-state')).toHaveText(mode==='api-blocked'?'Offline':'Running');
   if(mode!=='api-blocked')await expect(page.locator('#wheel-rpm')).toHaveText('12.5');
-  await expect(page.locator('#strip-block')).toHaveText('Squeek block 8,192 · next 50.0%');
-  await expect(page.locator('.network-strip')).not.toContainText('Unknown');await expect(page.locator('#genesis-row')).toHaveText('Genesis · not open');
+  await expect(page.locator('#strip-block')).toHaveText('Squeek blocks: 8,192 · next one 50.0% done');
+  await expect(page.locator('.network-strip')).not.toContainText('Unknown');await expect(page.locator('#genesis-row')).toHaveText('Genesis sale: not open yet');
   expect(await page.locator('nav [data-tab]').allTextContents()).toEqual(['Home','Squeeks','Playground','Network','Info']);
   const positions=await page.locator('.network-strip').evaluate(root=>{const rect=id=>{const r=root.querySelector(id).getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left};};return {wheel:rect('#wheel-line'),block:rect('#strip-block'),link:rect('a'),genesis:rect('#genesis-row'),font:[root.querySelector('#wheel-line'),root.querySelector('#genesis-row')].map(n=>getComputedStyle(n).fontSize)};});
   expect(positions.font[0]).toBe(positions.font[1]);if(width===390){expect(positions.block.top).toBeGreaterThanOrEqual(positions.wheel.bottom);expect(positions.link.top).toBeGreaterThanOrEqual(positions.block.bottom);expect(positions.genesis.top).toBeGreaterThanOrEqual(positions.link.bottom);}
@@ -29,7 +29,7 @@ test('legacy freeze stays inside strip; Activity only opens drawer; unlisted cus
 });
 test('before the first device reading: successful empty status stays dash, actual status failure shows offline',async({page})=>{
  await installV9Fixture(page,{telemetry:true,emptyStatus:true});
- await expect(page.locator('#wheel-state')).toHaveText('—');await expect(page.locator('#wheel-reading')).toBeHidden();
- await page.evaluate(async()=>{v9.statusBlocked=true;await squeek.pollDisplay();});await expect(page.locator('#wheel-state')).toHaveText('Wheel offline');
+ await expect(page.locator('#wheel-state')).toHaveText('Checking…');await expect(page.locator('#wheel-reading')).toBeHidden();
+ await page.evaluate(async()=>{v9.statusBlocked=true;await squeek.pollDisplay();});await expect(page.locator('#wheel-state')).toHaveText('Offline');
  await page.evaluate(async()=>{v9.statusBlocked=false;v9.emptyStatus=false;await squeek.pollDisplay();});await expect(page.locator('#wheel-state')).toHaveText('Running');await expect(page.locator('#wheel-rpm')).toHaveText('12.5');await page.evaluate(()=>squeek.destroy());
 });

@@ -14,7 +14,7 @@ export function createNetworkStrip(doc,{now=()=>Date.now(),wheelEnabled=key=>Boo
       $('wheel-asof').hidden=false;
       $('wheel-note').textContent=$('wheel-asof').textContent.slice(3);
     } else {
-      $('wheel-state').textContent='Wheel offline';
+      $('wheel-state').textContent='Offline';
       $('wheel-rpm').textContent='';
       $('wheel-reading').hidden=true;
       $('wheel-asof').hidden=true;
@@ -24,7 +24,7 @@ export function createNetworkStrip(doc,{now=()=>Date.now(),wheelEnabled=key=>Boo
   }
   function loading() {
     if(last)return;
-    $('wheel-state').textContent='—';
+    $('wheel-state').textContent='Checking…';
     $('wheel-reading').hidden=true;
     $('wheel-asof').hidden=true;
     $('wheel-line').classList.add('muted');

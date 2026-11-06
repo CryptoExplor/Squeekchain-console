@@ -95,7 +95,7 @@ try {
   assert.equal(requests, previousRequests, 'non-Sepolia refreshes never fetch device telemetry');
 
   const switchingBack = api.switchProfile('sepolia');
-  assert.equal($('wheel-state').textContent, '—', 'profile change resets rather than reusing old readings');
+  assert.equal($('wheel-state').textContent, 'Checking…', 'profile change resets rather than reusing old readings');
   assert.equal($('wheel-rpm').textContent, '');
   await switchingBack; release(response(measurement(5000))); await tick();
   assert.equal($('wheel-rpm').textContent, '5.0');
