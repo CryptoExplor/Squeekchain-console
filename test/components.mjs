@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from '../web/components.js';
+import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount, formatSqk, formatPower } from '../web/components.js';
 import { mount } from '../web/app.js';
 
 const html = fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
@@ -51,6 +51,18 @@ try {
   assert.equal($('btn-modal-confirm').disabled, true);
   $('modal-input').value = 'BURN-42'; $('modal-input').dispatchEvent(new win.Event('input'));
   $('btn-modal-confirm').click(); await result; assert.equal(confirmed, true);
+  // Phase 6: the burn warning renders directly above the typed BURN-<id> input; the typed guard is unchanged.
+  const warned = ConfirmDialog({ doc, win, elements: Object.fromEntries(Object.entries({ root: 'modal', title: 'modal-title', body: 'modal-body', input: 'modal-input', warning: 'modal-warning', cancel: 'btn-modal-cancel', confirm: 'btn-modal-confirm' }).map(([key, id]) => [key, $(id)])) });
+  let warnedResult = null;
+  const warnedPromise = warned.confirm({ title: 'Merge', body: 'Keep #41', warning: '#42 is BURNED permanently. Type BURN-42 below.', requireText: 'BURN-42' }).then(value => { warnedResult = value; });
+  assert.equal($('modal-warning').textContent, '#42 is BURNED permanently. Type BURN-42 below.'); assert.equal($('modal-warning').classList.contains('hidden'), false);
+  assert.equal($('modal-warning').nextElementSibling.getAttribute('for'), 'modal-input'); assert.equal($('modal-warning').nextElementSibling.nextElementSibling, $('modal-input'));
+  $('modal-input').value = 'BURN-41'; $('modal-input').dispatchEvent(new win.Event('input')); assert.equal($('btn-modal-confirm').disabled, true);
+  $('btn-modal-cancel').onclick(); await warnedPromise; assert.equal(warnedResult, false);
+  const plain = warned.confirm({ title: 'Claim', body: 'No burn' }); assert.equal($('modal-warning').classList.contains('hidden'), true); $('btn-modal-cancel').onclick(); await plain;
+  // Phase 6: one SQK format (2 decimals, separators, exact zero as "0 SQK") and whole-number power.
+  for (const [value, text] of [['0', '0 SQK'], ['0.0', '0 SQK'], [{ sqk: '563.9836' }, '563.98 SQK'], ['1234567.5', '1,234,567.50 SQK'], ['0.001', '< 0.01 SQK'], [null, UNKNOWN], ['nope', UNKNOWN]]) assert.equal(formatSqk(value), text);
+  for (const [value, text] of [['2200', '2,200'], ['2000000000000000000000', '2,000'], [null, UNKNOWN]]) assert.equal(formatPower(value), text);
 
   const owner = '0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54';
   let net = { core: {}, mining: {}, nft: {}, checkpoint: {} };
@@ -69,7 +81,7 @@ try {
     wallet = { owner, totals: { count: 0, power: 0, deposited: 0, sharePercent: 0, claimable: { sqk: '0' } }, squeeks: [] };
     await app.refresh();
     for (const id of ['net-round', 'net-blocks', 'net-squeeks', 'holder-count', 'holder-power']) assert.equal($(id).textContent, '0', `known zero ${id}`);
-    assert.equal($('holder-claimable').textContent, '0 SQK'); assert.equal($('net-paused').textContent, 'no');
+    assert.equal($('holder-claimable').textContent, '0 SQK'); assert.equal($('net-paused').textContent, 'No');
     failed = true; await app.refresh();
     assert.equal($('holder-count').textContent, UNKNOWN); assert.equal(app.state.status, null);
     assert.equal($('btn-custom-merge').disabled, true);

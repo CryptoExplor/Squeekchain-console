@@ -1,7 +1,7 @@
 // Display-only cards. Selection is a hint; the app reconstructs action inputs on-chain.
 import {createBrowseGrid} from './browse-grid.js';
 import {getProfile} from './bundle.js';
-import {formatNumber,formatAmount} from './components.js';
+import {formatNumber,formatSqk} from './components.js';
 export function createHoldings({doc,win,state,loadImage,onAction,onMerge,onConnect,onSelection=()=>{},onPairs=()=>{}}){
  const $=id=>doc.getElementById(id),selected=new Set();let observer,version=0,current;
  function pick(action,ids){$('v9-ids').value=ids.join(', ');$('v9-token').value=ids[0]??'';if(ids.length===2){$('v9-survivor').value=ids[0];$('v9-donor').value=ids[1];$('merge-survivor').value=ids[0];$('merge-donor').value=ids[1];}onAction(action);}
@@ -24,7 +24,7 @@ export function createHoldings({doc,win,state,loadImage,onAction,onMerge,onConne
  const grid=createBrowseGrid({doc,win,root:$('squeek-cards'),context:()=>({profile:state.profileKey,owner:current?.owner}),active:()=>!$('panel-squeeks').classList.contains('hidden')&&!$('holder-overview').hidden,loadImage,selected,canSelect:canSign,onSelection:selectionChanged,onAction:(action,id)=>pick(action,[id]),onPairs});
  function render(status){const previous=current;current=status;const changed=previous?.owner?.toLowerCase()!==status?.owner?.toLowerCase();if(changed||[...selected].some(id=>{const before=previous?.squeeks?.find(t=>String(t.tokenId)===id),after=status?.squeeks?.find(t=>String(t.tokenId)===id);return before&&after&&(before.level!==after.level||Boolean(before.deposited)!==Boolean(after.deposited));}))selected.clear();for(const id of [...selected])if(!status?.squeeks?.some(t=>String(t.tokenId)===id))selected.delete(id);$('nft-empty').classList.toggle('hidden',!status||status.squeeks?.length>0);$('squeek-controls').classList.toggle('hidden',!status||!(status.squeeks?.length>0));for(const button of doc.querySelectorAll('[data-action]'))button.disabled=true;grid.render(status?.squeeks??null,status?.net);selectionChanged();if(!status)return;
  const v9=Boolean(getProfile(state.profileKey).capabilities.stake);
- for(const [id,value] of [['sqk-balance',status.sqkBalance],['sqk-claimable',status.totals?.claimable],['sqk-staked',status.staking?.principal],['sqk-fresh',status.staking?.fresh],['sqk-mature',status.staking?.mature]])$(id).textContent=id==='sqk-claimable'?state.claimQuote?.ok&&state.claimQuote.total?.sqk!=null?`${state.claimQuote.total.sqk} SQK`:formatAmount(value):formatAmount(value);
+ for(const [id,value] of [['sqk-balance',status.sqkBalance],['sqk-claimable',status.totals?.claimable],['sqk-staked',status.staking?.principal],['sqk-fresh',status.staking?.fresh],['sqk-mature',status.staking?.mature]])$(id).textContent=id==='sqk-claimable'?state.claimQuote?.ok&&state.claimQuote.total?.sqk!=null?formatSqk(state.claimQuote.total):formatSqk(value):formatSqk(value);
  // Display data has no wallet SQK balance; hide the row instead of showing a dash.
  $('sqk-balance').parentElement.classList.toggle('hidden',status.sqkBalance==null);
  for(const id of ['sqk-staked','sqk-fresh','sqk-mature'])$(id).parentElement.classList.toggle('hidden',!v9);
