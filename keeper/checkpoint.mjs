@@ -7,7 +7,7 @@ import { sepolia } from 'viem/chains';
 import { createSqueekchain } from '../sdk/squeekchain.js';
 import { getProfile } from '../sdk/deployments.js';
 const DEPLOYMENT = getProfile().addresses;
-import { miningAbi } from '../sdk/abi.js';
+import { miningAbi } from '../sdk/abi-core-20261103.js';
 
 try {
   if (process.env.CHECKPOINT_KEEPER_ENABLED !== 'true' || process.argv.slice(2).join(' ') !== '--submit-checkpoint') throw new Error('Keeper OFF. Explicit CHECKPOINT_KEEPER_ENABLED=true and --submit-checkpoint are both required.');

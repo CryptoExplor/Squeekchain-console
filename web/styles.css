@@ -901,3 +901,16 @@ a { color: var(--sqk-blue); }
 .hero-art .sparkle { stroke: var(--brand-blue); }
 .hero-art .body { fill: color-mix(in srgb, var(--brand-yellow) 30%, var(--sqk-panel)); }
 .hero-art .hub { fill: var(--sqk-panel); }
+/* Hero: caption centred, hamster running */
+.art-annotation { left: 0; right: 0; bottom: -4px; text-align: center; }
+.hero-art .spin { transform-box: view-box; transform-origin: 244px 153px; animation: hero-spin 2.4s linear infinite; }
+.hero-art .runner { animation: hero-bob .32s ease-in-out infinite alternate; }
+.hero-art .foot { transform-box: fill-box; transform-origin: 50% 0; }
+.hero-art .foot-a { animation: hero-step .32s ease-in-out infinite alternate; }
+.hero-art .foot-b { animation: hero-step .32s ease-in-out infinite alternate-reverse; }
+@keyframes hero-spin { to { transform: rotate(360deg); } }
+@keyframes hero-bob { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+@keyframes hero-step { from { transform: rotate(-22deg); } to { transform: rotate(22deg); } }
+.hero-art:hover .spin { animation-duration: 1s; }
+.hero-art:hover .runner, .hero-art:hover .foot { animation-duration: .16s; }
+@media (prefers-reduced-motion: reduce) { .hero-art .spin, .hero-art .runner, .hero-art .foot { animation: none; } }
