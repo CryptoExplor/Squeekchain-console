@@ -141,35 +141,59 @@ export function mount(host, { reducedMotion = false } = {}) {
   const ro = new ResizeObserver(() => { size(); if (!running) draw(last); }); ro.observe(host); size();
 
   const { torso, head, legs } = hamster.userData;
-  let target = 0;
-  const pose = (t) => {
-    wheel.rotation.z = -(t / REV_SECONDS) * Math.PI * 2;
-    const p = t * STRIDE_HZ * Math.PI * 2;
-    torso.position.y = Math.abs(Math.sin(p)) * 0.04; torso.rotation.z = Math.sin(p) * 0.04;
-    head.rotation.z = Math.sin(p + 0.6) * 0.04; head.rotation.y = Math.sin(t * 0.7) * 0.12;
-    for (const { pivot, phase, front } of legs) pivot.rotation.z = Math.sin(p + phase) * (front ? 0.75 : 0.6);
-    rig.rotation.y += ((-0.18 + target) - rig.rotation.y) * 0.06;
+  // Cursor tracking: the hamster turns toward the pointer and runs that way; the wheel follows.
+  // Far away = full sprint, close = it slows, sits up and just watches. No pointer yet = runs right.
+  const pointer = { x: null, y: null };
+  const hamPos = new Vector3();
+  const state = { facing: 1, yaw: 0, speed: 1, wheelAngle: 0, stride: 0, lookX: 0, lookY: 0 };
+  const steer = (dt) => {
+    let want = 1, speed = 1, lookX = 0, lookY = 0;
+    if (pointer.x !== null) {
+      const rect = canvas.getBoundingClientRect();
+      hamster.getWorldPosition(hamPos).project(camera);
+      const hx = rect.left + (hamPos.x + 1) / 2 * rect.width, hy = rect.top + (1 - hamPos.y) / 2 * rect.height;
+      const dx = pointer.x - hx, dy = pointer.y - hy;
+      want = dx >= 0 ? 1 : -1;
+      speed = Math.min(1.4, Math.max(0, (Math.abs(dx) - 50) / 320));
+      lookX = Math.max(-1, Math.min(1, dx / 400)); lookY = Math.max(-1, Math.min(1, -dy / 300));
+    }
+    const k = 1 - Math.exp(-dt * 6);
+    state.facing += (want - state.facing) * k;               // -1..1, eased turn-around
+    state.speed += (speed - state.speed) * (1 - Math.exp(-dt * 3));
+    state.lookX += (lookX - state.lookX) * k; state.lookY += (lookY - state.lookY) * k;
+    state.wheelAngle -= Math.sign(state.facing || 1) * state.speed * dt * (Math.PI * 2 / REV_SECONDS);
+    state.stride += state.speed * dt * STRIDE_HZ * Math.PI * 2;
   };
-  let last = 0.9, raf = 0, running = false, visible = true, onScreen = true, t0 = performance.now() - last * 1000;
-  const draw = (t) => { pose(t); renderer.render(scene, camera); };
-  const loop = (now) => { last = (now - t0) / 1000; draw(last); raf = requestAnimationFrame(loop); };
+  const pose = (t, dt) => {
+    steer(dt);
+    wheel.rotation.z = state.wheelAngle;
+    hamster.rotation.y = (1 - state.facing) / 2 * -Math.PI;   // face +x or -x, turning through the camera
+    const run = Math.min(1, state.speed), p = state.stride;
+    torso.position.y = Math.abs(Math.sin(p)) * 0.04 * run;
+    torso.rotation.z = Math.sin(p) * 0.04 * run + (1 - run) * 0.12; // sits up a little when idle
+    head.rotation.z = Math.sin(p + 0.6) * 0.04 * run + state.lookY * 0.35;
+    head.rotation.y = Math.sin(t * 0.7) * 0.08 * (1 - run) + 0.35 * (1 - Math.abs(state.facing)); // glances at the camera mid-turn
+    for (const { pivot, phase, front } of legs) pivot.rotation.z = Math.sin(p + phase) * (front ? 0.75 : 0.6) * run;
+  };
+  let last = 0.9, raf = 0, running = false, visible = true, onScreen = true, prev = 0;
+  const draw = (t, dt = 0) => { pose(t, dt); renderer.render(scene, camera); };
+  const loop = (now) => { const dt = Math.min(0.05, prev ? (now - prev) / 1000 : 0); prev = now; last += dt; draw(last, dt); raf = requestAnimationFrame(loop); };
   const sync = () => {
     const want = !reducedMotion && visible && onScreen;
-    if (want && !running) { running = true; t0 = performance.now() - last * 1000; raf = requestAnimationFrame(loop); }
+    if (want && !running) { running = true; prev = 0; raf = requestAnimationFrame(loop); }
     else if (!want && running) { running = false; cancelAnimationFrame(raf); }
   };
   const io = new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; sync(); }); io.observe(host);
   const onVis = () => { visible = document.visibilityState === 'visible'; sync(); }; document.addEventListener('visibilitychange', onVis);
-  const hero = host.closest('.hero') || host;
-  const onMove = (e) => { const r = hero.getBoundingClientRect(); target = ((e.clientX - r.left) / r.width - 0.5) * 0.5; };
-  const onLeave = () => { target = 0; };
-  if (!reducedMotion) { hero.addEventListener('pointermove', onMove); hero.addEventListener('pointerleave', onLeave); }
+  const onMove = (e) => { pointer.x = e.clientX; pointer.y = e.clientY; };
+  const onLeave = () => { pointer.x = pointer.y = null; };
+  if (!reducedMotion) { window.addEventListener('pointermove', onMove, { passive: true }); document.documentElement.addEventListener('pointerleave', onLeave); }
 
   draw(last); host.classList.add('is-3d'); sync();
   return {
     destroy() {
       cancelAnimationFrame(raf); running = false; io.disconnect(); ro.disconnect();
-      document.removeEventListener('visibilitychange', onVis); hero.removeEventListener('pointermove', onMove); hero.removeEventListener('pointerleave', onLeave);
+      document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pointermove', onMove); document.documentElement.removeEventListener('pointerleave', onLeave);
       host.classList.remove('is-3d'); canvas.remove();
       scene.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); }); scene.environment?.dispose?.(); renderer.dispose();
     },
