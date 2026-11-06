@@ -32,7 +32,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
       await expect(page.getByTestId('panel-info')).toBeVisible();
       const rows=page.getByTestId('policy-table').locator('tbody tr');await expect(rows).toHaveCount(10);
       for(let i=0;i<10;i++)await expect(rows.nth(i).locator('td')).toHaveText([String(i+1),String((i+1)*1000),String(i===9?0:2*(i+1))]);
-      await expect(page.getByTestId('trust-block')).toHaveText('12,101,024');
+      await expect(page.getByTestId('trust-block')).toHaveText('block 12,101,024 on Sepolia');
     }
     if (view === 'settings') await page.getByTestId('settings-open').click();
     if (view === 'merge') {
@@ -49,7 +49,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
       await expect(page.getByTestId('tab-info')).toHaveAttribute('aria-selected','true');
       await expect(page.getByTestId('panel-info')).toBeVisible();
       await expect(page.locator('[role=tab][aria-selected=true]')).toHaveCount(1);
-      await expect(page.getByTestId('trust-block')).toHaveText('—');
+      await expect(page.getByTestId('trust-block')).toHaveText('Not available');
       await expect(page.getByTestId('deployment-content')).toBeHidden();
       await expect(page.getByTestId('wallet-button')).toBeVisible();
       await expect(page.getByTestId('btn-menu-connect')).toBeHidden();
@@ -125,7 +125,7 @@ for (const width of [900, 1024]) test(`header: single desktop row at ${width}px,
   await page.getByTestId('profile-select').selectOption('sepolia');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
   await expect(page.getByTestId('verified-chip')).toHaveText('Verified');
-  await expect(page.getByTestId('verified-chip')).toHaveAttribute('title', /Network and contract checks passed at block 12101025; latest check at block 12101024/);
+  await expect(page.getByTestId('verified-chip')).toHaveAttribute('title', /Network and contract checks passed at Sepolia block 12101025; latest check at Sepolia block 12101024/);
   await assertCompactHeader(page, width, true); await page.evaluate(() => window.squeek.destroy());
 });
 
@@ -135,7 +135,8 @@ test('structure: hash navigation, Trust shortcut, Info and watch address', async
   await page.getByTestId('tab-info').click();await page.getByTestId('info-link-how-it-works').click();
   await expect(page).toHaveURL(/#sepolia\/info\/how-it-works$/);
   await page.getByTestId('tab-info').click();
-  await expect(page).toHaveURL(/#sepolia\/info\/how-it-works$/);
+  // Phase 6: the Info tab lands on its plain-language overview, not a sub-section.
+  await expect(page).toHaveURL(/#sepolia\/info$/);await expect(page.getByTestId('info-overview')).toBeVisible();await expect(page.getByTestId('info-how-it-works')).toBeHidden();
   await page.getByTestId('info-link-developers').click();
   await expect(page).toHaveURL(/#sepolia\/info\/developers$/);
   await expect(page.getByTestId('tool-call')).toBeHidden();await page.locator('#agent-setup>summary').click();await expect(page.getByTestId('tool-call')).toBeVisible();

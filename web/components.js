@@ -15,6 +15,31 @@ export function formatAmount(amount) {
   const value = formatNumber(amount?.sqk, 2);
   return value === UNKNOWN ? UNKNOWN : `${value} SQK`;
 }
+// Plain-language formats: one formatter for SQK amounts and one for power across the app.
+export function formatSqk(amount) {
+  // Accepts { sqk: '1.5' } or a decimal SQK string. Two decimals, thousands separators; exact zero is "0 SQK".
+  const raw = amount !== null && typeof amount === 'object' ? amount.sqk : amount;
+  if (typeof raw === 'boolean' || valueText(raw) === UNKNOWN) return UNKNOWN;
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(String(raw).trim().replace(/,/g, ''));
+  if (!match) return UNKNOWN;
+  const [, sign, whole, fraction = ''] = match;
+  if (/^0+$/.test(whole) && /^0*$/.test(fraction)) return '0 SQK';
+  let cents = BigInt(whole) * 100n + BigInt(`${fraction}00`.slice(0, 2));
+  if (Number(fraction[2] ?? 0) >= 5) cents += 1n;
+  if (cents === 0n) return `${sign ? '> -' : '< '}0.01 SQK`;
+  return `${sign}${(cents / 100n).toLocaleString('en-US')}.${String(cents % 100n).padStart(2, '0')} SQK`;
+}
+export function formatSqkBase(baseUnits, formatEther) {
+  return /^\d+$/.test(String(baseUnits ?? '')) ? formatSqk(formatEther(BigInt(baseUnits))) : UNKNOWN;
+}
+export function formatPower(value) {
+  // Power is a whole number. Staking power can arrive as 18-decimal fixed point; scale it down first.
+  if (typeof value === 'boolean' || valueText(value) === UNKNOWN) return UNKNOWN;
+  const text = String(value).trim();
+  if (/^\d+$/.test(text)) { const big = BigInt(text); return (big >= 10n ** 18n ? big / 10n ** 18n : big).toLocaleString('en-US'); }
+  return formatNumber(text, 0);
+}
+// End plain-language formats.
 export function Skeleton(node, busy) {
   node.dataset.component = 'Skeleton';
   const loading = Boolean(busy && valueText(node.textContent) === UNKNOWN);
@@ -134,7 +159,7 @@ export function ConfirmDialog({ doc, win, elements }) {
     return close;
   }
 
-  function confirmModal({ title, body, requireText = null, confirmLabel = "Confirm", details = [] }) {
+  function confirmModal({ title, body, requireText = null, confirmLabel = "Confirm", details = [], warning = null }) {
     closeActiveModal?.();
     return new Promise((resolve) => {
       elements.title.textContent = title;
@@ -143,6 +168,8 @@ export function ConfirmDialog({ doc, win, elements }) {
         const list=doc.createElement('dl');list.className='confirm-details';list.dataset.testid='confirm-details';
         for(const [label,value,options] of details) {const term=doc.createElement('dt'),definition=doc.createElement('dd');term.textContent=label;definition.textContent=value;if(options?.warning){term.className=definition.className='recipient-warning';}list.append(term,definition);}elements.body.append(list);
       }
+      // A burn warning sits directly above the typed confirmation it belongs to.
+      if (elements.warning) { elements.warning.textContent = warning ?? ""; elements.warning.classList.toggle("hidden", !warning); }
       elements.input.value = "";
       elements.input.classList.toggle("hidden", !requireText);
       elements.input.placeholder = requireText ? `type ${requireText}` : "";

@@ -28,11 +28,11 @@ for(const profile of ['sepolia'])for(const width of [1280,390])test(`one wallet 
 });
 test('live Squeeks, plain profile notes, plural rounds and checkpoint issuance source',async({page})=>{
  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.getByTestId('tab-squeeks').click();
- await expect(page.getByTestId('net-issued-label')).toHaveText('SQK issued');await expect(page.getByTestId('net-issued')).toContainText('12,500,000');await expect(page.getByTestId('net-issued')).not.toContainText('25,000,000');await expect(page.getByTestId('issuance-source')).toHaveCount(0);
+ await expect(page.getByTestId('net-issued-label')).toHaveText('SQK issued so far');await expect(page.getByTestId('net-issued')).toContainText('12,500,000');await expect(page.getByTestId('net-issued')).not.toContainText('25,000,000');await expect(page.getByTestId('issuance-source')).toHaveCount(0);
  for(const [lag,text] of [['0','0 rounds'],['1','1 round'],['2','2 rounds']]){await page.evaluate(async lag=>{v9.net.mining.lagRounds=lag;await squeek.refresh();},lag);await expect(page.getByTestId('net-lag')).toHaveText(text);}
  await page.evaluate(async()=>{v9.net.core.settledThroughRound='2049';await squeek.refresh();});await expect(page.getByTestId('net-issued')).toContainText('12,500,000');
  await page.evaluate(async()=>{v9.net.mining.issued.sqk='12500001';v9.net.mining.processedThroughRound='2049';await squeek.refresh();});await expect(page.getByTestId('net-issued')).toContainText('12,500,001');await expect(page.getByTestId('issuance-source')).toHaveCount(0);
- await page.evaluate(()=>squeek.switchProfile('sepolia'));await page.getByTestId('tab-squeeks').click();await expect(page.getByTestId('net-squeeks')).toHaveText('512');await expect(page.getByTestId('net-issued-label')).toHaveText('SQK issued');
+ await page.evaluate(()=>squeek.switchProfile('sepolia'));await page.getByTestId('tab-squeeks').click();await expect(page.getByTestId('net-squeeks')).toHaveText('512');await expect(page.getByTestId('net-issued-label')).toHaveText('SQK issued so far');
  await expect(page.getByTestId('profile-notice')).toHaveText('Test network. Use test funds only.');await page.evaluate(()=>squeek.destroy());
 });
 test('refreshes coalesce per generation, not across profile changes',async({page})=>{
@@ -45,7 +45,7 @@ test('refreshes coalesce per generation, not across profile changes',async({page
 for(const width of [1280,390])test(`actual wallet log-range failure is availability, not a trust mismatch / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);await page.evaluate(()=>squeek.connect());
  await page.evaluate(async()=>{v9.walletError={name:'RpcRequestContextError',message:'JSON-RPC request failed',endpoint:'wallet',method:'eth_getLogs',cause:{message:'getLogs request exceeded max allowed range'}};await squeek.refresh();});
- await expect(page.getByTestId('banner')).toHaveText(availability);await expect(page.getByTestId('profile-status')).toHaveText('Unavailable');await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('trust-block')).toHaveText('—');await expect(page.getByTestId('trust-time')).toHaveText('—');
+ await expect(page.getByTestId('banner')).toHaveText(availability);await expect(page.getByTestId('profile-status')).toHaveText('Unavailable');await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('trust-block')).toHaveText('Not available');await expect(page.getByTestId('trust-time')).toHaveText('—');
  expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.reason)).toBe('Log range limit');expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.method)).toBe('eth_getLogs');expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.endpoint)).toBe('wallet');
  await capture(page,info,`staking-log-range-unavailable-light-${width}.png`);expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });

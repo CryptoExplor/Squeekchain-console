@@ -16,7 +16,7 @@ for(const action of ['claim','claimAndStake'])for(const change of ['equal','incr
  await expect(page.getByTestId('banner')).toContainText(allowed?'Mock wallet stops':action==='claim'?'Claim outcome changed':'Outcome or fee changed');
  expect(await page.evaluate(()=>v9.sends)).toBe(allowed?1:0);
  expect(await page.evaluate(()=>v9.previews.filter(p=>p.action==='claim'||p.action==='claimAndStake').length)).toBe(2);
- if(change==='increase')await expect(page.getByTestId('claim-update')).toHaveText('Claim amount updated: 3 SQK (reviewed 2.5 SQK).');
+ if(change==='increase')await expect(page.getByTestId('claim-update')).toHaveText('Claim amount updated: 3.00 SQK (reviewed 2.50 SQK).');
  await page.evaluate(()=>squeek.destroy());
 });
 for(const theme of ['light','dark'])for(const width of [1280,390])test(`non-owner claim recipient / ${theme} / ${width}`,async({page},info)=>{

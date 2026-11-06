@@ -29,7 +29,7 @@ import {
   profileFromHash, profileInput, canonicalHash, parseEther, formatEther, unstakeQuoteError, SQUEEKS_POLICY,
 } from "./bundle.js";
 
-import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatAmount } from './components.js';
+import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatSqk, formatPower } from './components.js';
 
 // Sepolia is the only chain Wheelhouse talks to; the profile decides the rest.
 const SEPOLIA_CHAIN_ID = 11155111;
@@ -93,7 +93,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     },
     art: { token: $("art-token"), one: $("btn-art-one"), mine: $("btn-art-mine"), grid: $("art-grid"), status: $("art-status") },
     agent: { select: $("tool-call"), run: $("btn-run-tool"), args: $("tool-args"), out: $("tool-result"), copy: $("btn-copy-manifest") },
-    modal: { root: $("modal"), title: $("modal-title"), body: $("modal-body"), input: $("modal-input"), cancel: $("btn-modal-cancel"), confirm: $("btn-modal-confirm") },
+    modal: { root: $("modal"), title: $("modal-title"), body: $("modal-body"), input: $("modal-input"), warning: $("modal-warning"), cancel: $("btn-modal-cancel"), confirm: $("btn-modal-confirm") },
     toasts: $("toasts"),
   };
 
@@ -180,12 +180,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const availability=failure.diagnostics.availability;
     el.verified.textContent=availability?'Unavailable':'Stopped';
     trustDisplay({kind:availability?'unavailable':'mismatch',chipText:availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Unverified'});
-    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent=UNKNOWN;$('trust-result').textContent=BANNER_READ_FAILURE;$('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
+    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;$('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
     readBanner=true;
   }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
   const num = formatNumber;
-  const sqk = formatAmount;
+  // One SQK format everywhere it is displayed (signing dialogs keep exact amounts).
+  const sqk = formatSqk;
   const setStat = (node, value, formatter = valueText) => {const stat=node.closest('.stat');if(stat)Stat(stat).set(value,formatter);else node.textContent=valueText(formatter(value));};
   const json = (v) => JSON.stringify(v, null, 2);
   const actionNames={merge:'Merge Squeeks',mergeDeposited:'Merge deposited',deposit:'Deposit',withdraw:'Withdraw',claim:'Claim',claimAndStake:'Claim and stake',stake:'Stake',unstake:'Unstake',approveNft:'Approve one Squeek',approveAll:'Approve all Squeeks',approveSqk:'Approve SQK'};
@@ -196,7 +197,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     node.replaceChildren();const title=doc.createElement('p');title.textContent=value.ok?'Simulation passed':value.reason?errorMessage({message:value.reason}):'Preview unavailable';node.append(title);
     const facts=doc.createElement('dl');facts.className='preview-facts';
     const labels={merge:'Merge Squeeks',mergeDeposited:'Merge deposited Squeeks',claim:'Claim SQK',claimAndStake:'Claim and stake',stake:'Stake SQK',unstake:'Unstake SQK',deposit:'Deposit Squeeks',withdraw:'Withdraw Squeeks',approveNft:'Approve one Squeek',approveAll:'Approve all Squeeks',approveSqk:'Approve SQK'};
-    for(const [label,raw] of [['Action',labels[value.action]??(value.nextRound?'Checkpoint':null)],['Amount',value.total??value.amount],['Keep',value.survivor],['Burn',value.donor],['Squeeks',value.tokenIds?.join(', ')],['Recipient',value.recipient],['Fee',value.fee],['You receive',value.net]]){if(raw==null)continue;const group=doc.createElement('div'),dt=doc.createElement('dt'),dd=doc.createElement('dd');dt.textContent=label;dd.textContent=raw?.sqk!=null?sqk(raw):label==='Amount'&&/^\d+$/.test(String(raw))?`${formatEther(BigInt(raw))} SQK`:String(raw);group.append(dt,dd);facts.append(group);}node.append(facts);
+    for(const [label,raw] of [['Action',labels[value.action]??(value.nextRound?'Checkpoint':null)],['Amount',value.total??value.amount],['Keep',value.survivor],['Burn',value.donor],['Squeeks',value.tokenIds?.join(', ')],['Recipient',value.recipient],['Fee',value.fee],['You receive',value.net]]){if(raw==null)continue;const group=doc.createElement('div'),dt=doc.createElement('dt'),dd=doc.createElement('dd');dt.textContent=label;dd.textContent=raw?.sqk!=null?sqk(raw):label==='Amount'&&/^\d+$/.test(String(raw))?sqk(formatEther(BigInt(raw))):String(raw);group.append(dt,dd);facts.append(group);}node.append(facts);
     const details=doc.createElement('details'),summary=doc.createElement('summary'),raw=doc.createElement('pre'),copy=doc.createElement('button');summary.textContent='Technical details';raw.textContent=technical(value);copy.className='btn';copy.textContent='Copy';copy.onclick=async()=>{try{await win.navigator.clipboard.writeText(raw.textContent);}catch{toast('Copy unavailable','warn');}};details.append(summary,copy,raw);node.append(details);node.classList.remove('hidden');
   };
   const errorMessage = err => {
@@ -276,7 +277,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(!value.source||value.source.kind==='rpc'){if(value.verification)renderVerification(value.verification);return;}
     if(state.lastReadFailure?.profile===state.profileKey)return;
     if(verifiedForGeneration){renderVerification(verifiedForGeneration);return;}
-    renderTrust(null);$('trust-block').textContent=UNKNOWN;
+    renderTrust(null);$('trust-block').textContent='Not available';
     $('trust-result').textContent=UNKNOWN;
     $('profile-status').textContent='Checking…';$('profile-status').className='chip';
     $('profile-status').title='Awaiting contract verification. Display data is not transaction authority. Open Info › Trust for details.';
@@ -462,11 +463,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for (const key of ["round", "blocks", "lag", "issued", "squeeks", "paused"]) el.net[key].textContent = UNKNOWN;
     el.net.paused.parentElement.className = "stat";
     el.cp.button.disabled = true;
-    el.cp.reason.textContent = profile.addresses ? "Waiting for verified chain state." : "Unavailable until a mainnet deployment is published and verified.";
+    el.cp.reason.textContent = profile.addresses ? "Waiting for checked network data…" : "Unavailable until a mainnet deployment is published and verified.";
     el.verified.textContent = profile.addresses ? "Checking…" : "Not deployed";
     el.verified.className = "sr-only";
     $('profile-status').title=el.verified.title='';
-    $('net-issued-label').textContent='SQK issued';
+    $('net-issued-label').textContent='SQK issued so far';
 
     $("profile-status").className = "chip";
     $("profile-status").textContent = profile.addresses ? "Checking…" : "Not deployed";
@@ -475,7 +476,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     renderContracts(profile);
     renderCapabilities(profile);
     el.net.chain.textContent = profile.chainId === SEPOLIA_CHAIN_ID ? "Sepolia" : "Ethereum";
-    el.net.release.textContent = profile.addresses?`${profile.short.toUpperCase()} · Sepolia`:"Not deployed";
+    el.net.release.textContent = profile.addresses?`${profile.short.toUpperCase()} contracts · Sepolia test network`:"Not deployed";
     el.net.notice.textContent = profile.addresses?"Test network. Use test funds only.":"Not deployed on Ethereum.";
     el.net.notice.className = `notice ${profile.addresses ? "" : "warn"}`;
   }
@@ -512,7 +513,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderTrust(v) {
     if(v?.ok&&v?.trusted)clearReadBanner();
     lastVerificationTime=v?Date.now():null;
-    $('trust-block').textContent=formatNumber(v?.blockNumber ?? state.net?.snapshot?.blockNumber);
+    {const block=formatNumber(v?.blockNumber ?? state.net?.snapshot?.blockNumber);$('trust-block').textContent=block===UNKNOWN?'Not available':`block ${block} on Sepolia`;}
     if(v?.ok||!v&&!state.lastReadFailure)$('rpc-diagnostics').textContent='';
     $('trust-result').textContent=v?.ok&&v?.trusted?'Verified':v?"Can't verify right now":UNKNOWN;
     for(const id of ['trust-block','trust-time'])$(id).parentElement.hidden=!(v?.ok&&v?.trusted);
@@ -664,6 +665,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const hasMenu = state.account || Number(el.connect.dataset.activityCount) > 0 || !deployed;
     el.connect.textContent = wallet.get().status==='connecting'?'Connecting…':state.account ? `${short(state.account)} ▾` : hasMenu ? 'Activity ▾' : 'Connect wallet';
     el.connect.setAttribute('aria-label', hasMenu ? 'Wallet menu' : 'Connect wallet');
+    el.connect.title = state.account ?? '';
     $('btn-menu-connect').classList.toggle('hidden', Boolean(state.account) || !deployed);
     const target=getProfile(state.profileKey);
     $('btn-switch-chain').classList.toggle('hidden',!state.account||watching()||state.chainId===target.chainId);
@@ -756,19 +758,19 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     setStat(el.net.issued,net.supply?.issued??(v9?mining.issued:mining.minted),sqk);
     setStat($('net-progress'),core.blockProgress,value=>/^\d+$/.test(String(value))&&BigInt(value)<=1000000000n?`${(Number(value)/10000000).toFixed(1)}%`:UNKNOWN);
     for(const panel of ['Network'])recordSource(panel,net.source?.kind==='api'?'api':'rpc',net.source?.reason??(net.source?.stale?'Cached response; live request unavailable':net.source?.kind==='cached-rpc'?'24-hour display cache':null));
-    $('net-issued-label').textContent='SQK issued';
+    $('net-issued-label').textContent='SQK issued so far';
     setStat(el.net.squeeks, net.nft?.totalSupply, num);liveSupply=net.nft?.totalSupply??liveSupply;explore?.supply(liveSupply);
     // Chain data loads without a wallet: warm the Explore index in the background once the chain verifies.
     if(!explorePrefetched&&getProfile(state.profileKey).addresses){explorePrefetched=true;explorePrefetchTimer=win.setTimeout(()=>{void ensureExplore().then(e=>{e.supply(liveSupply);return e.prefetch();}).catch(error=>recordSource('Explore','rpc',error.message));},1500);}
-    setStat(el.net.paused, core.paused, value => value === true ? 'yes' : value === false ? 'no' : UNKNOWN);
+    setStat(el.net.paused, core.paused, value => value === true ? 'Yes' : value === false ? 'No' : UNKNOWN);
     el.net.paused.parentElement.className = `stat ${core.paused === true ? 'bad' : core.paused === false ? 'ok' : ''}`;
 
     const caps = capabilities();
     renderCheckpointGate();
     el.cp.reason.textContent = caps.checkpoint
       ? checkpoint.canCheckpoint
-        ? `next round ${valueText(checkpoint.nextRound)} is settled — a checkpoint will fund it`
-        : checkpoint.reason ?? UNKNOWN
+        ? `Round ${valueText(checkpoint.nextRound)} is ready. Running a checkpoint now pays it out to holders.`
+        : checkpoint.reason ?? 'Checkpoint status not available right now.'
       : caps.reasons.unavailable;
     renderPolicy(net.policy);
     el.cp.explain.textContent = "Turns settled rounds into issued SQK. Holders cannot claim until someone checkpoints, so this is the job a wallet without Squeeks can do.";
@@ -805,7 +807,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderWatchMode() {
     const viewing=watching();
     $('watch-mode').classList.toggle('hidden',!viewing);
-    $('watch-chip').textContent=viewing?`Viewing ${short(state.inspected)} · view only, actions need this wallet connected`:'';
+    $('watch-chip').textContent=viewing?`Viewing ${short(state.inspected)} · view only, actions need this wallet connected`:'';$('watch-chip').title=viewing?state.inspected:'';
     $('watch-chip').title=viewing?state.inspected:'';
     el.holder.watchRow.classList.remove('hidden');
   }
@@ -847,10 +849,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const has = num(totals.count) !== UNKNOWN && Number(totals.count) > 0;
     const signerOwns = Boolean(!watching()&&(state.chainId==null||state.chainId===11155111) && state.account && status.owner?.toLowerCase() === state.account.toLowerCase());
     setStat(el.holder.count, totals.count, num);
-    setStat(el.holder.power, isV9 ? totals.deposited : totals.power, num);
+    setStat(el.holder.power, isV9 ? totals.deposited : totals.power, isV9 ? num : formatPower);
     // Share is rarely published; fall back to total power so the summary never shows a blank slot.
     const showShare=num(totals.sharePercent,4)!==UNKNOWN;$('holder-share-label').textContent=showShare?'Share':'Power';
-    if(showShare)setStat(el.holder.share, totals.sharePercent, value => `${num(value, 4)}%`);else setStat(el.holder.share, totals.power, value => {const text=String(value??'');if(!/^\d+$/.test(text))return UNKNOWN;const big=BigInt(text);/* Staking power is 18-decimal fixed point; no real wallet reaches 1e18 unscaled. */return num(String(big>=10n**18n?big/10n**18n:big));});
+    if(showShare)setStat(el.holder.share, totals.sharePercent, value => `${num(value, 4)}%`);else setStat(el.holder.share, totals.power, value => {const text=String(value??'');if(!/^\d+$/.test(text))return UNKNOWN;/* Staking power is 18-decimal fixed point; formatPower scales it to a whole number. */return formatPower(text);});
     setStat(el.holder.claimable, totals.claimable, sqk);
     el.holder.claim.disabled = state.busy || state.walletPromptPending || num(totals.count) === UNKNOWN || (!has && !isV9) || !signerOwns || !caps.claim;
     $("btn-custom-merge").disabled = state.busy || state.walletPromptPending || !has || !signerOwns || !caps.merge;
@@ -873,7 +875,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for (const pair of plan?.pairs ?? []) {
       const li = doc.createElement("li");
       const text = doc.createElement("span");
-      text.textContent = `keep #${pair.survivor} · burn #${pair.donor} · L${pair.level}→L${pair.nextLevel}${pair.deposited?" · Deposited":""}${pair.powerBefore==null?"":` · power ${pair.powerBefore}→${pair.powerAfter} (+${pair.powerGainPercent}%)`}`;
+      text.textContent = `keep #${pair.survivor} · burn #${pair.donor} · L${pair.level}→L${pair.nextLevel}${pair.deposited?" · Deposited":""}${pair.powerBefore==null?"":` · power ${formatPower(pair.powerBefore)}→${formatPower(pair.powerAfter)} (+${pair.powerGainPercent}%)`}`;
       if (signerOwns && caps.merge) {
         const button = doc.createElement("button");
         button.className = "btn btn-danger";
@@ -897,7 +899,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       el.verified.textContent = v.ok && v.trusted ? "Verified" : "Stopped";
       el.verified.className = "sr-only";
       trustDisplay({kind:v.ok&&v.trusted?'verified':'mismatch',chipText:v.ok&&v.trusted?'Verified':'Mismatch: stop',
-        title:v.ok&&v.trusted?`Network and contract checks passed at block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; latest check at block ${v.blockNumber ?? "unknown"}. Two independent connections agree.`:"Network or contract checks did not match. Actions are stopped."});
+        title:v.ok&&v.trusted?`Network and contract checks passed at Sepolia block ${v.fullVerificationBlockNumber ?? v.blockNumber ?? "unknown"}; latest check at Sepolia block ${v.blockNumber ?? "unknown"}. Two independent connections agree.`:"Network or contract checks did not match. Actions are stopped."});
   }
 
   async function refreshNetwork(options={}) {
@@ -1008,7 +1010,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const recipientOf=(preview,owner)=>String(preview.recipient??owner).toLowerCase();
   const recipientDetails=(preview,owner)=>preview.recipient?[['Recipient',preview.recipient,{warning:recipientOf(preview,owner)!==owner.toLowerCase()}]]:[];
   function showClaimIncrease(before,after) {
-    $('claim-update').textContent=`Claim amount updated: ${after.sqk} SQK (reviewed ${before.sqk} SQK).`;
+    $('claim-update').textContent=`Claim amount updated: ${sqk(after)} (reviewed ${sqk(before)}).`;
     $('claim-update').classList.remove('hidden');
   }
   async function requestClaim(tokenIds) {
@@ -1059,7 +1061,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const confirm = `BURN-${BigInt(pair.donor)}`;
     const confirmed = await confirmModal({
       title: `Keep #${pair.survivor} · burn #${pair.donor}`,
-      body: `#${pair.donor} is BURNED permanently and cannot be restored. #${pair.survivor} survives. Type ${confirm} before we build or simulate this call. You will review the simulation before your wallet opens.`,
+      body: `#${pair.survivor} survives and goes up one level. You will review the simulation before your wallet opens.`,
+      warning: `#${pair.donor} is BURNED permanently and cannot be restored. Type ${confirm} below before we build or simulate this call.`,
       requireText: confirm,
       confirmLabel: "Acknowledge burn & simulate",
     });
@@ -1108,7 +1111,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(action==='mergeDeposited'&&!adapterFactory){const fresh=await load.adapter.walletStatus(owner);assertCurrent(load);const canonical=id=>{const token=fresh.squeeks.find(t=>String(t.tokenId)===String(BigInt(id)));if(!token)throw new Error('Token not in fresh on-chain inventory');return token.tokenId;};input={...input,survivor:canonical(input.survivor),donor:canonical(input.donor)};}
     if (action === 'mergeDeposited') {
       const burn = `BURN-${BigInt(input.donor)}`;
-      if (!await confirmModal({ title: `Keep #${input.survivor} · burn #${input.donor}`, body: `Keep #${input.survivor} · burn #${input.donor}. #${input.donor} is BURNED permanently and cannot be restored. #${input.survivor} survives. Type ${burn} before we build or simulate this call. You will review the simulation before your wallet opens.`, requireText: burn, confirmLabel: 'Acknowledge burn & simulate' })) return {ok:false,reason:'cancelled'};
+      if (!await confirmModal({ title: `Keep #${input.survivor} · burn #${input.donor}`, body: `Keep #${input.survivor} · burn #${input.donor}. #${input.survivor} survives and goes up one level. You will review the simulation before your wallet opens.`, warning: `#${input.donor} is BURNED permanently and cannot be restored. Type ${burn} below before we build or simulate this call.`, requireText: burn, confirmLabel: 'Acknowledge burn & simulate' })) return {ok:false,reason:'cancelled'};
       input = {...input,confirm:burn};
     }
     const preview = await readFor(load,'actionPreview',owner,action,input);
@@ -1315,8 +1318,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!['home', 'squeeks', 'explore', 'network', 'info'].includes(name)) name = 'squeeks';
     const deployed = Boolean(getProfile(state.profileKey).addresses);
     if(!deployed)name='info';
-    const sections=['how-it-works','trust','status','contracts','developers'];
-    if(name==='info'){if(!sections.includes(section))section='how-it-works';for(const node of doc.querySelectorAll('#panel-info .info-section'))node.hidden=node.id!==`info-${section}`;}
+    const sections=['overview','how-it-works','trust','status','contracts','developers'];
+    // Info opens on its plain-language overview unless a section is named.
+    if(name==='info'){if(!sections.includes(section))section='overview';for(const node of doc.querySelectorAll('#panel-info .info-section'))node.hidden=node.id!==`info-${section}`;}
     doc.querySelectorAll('a[href^="#info/"], a[data-info-route]').forEach(link => { const route = link.dataset.infoRoute ?? link.getAttribute('href').slice(1); link.dataset.infoRoute = route; link.href = `#${state.profileKey}/${route}`; });
     el.tabs.forEach(t => { t.setAttribute('aria-selected', String(t.dataset.tab === name)); t.tabIndex = t.dataset.tab === name ? 0 : -1; });
     el.panels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== name || (!deployed && name !== 'info')));
