@@ -32,7 +32,7 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
       await expect(page.getByTestId('panel-info')).toBeVisible();
       const rows=page.getByTestId('policy-table').locator('tbody tr');await expect(rows).toHaveCount(10);
       for(let i=0;i<10;i++)await expect(rows.nth(i).locator('td')).toHaveText([String(i+1),String((i+1)*1000),String(i===9?0:2*(i+1))]);
-      await expect(page.getByTestId('trust-block')).toHaveText('12101024');
+      await expect(page.getByTestId('trust-block')).toHaveText('12,101,024');
     }
     if (view === 'settings') await page.getByTestId('settings-open').click();
     if (view === 'merge') {

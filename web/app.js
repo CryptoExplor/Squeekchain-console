@@ -495,20 +495,24 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   function renderContracts(profile) {
     $('contracts-release').textContent = profile.addresses?`${profile.short.toUpperCase()} contracts`:'Not deployed';
     $('contracts-list').replaceChildren(...Object.entries(profile.addresses ?? {}).map(([name, address]) => {
-      const row = doc.createElement('li'), link = doc.createElement('a');
-      link.textContent = `${name}: ${address}`; link.href = `${EXPLORER}/address/${address}`;
-      link.target = '_blank'; link.rel = 'noopener noreferrer'; row.append(link); return row;
+      const row = doc.createElement('li'), label = doc.createElement('span'), link = doc.createElement('a'), copy = doc.createElement('button');
+      label.className = 'contract-name'; label.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+      link.className = 'mono'; link.textContent = `${address.slice(0, 6)}…${address.slice(-4)}`; link.title = address; link.setAttribute('aria-label', `${name} contract ${address}`);
+      link.href = `${EXPLORER}/address/${address}`; link.target = '_blank'; link.rel = 'noopener noreferrer';
+      copy.type = 'button'; copy.className = 'btn btn-small'; copy.textContent = 'Copy'; copy.setAttribute('aria-label', `Copy ${name} address`);
+      copy.addEventListener('click', () => { navigator.clipboard?.writeText(address).then(() => { copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); }, () => {}); });
+      row.append(label, link, copy); return row;
     }));
   }
 
   let lastVerificationTime = null;
   function updateTrustAge() {
-    $('trust-time').textContent=lastVerificationTime==null?UNKNOWN:new Date(lastVerificationTime).toISOString();
+    $('trust-time').textContent=lastVerificationTime==null?UNKNOWN:new Date(lastVerificationTime).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'});$('trust-time').title=lastVerificationTime==null?'':new Date(lastVerificationTime).toISOString();
   }
   function renderTrust(v) {
     if(v?.ok&&v?.trusted)clearReadBanner();
     lastVerificationTime=v?Date.now():null;
-    $('trust-block').textContent=valueText(v?.blockNumber ?? state.net?.snapshot?.blockNumber);
+    $('trust-block').textContent=formatNumber(v?.blockNumber ?? state.net?.snapshot?.blockNumber);
     if(v?.ok||!v&&!state.lastReadFailure)$('rpc-diagnostics').textContent='';
     $('trust-result').textContent=v?.ok&&v?.trusted?'Verified':v?"Can't verify right now":UNKNOWN;
     for(const id of ['trust-block','trust-time'])$(id).parentElement.hidden=!(v?.ok&&v?.trusted);

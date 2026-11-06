@@ -851,3 +851,16 @@ a { color: var(--sqk-blue); }
 .btn-primary:disabled { background: var(--sqk-panel-alt); border-color: var(--sqk-line); color: var(--sqk-gray); opacity: 1; }
 .earnings-bar.empty { background: color-mix(in srgb, var(--sqk-gray) 45%, transparent); min-height: 3px; }
 .stat.accent strong { color: var(--sqk-ink); }
+/* Info + Network tidy-up */
+.trust-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 700px) { .trust-grid { grid-template-columns: 1fr; } }
+#contracts-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 0; line-height: 1.4; }
+#contracts-list li { display: grid; grid-template-columns: minmax(90px, 160px) 1fr auto; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--sqk-line-soft); }
+#contracts-list .contract-name { font: 12px var(--sqk-font-label); color: var(--sqk-gray-lit); text-transform: uppercase; letter-spacing: .08em; }
+#contracts-list a { font-family: var(--sqk-font-data); font-size: 13px; }
+.network-strip { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 24px; }
+.network-strip > :empty, .network-strip > [hidden], .network-strip > .hidden { display: none; }
+[data-testid="policy-table"] { table-layout: fixed; width: 100%; }
+[data-testid="policy-table"] caption { padding: 14px 12px 10px; text-align: left; }
+[data-testid="policy-table"] :is(th, td):not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+[data-testid="policy-table"] :is(th, td) { padding: 8px 14px; }
