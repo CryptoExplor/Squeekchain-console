@@ -14,5 +14,6 @@ export function observeExplore(){
   if(d.indexStatus==='complete'&&stats.length===4&&stats.every(s=>s&&s!=='—')&&table?.querySelector('tbody tr')?.getClientRects().length){m.renderedAt??=at;m.stats=stats;m.leaderRows=rows;}
   if(m.trace.at(-1)?.phase!==d.phase||m.trace.at(-1)?.hydrated!==hydrated){if(m.trace.length<180)m.trace.push({at,phase:d.phase,status:d.indexStatus,hydrated:Number.isFinite(hydrated)?hydrated:null,total:Number.isFinite(total)?total:null});}
  };
- new MutationObserver(observe).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['data-phase','data-index-status','data-hydrated','data-hydration-total','data-resumed']});
+ // Also watch hidden/class: the leaderboard can become visible by its tab panel un-hiding, with no data-* change.
+ new MutationObserver(observe).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['data-phase','data-index-status','data-hydrated','data-hydration-total','data-resumed','hidden','class']});
 }

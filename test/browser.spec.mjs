@@ -190,16 +190,15 @@ test('broadcast Activity survives a profile switch, late wallet response and pag
 });
 
 
-test('v6 settlement stall uses configuration and snapshot time, not checkpoint lag', async ({page}) => {
+test('settlement stall uses configuration and snapshot time, not checkpoint lag', async ({page}) => {
   await installRaceHarness(page);
   await page.evaluate(async()=>{
     const h=races,original=h.network;h.frontier='1973';h.expected='1976';h.ready=false;
     h.network=()=>({...original(h.frontier),core:{...original(h.frontier).core,genesisTimestamp:'1000',roundDuration:'600'},snapshot:{timestamp:String(1000n+BigInt(h.expected)*600n)},checkpoint:{canCheckpoint:h.ready,roundSettled:h.ready}});
     await squeek.refresh();
   });
-  await page.getByTestId('tab-squeeks').click();
-  await expect(page.getByTestId('settlement-notice')).toBeHidden();
-  await expect(page.locator('#v6-frozen')).toHaveText('Settlement frozen at round 1973');
+  // Sepolia has no frozen-settlement strip (that was v6-only); a stall is the shared Rewards-paused notice.
+  await expect(page.getByTestId('settlement-notice')).toHaveText('Rewards paused: settlement stopped at round 1973.');
   await page.getByTestId('tab-squeeks').click();
   await expect(page.getByTestId('holder-rewards-notice')).toBeVisible();
   await expect(page.getByTestId('btn-claim')).toBeEnabled();
@@ -207,7 +206,7 @@ test('v6 settlement stall uses configuration and snapshot time, not checkpoint l
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.evaluate(async()=>{races.expected='1975';await squeek.refresh();});
   await expect(page.getByTestId('holder-rewards-notice')).toBeHidden();
-  await expect(page.getByTestId('settlement-notice')).toBeHidden();
+  await expect(page.getByTestId('settlement-notice')).toHaveText('');
   await page.evaluate(async()=>{races.expected='1976';races.ready=true;await squeek.refresh();});
   await expect(page.getByTestId('holder-rewards-notice')).toBeVisible();
   await page.evaluate(async()=>{races.frontier='1976';await squeek.refresh();});
@@ -216,6 +215,7 @@ test('v6 settlement stall uses configuration and snapshot time, not checkpoint l
   await expect(page.getByTestId('holder-rewards-notice')).toBeHidden();
   await page.getByTestId('profile-select').selectOption('mainnet');
   await expect(page.getByTestId('settlement-notice')).toHaveText('');
+  expect(await page.evaluate(()=>races.sends)).toBe(0);
   await page.evaluate(()=>squeek.destroy());
 });
 
@@ -266,9 +266,12 @@ test('offline design system: light/dark contrast, readable labels, theme state a
     document.querySelector('main').prepend(fixture);
   });
   const theme = page.getByRole('button', { name: 'Toggle theme' });
+  // Computed colours from color-mix() serialize as `color(srgb r g b)` with 0..1
+  // channels; rgb()/rgba() use 0..255. Parse both instead of assuming 0..255.
   const luminance = color => {
-    const channels = color.match(/[\d.]+/g).slice(0, 3).map(value => {
-      const channel = Number(value) / 255;
+    const unit = /^color\(srgb\s/.test(color);
+    const channels = color.replace(/^color\(srgb\s/, '').match(/[\d.]+(?:e-?\d+)?/g).slice(0, 3).map(value => {
+      const channel = unit ? Number(value) : Number(value) / 255;
       return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
     });
     return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
@@ -289,7 +292,8 @@ test('offline design system: light/dark contrast, readable labels, theme state a
     });
     records.forEach(expectContrast);
     expect(await page.locator('#design-fixture .label').evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(11);
-    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', mode === 'light' ? '#fafaf7' : '#10120f');
+    // The brand layer owns the page surface: cream by day, night #0a0a0c in dark mode.
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', mode === 'light' ? '#fffaee' : '#0a0a0c');
     for (const selector of ['.btn-primary', '.btn-danger']) {
       const button = page.locator(`#design-fixture ${selector}`);
       await button.hover();

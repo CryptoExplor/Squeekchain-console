@@ -35,13 +35,8 @@ test('v9 staked merge BURN guard and SQK-only account claim',async({page})=>{
  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());await page.getByRole('checkbox',{name:'Select Squeek #41',exact:true}).check();await page.getByRole('checkbox',{name:'Select Squeek #42',exact:true}).check();await page.locator('[data-action="mergeDeposited"]').click();await page.getByTestId('v9-ids').fill('41, 42');await page.getByTestId('v9-review').click();await expect(page.getByTestId('modal-title')).toHaveText('Keep #41 · burn #42');await expect(page.getByTestId('modal-body')).toContainText('Keep #41 · burn #42');await expect(page.getByTestId('modal-input')).toHaveAccessibleName('Type BURN-42 to acknowledge permanent burn');await page.getByTestId('modal-input').fill('42');await expect(page.getByTestId('btn-modal-confirm')).toBeDisabled();expect(await page.evaluate(()=>v9.previews.length)).toBe(0);await page.getByTestId('modal-input').fill('BURN-42');await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('modal')).toBeVisible();await expect(page.getByTestId('modal-title')).toHaveText('Keep #41 · burn #42');await expect(page.getByTestId('modal-body')).toContainText('Keep #41 · burn #42');expect(await page.evaluate(()=>v9.previews[0].input.confirm)).toBe('BURN-42');await page.getByTestId('btn-modal-cancel').click();
  await page.evaluate(async()=>{v9.wallet.totals.count=0;v9.wallet.totals.deposited=0;v9.wallet.squeeks=[];await squeek.refresh();});await expect(page.getByTestId('btn-claim')).toBeEnabled();await page.getByTestId('btn-claim').click();await expect(page.getByTestId('modal')).toBeVisible();expect(await page.evaluate(()=>v9.previews.at(-1).action)).toBe('claim');await page.evaluate(()=>squeek.destroy());
 });
-for(const [a,b,expected]of [['2','0','sepolia'],['0','2','sepolia'],['2','3','sepolia'],['0','0','sepolia'],[null,'2','sepolia']])test(`connect inventory ${a}/${b} chooses ${expected}`,async({page})=>{
- await installV9Fixture(page);await page.evaluate(([a,b])=>{v9.counts={'sepolia':a,'sepolia':b};},[a,b]);await page.evaluate(()=>squeek.connect());await expect(page.getByTestId('profile-select')).toHaveValue(expected);expect(await page.getByTestId('profile-select').locator('option').allTextContents()).toEqual(expect.arrayContaining([`Sepolia v6 · ${a??'—'} in wallet · 0 staked`,`Sepolia v9 · ${b} in wallet · 0 staked`]));
- await expect(page.getByTestId('profile-choice'))[a==='2'&&b==='3'?'toBeVisible':'toBeHidden']();
- await page.getByTestId('wallet-button').click();await page.getByTestId('btn-disconnect').click();
- expect(await page.getByTestId('profile-select').locator('option').allTextContents()).toEqual(['Sepolia v9','Sepolia v6','Mainnet']);
- await page.evaluate(()=>squeek.destroy());
-});
+// Removed with the v6/v9 split: connect-inventory profile choice, staked profile selector and
+// two-wallet profile counts (only 'sepolia' and 'mainnet' remain, so there is nothing to choose between).
 test('restored frontend: active policy, one footer, baseline copy, conditional warning/pause and lazy modules',async({page})=>{
  const loaded=[];page.on('request',r=>loaded.push(new URL(r.url()).pathname));await installV9Fixture(page);
  expect(loaded).not.toContain('/settings.js');expect(loaded).not.toContain('/developers.js');
@@ -54,18 +49,6 @@ test('restored frontend: active policy, one footer, baseline copy, conditional w
  await page.getByTestId('tab-squeeks').click();await expect(page.locator('.telemetry-source')).toHaveCount(0);await expect(page.getByTestId('panel-explore')).toBeHidden();await expect(page.locator('.network-strip')).toContainText('Status ↗');await page.evaluate(()=>squeek.destroy());
 });
 
-for(const [name,v6,v9,expected] of [
- ['only staked v9',{wallet:'0',staked:'0',nftPower:'0'},{wallet:'0',staked:'2',nftPower:'9000'},'sepolia'],
- ['wallet v6 and staked v9',{wallet:'3',staked:'0',nftPower:'0'},{wallet:'0',staked:'2',nftPower:'9000'},'sepolia'],
- ['staked history unavailable',{wallet:'0',staked:'0',nftPower:'0'},{wallet:'0',staked:null,nftPower:'9000'},'sepolia'],
-])test(`staked profile selector: ${name}`,async({page})=>{
- await installV9Fixture(page);await page.evaluate(async({v6,v9})=>{window.v9.counts={'sepolia':v6,'sepolia':v9};await squeek.switchProfile('sepolia');await squeek.connect();},{v6,v9});
- await expect(page.getByTestId('profile-select')).toHaveValue(expected);
- const text=await page.getByTestId('profile-select').locator('option[value="sepolia"]').textContent();
- expect(text).toContain(v9.staked==null?'Staked (—)':'0 in wallet · 2 staked');expect(text).not.toContain('9000');
- if(name==='wallet v6 and staked v9'){await expect(page.getByTestId('profile-choice')).toBeVisible();await expect(page.getByTestId('profile-choice')).toContainText('3 in wallet · 0 staked');await expect(page.getByTestId('profile-choice')).toContainText('0 in wallet · 2 staked');}
- await page.evaluate(()=>squeek.destroy());
-});
 test('v9 Unknown holdings keep Claim and otherwise-ready Checkpoint disabled; known zero still allows SQK claim',async({page})=>{
  await installV9Fixture(page);await page.evaluate(async()=>{v9.wallet.totals.count=null;v9.net.checkpoint.canCheckpoint=true;await squeek.connect();});
  await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('btn-checkpoint')).toBeDisabled();
@@ -108,9 +91,4 @@ for(const width of [1280,390])test(`b705683 layout and live-only badges / ${widt
  await page.evaluate(async()=>{v9.net.verification.trusted=false;await squeek.refresh();});await expect(page.getByTestId('profile-status')).toHaveText('Mismatch: stop');
  await page.getByTestId('profile-select').selectOption('mainnet');await expect(page.getByTestId('profile-status')).toHaveText('Not deployed');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.evaluate(()=>squeek.destroy());
-});
-
-test('profile counts with both wallets present never expose missing staked-count placeholders',async({page})=>{
- await installV9Fixture(page);await page.evaluate(async()=>{v9.counts={'sepolia':{wallet:'1',staked:null},'sepolia':{wallet:'1',staked:null}};await squeek.connect();});
- await expect(page.getByTestId('profile-choice')).toBeVisible();await expect(page.getByTestId('profile-choice')).not.toContainText('Unknown');await expect(page.getByTestId('profile-select')).not.toContainText('Unknown');expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });

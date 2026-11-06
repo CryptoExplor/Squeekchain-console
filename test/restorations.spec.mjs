@@ -93,7 +93,8 @@ for(const theme of ['light','dark'])for(const width of [1280,390])for(const view
   if(view==='stall-squeeks'||view==='watch')await page.evaluate(()=>squeek.connect());
   if(view==='watch'){await page.getByTestId('watch-input').fill(other);await page.getByTestId('btn-watch').click();await expect(page.getByTestId('watch-mode')).toBeVisible();}
   if(view==='stall-squeeks')await expect(page.getByTestId('holder-rewards-notice')).toBeVisible();
-  if(view==='stall-network'){await expect(page.getByTestId('settlement-notice')).toBeHidden();await expect(page.locator('#v6-frozen')).toHaveText('Settlement frozen at round 1973');}
+  // Sepolia shows a stall as the shared Rewards-paused notice (the v6 frozen strip is gone).
+  if(view==='stall-network')await expect(page.getByTestId('settlement-notice')).toHaveText('Rewards paused: settlement stopped at round 1973.');
   if(view==='pending'){await page.getByTestId('profile-select').selectOption('sepolia');await expect(page.locator('.toast').last()).toContainText('1 transaction still pending');}
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({fullPage:true,animations:'disabled'});const name=`${view}-${theme}-${width}.png`;await info.attach(name,{body:image,contentType:'image/png'});fs.mkdirSync('artifacts/screenshots',{recursive:true});fs.writeFileSync('artifacts/screenshots/'+name,image);
