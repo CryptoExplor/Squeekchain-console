@@ -34,7 +34,7 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
   root.dataset.phase=p.phase;root.dataset.resumed=String(p.resumed??false);
   if(p.tokenTotal!=null){root.dataset.hydrated=String(p.tokens);root.dataset.hydrationTotal=String(p.tokenTotal);}
   if(p.state){state=p.state;if(p.tokens>0){root.dataset.indexStatus='partial';render(false);}}
-  status.textContent=p.phase==='final'?'Partial · Checking supply and final snapshot…':p.phase==='hydrate'?`Partial · Loading Squeeks: ${p.tokens} of ${p.tokenTotal}`:p.phase==='history'?`Checking history: ${p.headers} of ${p.headerTotal}`:`Scanning blocks: ${p.done} of ${p.total}`;
+  status.textContent=p.phase==='final'?'Partial · Checking supply and final snapshot…':p.phase==='hydrate'?`Partial · Loading Squeeks: ${p.tokens} of ${p.tokenTotal}`:p.phase==='history'?`Loading merge times: ${p.headers} of ${p.headerTotal}`:`Scanning blocks: ${p.done} of ${p.total}`;
  }
  let autoRetries=0;
  async function sync({restart=false}={}){
