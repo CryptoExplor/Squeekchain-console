@@ -18,7 +18,7 @@ strip.reading({measurement:{...data.measurement,receivedAt:new Date(clock).toISO
 strip.network({core:{blockHeight:'0',blockProgress:'0'}});assert.equal($('strip-height').textContent,'0');assert.equal($('strip-percent').textContent,'0.0%');
 for(const core of [{},{blockHeight:null},{blockHeight:'Unknown'},{blockHeight:'1',blockProgress:'1000000001'},{blockHeight:'1',blockProgress:'-1'}]){strip.network({core});assert.ok($('strip-next').hidden);}
 strip.reset('sepolia');assert.ok($('wheel-line').hidden);strip.reset('sepolia');strip.offline();assert.equal($('wheel-state').textContent,'Wheel offline','no cross-profile device reuse');
-assert.deepEqual([...doc.querySelectorAll('nav [data-tab]')].map(node=>node.textContent),['Squeeks','Art','Explore','Info']);
+assert.deepEqual([...doc.querySelectorAll('nav [data-tab]')].map(node=>node.textContent),['Squeeks','Playground','Network','Info']);
 assert.equal(doc.querySelector('#panel-activity'),null);assert.equal($('network-events'),null,'removed incorrect public round/checkpoint list');assert.ok($('activity-drawer').contains($('account-activity')));assert.equal(doc.querySelector('#activity-panel > p'),null);
 assert.ok(doc.querySelector('.network-strip').contains($('genesis-row')));assert.ok(doc.querySelector('.network-strip').contains($('v6-frozen')));assert.equal(doc.querySelector('.network-strip').lastElementChild,$('genesis-row'));
 assert.doesNotMatch(html,new RegExp(['Unknown','RPM'].join(' ')));

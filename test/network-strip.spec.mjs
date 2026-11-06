@@ -9,7 +9,7 @@ for(const width of [1280,390])for(const mode of ['no-wallet','connected','api-bl
   if(mode!=='api-blocked')await expect(page.locator('#wheel-rpm')).toHaveText('12.5');
   await expect(page.locator('#strip-block')).toHaveText('Squeek block 8,192 · next 50.0%');
   await expect(page.locator('.network-strip')).not.toContainText('Unknown');await expect(page.locator('#genesis-row')).toHaveText('Genesis · not open');
-  expect(await page.locator('nav [data-tab]').allTextContents()).toEqual(['Squeeks','Art','Explore','Network','Info']);
+  expect(await page.locator('nav [data-tab]').allTextContents()).toEqual(['Squeeks','Playground','Network','Info']);
   const positions=await page.locator('.network-strip').evaluate(root=>{const rect=id=>{const r=root.querySelector(id).getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left};};return {wheel:rect('#wheel-line'),block:rect('#strip-block'),link:rect('a'),genesis:rect('#genesis-row'),font:[root.querySelector('#wheel-line'),root.querySelector('#genesis-row')].map(n=>getComputedStyle(n).fontSize)};});
   expect(positions.font[0]).toBe(positions.font[1]);if(width===390){expect(positions.block.top).toBeGreaterThanOrEqual(positions.wheel.bottom);expect(positions.link.top).toBeGreaterThanOrEqual(positions.block.bottom);expect(positions.genesis.top).toBeGreaterThanOrEqual(positions.link.bottom);}
   if(mode==='api-blocked'){await expect(page.locator('#display-sources')).toContainText('Block height — Source: RPC');expect(await page.evaluate(()=>v9.networkCalls)).toBeGreaterThan(0);await expect(page.locator('#wheel-reading')).toBeHidden();}

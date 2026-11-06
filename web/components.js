@@ -76,7 +76,7 @@ export function TokenCard({ doc, item, onOpen }) {
   card.append(image, label); card.onclick = onOpen;
   return card;
 }
-export function Toast({ doc, host, message, kind = '', timeout = kind === 'err' ? 0 : 6000, action, onAction }) {
+export function Toast({ doc, host, message, kind = '', timeout = kind === 'err' ? 15000 : 6000, action, onAction }) {
   const node = doc.createElement('div'); node.dataset.component = 'Toast';
   node.className = `toast ${kind}`; node.setAttribute('role', kind === 'err' ? 'alert' : 'status');node.setAttribute('aria-atomic','true');
   const text=doc.createElement('span');text.className='toast-message';text.textContent=message;node.append(text);

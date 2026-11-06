@@ -723,7 +723,11 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const unknownHoldings=Boolean(state.inspected) && (state.status?.owner?.toLowerCase()!==state.inspected.toLowerCase() || num(state.status?.totals?.count)===UNKNOWN);
     el.cp.button.disabled=state.watchOnly || state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
   }
-  let liveSupply=null,explorePrefetched=false,artSampled=false;
+  let liveSupply=null,explorePrefetched=false,artSampled=false,lastTabHash=null;
+  const closeSqueek=()=>{if(!$('squeek-modal')||$('squeek-modal').classList.contains('hidden'))return;const tab=[...el.tabs].find(t=>t.getAttribute('aria-selected')==='true')?.dataset.tab??'squeeks';win.location.hash=lastTabHash??(state.watchOnly&&state.inspected?`#/${state.profileKey}/address/${state.inspected}/${tab}`:`#${state.profileKey}/${tab}`);};
+  if($('squeek-modal-close'))$('squeek-modal-close').onclick=closeSqueek;
+  $('squeek-modal')?.addEventListener('click',e=>{if(e.target===$('squeek-modal'))closeSqueek();});
+  doc.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('squeek-modal')&&!$('squeek-modal').classList.contains('hidden')&&!doc.querySelector('#modal:not(.hidden)'))closeSqueek();});
   function renderNetwork(net) {
     const previous = observedRounds.get(state.profileKey);
     const round = net.core?.settledThroughRound;
@@ -1089,7 +1093,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     try{return await requestActionInner(action,input);}
     catch(error){const quoteError=action==='unstake'?unstakeQuoteError(error):null;if(quoteError)return showFeeRose(action,input,load,quoteError.reason);throw error;}
   }
-  async function requestActionInner(action, input = {}) {
+  async function requestActionInner(action, input = {}, opts = {}) {
     if (!capabilities().deposit) throw new Error(capabilities().reasons.unavailable);
     const load = captureLoad(), owner = state.account;
     if (!owner || owner.toLowerCase() !== state.inspected?.toLowerCase()) throw new Error('Connect the inspected owner wallet');
@@ -1101,6 +1105,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     const preview = await readFor(load,'actionPreview',owner,action,input);
     showOut($('v9-result'),preview);
+    if (!preview.ok&&action==='stake'&&preview.approvalRequired&&!opts.autoApproved) {
+      // ERC-20: staking can only pull SQK after an approval. Ask for the exact amount, then continue to Stake.
+      showBanner('Step 1 of 2: approve exactly this SQK amount, then confirm the stake.','warn');
+      const approved=await requestActionInner('approveSqk',{amount:input.amount});
+      if(approved?.ok===false)return approved;
+      assertCurrent(load);hideBanner();
+      return requestActionInner('stake',input,{autoApproved:true});
+    }
     if (!preview.ok) {if(['feeRose','quoteExpired'].includes(preview.reasonCode))return showFeeRose(action,input,load,preview.reason); showBanner(preview.reason,'warn'); return preview; }
     const mergeLabel=action==='mergeDeposited'?`Keep #${input.survivor} · burn #${input.donor}`:null;
     const body=mergeLabel?`${mergeLabel}. #${input.donor} is BURNED permanently and cannot be restored. #${input.survivor} survives at level ${preview.nextLevel}.`:action==='unstake'?'The quoted exit fee is burned.':`${actionNames[action]??'Review action'}. ${preview.amount?.sqk?'Rewards: '+preview.amount.sqk+' SQK.':''}`;
@@ -1282,12 +1294,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     return /^(squeeks|squeek|address|activity|art|explore|network|info)(\/|$)/.test(hash) ? hash+(win.location.hash.includes('?')?'?'+win.location.hash.split('?')[1]:'') : (state.account?'squeeks':'explore');
   }
   function selectTab(route) {
-    const aliases = { overview: 'squeeks', holdings: 'squeeks', agent: 'info/developers' };
+    const aliases = { overview: 'squeeks', holdings: 'squeeks', playground: 'squeeks', art: 'explore', agent: 'info/developers' };
     const query=String(route).split('?')[1]??(win.location.hash.split('?')[0].endsWith('/'+String(route))?win.location.hash.split('?')[1]:'');route=String(route).split('?')[0];route = aliases[route] ?? route;
     const special=/^(address|squeek)\//.test(route);
-    let [name, section] = String(route).split('/');if(special)name=String(route).startsWith('address/')?(String(route).split('/')[2]??'squeeks'):'squeeks';
+    const squeekRoute=special&&String(route).startsWith('squeek/');
+    // A Squeek opens as a popup over whichever tab is showing (Squeeks or Playground).
+    const shownTab=[...el.tabs].find(t=>t.getAttribute('aria-selected')==='true')?.dataset.tab;
+    let [name, section] = String(route).split('/');if(special)name=String(route).startsWith('address/')?(String(route).split('/')[2]??'squeeks'):(['squeeks','explore'].includes(shownTab)?shownTab:'squeeks');
     const openHistory=name==='activity';if(openHistory)name='squeeks';
-    if (!['squeeks', 'art', 'explore', 'network', 'info'].includes(name)) name = 'squeeks';
+    if(name==='art')name='explore';
+    if (!['squeeks', 'explore', 'network', 'info'].includes(name)) name = 'squeeks';
     const deployed = Boolean(getProfile(state.profileKey).addresses);
     if(!deployed)name='info';
     const sections=['how-it-works','trust','status','contracts','developers','about'];
@@ -1299,13 +1315,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if(query&&['squeeks','explore'].includes(name))hash+='?'+query;
     // replaceState avoids hashchange loops, while tab clicks below create history entries.
     if (win.location.hash !== hash) win.history.replaceState(null, '', hash);
+    if(!squeekRoute)lastTabHash=hash;
     if(special&&String(route).startsWith('squeek/')){try{rememberWatch(holderRoute(hash),state.watchOnly?activeWatchRoute:null);}catch{/* Invalid routes are reported below. */}}
     for(const link of doc.querySelectorAll('.info-links a')){if(name==='info'&&link.hash.endsWith('/'+section))link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
-    $('holder-overview').hidden=special&&String(route).startsWith('squeek/');$('squeek-page').hidden=!$('holder-overview').hidden;
+    $('holder-overview').hidden=false;$('squeek-modal')?.classList.toggle('hidden',!squeekRoute);doc.body.classList.toggle('modal-open',squeekRoute);
     if(name==='squeeks'&&state.adapter){holdings.refresh();if(!query)void refreshNetworkExtras();}
     if(name==='network'&&state.adapter)void refreshNetworkExtras();
-    if(name==='art'&&!artSampled&&!state.account&&!state.inspected&&!el.art.grid.children.length&&state.adapter?.art){artSampled=true;void loadArt(['1']).catch(()=>{artSampled=false;});}
-    if(name==='explore')void ensureExplore().then(e=>e.show()).catch(error=>recordSource('Explore','rpc',error.message));
+        if(name==='explore'&&!squeekRoute)void ensureExplore().then(e=>e.show()).catch(error=>recordSource('Explore','rpc',error.message));
     if(openHistory)openSheet('activity-drawer');
     if(special&&String(route).startsWith('squeek/')){try{const parsed=holderRoute(hash);void ensureWorkspace().then(w=>w.detail(parsed));}catch(error){routeError(error);}}else workspace?.detail(null);
   }
