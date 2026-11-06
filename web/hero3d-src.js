@@ -36,16 +36,18 @@ function buildHamster() {
   // Proportions measured off the SVG hero: body ~1.25 long, 0.9 tall; head ~0.6 of body height.
   torso.add(ball(coat, 1, [0, 0.46, 0], [0.64, 0.47, 0.5]));
   torso.add(ball(cream, 1, [0.12, 0.33, 0], [0.5, 0.3, 0.42]));
-  torso.add(ball(coat, 0.13, [-0.62, 0.42, 0], [0.8, 0.7, 0.7], 20)); // tail nub
+  const tail = ball(coat, 0.13, [-0.62, 0.42, 0], [0.8, 0.7, 0.7], 20); torso.add(tail); // tail nub
+  const eyes = [], ears = [];
   const head = new Group(); head.position.set(0.52, 0.62, 0); torso.add(head);
   head.add(ball(coat, 0.39, [0, 0, 0], [1, 0.92, 0.96]));
   head.add(ball(cream, 0.21, [0.26, -0.08, 0], [0.95, 0.75, 1.15]));
   head.add(ball(pink, 0.045, [0.46, -0.03, 0], [1, 0.8, 1.1], 16));
   for (const s of [-1, 1]) {
-    const eye = ball(eyeMat, 0.068, [0.25, 0.1, 0.2 * s], [0.9, 1, 1], 24); head.add(eye);
+    const eye = ball(eyeMat, 0.068, [0.25, 0.1, 0.2 * s], [0.9, 1, 1], 24); head.add(eye); eyes.push(eye);
     head.add(ball(glint, 0.018, [0.31, 0.13, 0.215 * s], [1, 1, 1], 10));
     head.add(ball(blush, 0.085, [0.22, -0.08, 0.27 * s], [0.8, 0.55, 0.35], 16));
     const ear = new Group(); ear.position.set(-0.1, 0.33, 0.21 * s); ear.rotation.set(0.35 * s, 0, -0.15); head.add(ear);
+    ears.push({ ear, base: ear.rotation.x, s });
     ear.add(ball(coat, 0.13, [0, 0, 0], [0.55, 1, 1], 24));
     ear.add(ball(pink, 0.09, [0.05, 0.01, 0], [0.35, 0.85, 0.85], 20));
   }
@@ -71,7 +73,7 @@ function buildHamster() {
     limb.position.set(front ? 0.02 : -0.02, -0.12, 0); limb.rotation.z = front ? 0.2 : -0.25; pivot.add(limb);
     legs.push({ pivot, phase, front });
   }
-  h.userData = { torso, head, legs };
+  h.userData = { torso, head, legs, tail, eyes, ears };
   return h;
 }
 
@@ -85,14 +87,15 @@ function buildWheel() {
   }
   const rungGeo = new CylinderGeometry(0.022, 0.022, DEPTH, 10);
   const N = 40;
+  const markMat = new MeshPhysicalMaterial({ color: BRAND.blue, roughness: 0.3, metalness: 0.3, clearcoat: 1 });
   for (let i = 0; i < N; i++) {
     const a = (i / N) * Math.PI * 2;
-    const rung = new Mesh(rungGeo, rungMat); rung.rotation.x = Math.PI / 2;
+    const rung = new Mesh(rungGeo, i % 5 === 0 ? markMat : rungMat); rung.rotation.x = Math.PI / 2; // blue marker rungs make the turn readable
     rung.position.set(Math.cos(a) * (R + 0.04), Math.sin(a) * (R + 0.04), 0); rung.castShadow = true; wheel.add(rung);
   }
   // Spokes and hub on the back face only, so the front stays open onto the hamster.
   for (let i = 0; i < 6; i++) {
-    const spoke = new Mesh(new BoxGeometry(R * 2, 0.07, 0.05), rimMat);
+    const spoke = new Mesh(new BoxGeometry(R * 2, 0.07, 0.05), i % 3 === 0 ? markMat : rimMat);
     spoke.position.z = -DEPTH / 2; spoke.rotation.z = (i / 6) * Math.PI; wheel.add(spoke);
   }
   const hub = new Mesh(new CylinderGeometry(0.2, 0.2, 0.14, 32), frameMat); hub.rotation.x = Math.PI / 2; hub.position.z = -DEPTH / 2 - 0.02; wheel.add(hub);
@@ -128,8 +131,8 @@ export function mount(host, { reducedMotion = false } = {}) {
   const rim = new DirectionalLight(BRAND.blue, 1.1); rim.position.set(-4, 2, -3); scene.add(rim);
 
   const rig = new Group(); scene.add(rig);
-  const { wheel, stand, floorY } = buildWheel(); rig.add(wheel, stand);
-  const hamster = buildHamster(); hamster.position.set(0.05, -R + 0.03, 0.02); hamster.scale.setScalar(1.12); rig.add(hamster);
+  const { wheel, stand, floorY } = buildWheel(); const wheelRock = new Group(); wheelRock.add(wheel); rig.add(wheelRock, stand);
+  const hamster = buildHamster(); hamster.position.set(0.05, -R + 0.03, 0.02); hamster.scale.setScalar(1.12); wheelRock.add(hamster);
   const floor = new Mesh(new PlaneGeometry(12, 12), new ShadowMaterial({ opacity: 0.16 })); floor.rotation.x = -Math.PI / 2; floor.position.y = floorY; floor.receiveShadow = true; rig.add(floor);
 
   const camera = new PerspectiveCamera(28, 1, 0.1, 50);
@@ -145,7 +148,7 @@ export function mount(host, { reducedMotion = false } = {}) {
   // Far away = full sprint, close = it slows, sits up and just watches. No pointer yet = runs right.
   const pointer = { x: null, y: null };
   const hamPos = new Vector3();
-  const state = { facing: 1, yaw: 0, speed: 1, wheelAngle: 0, stride: 0, lookX: 0, lookY: 0 };
+  const state = { facing: 1, yaw: 0, speed: 1, wheelAngle: 0, wheelVel: -Math.PI * 2 / REV_SECONDS, stride: 0, lookX: 0, lookY: 0, blinkAt: 2.5, twitchAt: 4 };
   const steer = (dt) => {
     let want = 1, speed = 1, lookX = 0, lookY = 0;
     if (pointer.x !== null) {
@@ -161,12 +164,26 @@ export function mount(host, { reducedMotion = false } = {}) {
     state.facing += (want - state.facing) * k;               // -1..1, eased turn-around
     state.speed += (speed - state.speed) * (1 - Math.exp(-dt * 3));
     state.lookX += (lookX - state.lookX) * k; state.lookY += (lookY - state.lookY) * k;
-    state.wheelAngle -= Math.sign(state.facing || 1) * state.speed * dt * (Math.PI * 2 / REV_SECONDS);
+    // The hamster drives the wheel; the wheel has inertia, so it coasts and drifts instead of stopping dead.
+    const drive = -Math.sign(state.facing || 1) * state.speed * (Math.PI * 2 / REV_SECONDS);
+    state.wheelVel += (drive - state.wheelVel) * (1 - Math.exp(-dt * (state.speed > 0.15 ? 4 : 0.6)));
+    state.wheelAngle += state.wheelVel * dt;
     state.stride += state.speed * dt * STRIDE_HZ * Math.PI * 2;
   };
   const pose = (t, dt) => {
     steer(dt);
     wheel.rotation.z = state.wheelAngle;
+    const run0 = Math.min(1, state.speed);
+    // The whole wheel rocks a little on its stand with each step, as the SVG one did.
+    wheelRock.rotation.z = Math.sin(state.stride * 2) * 0.012 * run0 + Math.sin(t * 1.3) * 0.004;
+    wheelRock.position.y = Math.abs(Math.sin(state.stride)) * 0.012 * run0;
+    // Blink every few seconds; flick an ear now and then; tail wiggles with the run.
+    const { eyes, ears, tail } = hamster.userData;
+    if (t > state.blinkAt) state.blinkAt = t + 2.5 + Math.random() * 3;
+    const b = state.blinkAt - t < 0.14 ? 0.12 : 1; for (const e of eyes) e.scale.y = b;
+    if (t > state.twitchAt) state.twitchAt = t + 3 + Math.random() * 4;
+    const tw = Math.max(0, 0.25 - (state.twitchAt - t)) * 4; for (const { ear, base, s: side } of ears) ear.rotation.x = base + Math.sin(tw * Math.PI) * 0.35 * side;
+    tail.rotation.z = Math.sin(state.stride * 2) * 0.3 * run0;
     hamster.rotation.y = (1 - state.facing) / 2 * -Math.PI;   // face +x or -x, turning through the camera
     const run = Math.min(1, state.speed), p = state.stride;
     torso.position.y = Math.abs(Math.sin(p)) * 0.04 * run;
