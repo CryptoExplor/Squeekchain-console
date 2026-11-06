@@ -36,6 +36,7 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
   if(p.state){state=p.state;if(p.tokens>0){root.dataset.indexStatus='partial';render(false);}}
   status.textContent=p.phase==='final'?'Partial · Checking supply and final snapshot…':p.phase==='hydrate'?`Partial · Loading Squeeks: ${p.tokens} of ${p.tokenTotal}`:p.phase==='history'?`Checking history: ${p.headers} of ${p.headerTotal}`:`Scanning blocks: ${p.done} of ${p.total}`;
  }
+ let autoRetries=0;
  async function sync({restart=false}={}){
   if(!visible()&&!background)return;const load=capture(),key=`${load.generation}:${load.profileKey}`;
   if(scope===key&&(busy||failed&&!restart))return;
@@ -48,7 +49,7 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
   const seq=++sequence;busy=true;scan.hidden=true;
   try{
    const result=await service.sync({restart});if(closed||!current(load)||scope!==key||seq!==sequence)return;
-   state=result;failed=!result.complete;root.dataset.indexStatus=result.complete?'complete':'incomplete';root.dataset.phase='done';
+   state=result;failed=!result.complete;if(result.complete)autoRetries=0;root.dataset.indexStatus=result.complete?'complete':'incomplete';root.dataset.phase='done';
    root.dataset.indexed=String(Object.values(result.tokens).filter(t=>t.minted&&!t.burned).length);root.dataset.supply=result.totalSupply;root.dataset.scanBlock=result.snapshot.blockNumber;
    scan.hidden=result.complete;scan.textContent=result.complete?'Rescan':'Retry';
    status.textContent=result.complete?`As of ${new Date(Number(result.snapshot.timestamp)*1000).toISOString().replace('T',' ').slice(0,19)} UTC · ${Math.max(0,Math.floor((Date.now()/1000-Number(result.snapshot.timestamp))/60))} min ago`:"Couldn't finish, retry";
@@ -56,6 +57,7 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
   }catch(error){
    if(closed||!current(load)||scope!==key||seq!==sequence)return;
    scanController.abort(error);clear();state=null;failed=true;stats.hidden=true;root.dataset.indexStatus='unavailable';root.dataset.phase='failed';
+   if(error?.name!=='AbortError'&&autoRetries<2){autoRetries++;status.textContent='Network busy · retrying…';scope=null;busy=false;setTimeout(()=>{if(!closed&&scope===null)sync();},2500*autoRetries);return;}
    status.textContent="Couldn't finish, retry";scan.textContent='Retry';scan.hidden=false;source('Explore','rpc',error.message);if(error.name==='RpcTrustError')onTrustError(error);
   }finally{if(scope===key&&seq===sequence)busy=false;}
  }
