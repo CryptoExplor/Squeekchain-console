@@ -122,8 +122,12 @@ export function createExploreIndex({profile,store,reader,signal,progress=()=>{},
   const validate=()=>bounded(async()=>{check();await reader.finish();check();
     return BigInt(live.length)===BigInt(state.totalSupply)&&live.every(t=>addr(t.owner)&&uint(t.basePower));},finalTimeoutMs);
   let complete;
-  try{complete=await validate();}
-  catch(error){check();complete=await validate();}
+  // RPC peers rate-limit (429) at this step; back off and retry, then keep the hydrated data as partial instead of throwing it away.
+  complete=false;
+  for(let attempt=0;attempt<4;attempt++){
+   try{complete=await validate();break;}
+   catch(error){check();if(error?.name==='AbortError')throw error;if(attempt===3)break;await sleep(1500*(attempt+1));}
+  }
   state.complete=complete;state.validationFailed=!complete;
   await save();
   return {...state,status:state.complete?'complete':'incomplete',metrics:{milliseconds:now()-started,reorg,cached:false,resumed:resuming}};

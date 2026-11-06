@@ -1299,7 +1299,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const parts = win.location.hash.split('?')[0].replace(/^#\/?/,'').split('/');
     if (profileFromHash(win.location.hash)) parts.shift();
     const hash = parts.join('/');
-    return /^(squeeks|squeek|address|activity|art|explore|network|info)(\/|$)/.test(hash) ? hash+(win.location.hash.includes('?')?'?'+win.location.hash.split('?')[1]:'') : (state.account?'squeeks':'explore');
+    return /^(home|squeeks|squeek|address|activity|art|explore|network|info)(\/|$)/.test(hash) ? hash+(win.location.hash.includes('?')?'?'+win.location.hash.split('?')[1]:'') : (state.account?'squeeks':'home');
   }
   function selectTab(route) {
     const aliases = { overview: 'squeeks', holdings: 'squeeks', playground: 'squeeks', art: 'explore', agent: 'info/developers' };
@@ -1311,15 +1311,16 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     let [name, section] = String(route).split('/');if(special)name=String(route).startsWith('address/')?(String(route).split('/')[2]??'squeeks'):(['squeeks','explore'].includes(shownTab)?shownTab:'squeeks');
     const openHistory=name==='activity';if(openHistory)name='squeeks';
     if(name==='art')name='explore';
-    if (!['squeeks', 'explore', 'network', 'info'].includes(name)) name = 'squeeks';
+    if(name==='info'&&section==='about'){name='home';section=undefined;}
+    if (!['home', 'squeeks', 'explore', 'network', 'info'].includes(name)) name = 'squeeks';
     const deployed = Boolean(getProfile(state.profileKey).addresses);
     if(!deployed)name='info';
-    const sections=['how-it-works','trust','status','contracts','developers','about'];
+    const sections=['how-it-works','trust','status','contracts','developers'];
     if(name==='info'){if(!sections.includes(section))section='how-it-works';for(const node of doc.querySelectorAll('#panel-info .info-section'))node.hidden=node.id!==`info-${section}`;}
     doc.querySelectorAll('a[href^="#info/"], a[data-info-route]').forEach(link => { const route = link.dataset.infoRoute ?? link.getAttribute('href').slice(1); link.dataset.infoRoute = route; link.href = `#${state.profileKey}/${route}`; });
     el.tabs.forEach(t => { t.setAttribute('aria-selected', String(t.dataset.tab === name)); t.tabIndex = t.dataset.tab === name ? 0 : -1; });
     el.panels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== name || (!deployed && name !== 'info')));
-    let hash = special?`#/${state.profileKey}/${route}`:`#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers', 'about'].includes(section) ? '/' + section : ''}`;
+    let hash = special?`#/${state.profileKey}/${route}`:`#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers'].includes(section) ? '/' + section : ''}`;
     if(query&&['squeeks','explore'].includes(name))hash+='?'+query;
     // replaceState avoids hashchange loops, while tab clicks below create history entries.
     if (win.location.hash !== hash) win.history.replaceState(null, '', hash);
