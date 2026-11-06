@@ -51,14 +51,14 @@ for(const width of [1280,390])test(`actual wallet log-range failure is availabil
 });
 test('profile change discards the pending Clear Activity confirmation without reopening Settings',async({page})=>{
  await installV9Fixture(page);await page.evaluate(()=>squeek.activity.record('0x'+'ab'.repeat(32),'Mock pending checkpoint',11155111,'sepolia'));
- await expect(page.getByTestId('activity-list')).toContainText('Sepolia v9');
+ await expect(page.getByTestId('activity-list')).toContainText('Sepolia');
  await page.getByTestId('settings-open').click();await page.getByTestId('btn-clear-activity').click();await expect(page.getByTestId('modal')).toBeVisible();
- await page.evaluate(()=>squeek.switchProfile('sepolia'));await expect(page.getByTestId('settings-sheet')).toBeHidden();await expect(page.getByTestId('modal')).toBeHidden();expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);await page.evaluate(()=>squeek.destroy());
+ await page.evaluate(()=>squeek.switchProfile('mainnet'));await expect(page.getByTestId('settings-sheet')).toBeHidden();await expect(page.getByTestId('modal')).toBeHidden();expect(await page.evaluate(()=>squeek.activity.list().length)).toBe(1);await page.evaluate(()=>squeek.destroy());
 });
-test('explicit other-profile tool errors retain the serving adapter diagnostics',async({page})=>{
+test('explicit-profile tool errors retain the serving adapter diagnostics',async({page})=>{
  await installV9Fixture(page);
  const result=await page.evaluate(async()=>{v9.networkError={name:'TypeError',message:'Failed to fetch'};return squeek.callTool('squeek_network_status',{profile:'sepolia'});});
- expect(result.diagnostics.attempts).toEqual([{endpoint:'https://v6-rpc.test',method:'eth_call'}]);expect(await page.getByTestId('profile-select').inputValue()).toBe('sepolia');await page.evaluate(()=>squeek.destroy());
+ expect(result.diagnostics.attempts).toEqual([{endpoint:'https://v9-rpc.test',method:'eth_call'}]);/* the single Sepolia adapter */expect(await page.getByTestId('profile-select').inputValue()).toBe('sepolia');await page.evaluate(()=>squeek.destroy());
 });
 test('another tab cannot restore Activity after Clear, even with an in-flight receipt read',async({page})=>{
  await installV9Fixture(page);

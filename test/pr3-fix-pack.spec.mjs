@@ -8,7 +8,7 @@ const other='0x1111111111111111111111111111111111111111';
 for(const action of ['claim','claimAndStake'])for(const change of ['equal','increase','lower','recipient'])test(`v9 ${action} fresh ${change}: reviewed payout guard`,async({page})=>{
  await installV9Fixture(page);await page.evaluate(()=>squeek.connect());
  if(action==='claim')await page.getByTestId('btn-claim').click();
- else{await page.locator(`[data-action="${action}"]`).first().click();await page.getByTestId('v9-review').click();}
+ else await page.locator(`[data-action="${action}"]`).first().click(); // claimAndStake opens its review automatically
  await expect(page.getByTestId('modal')).toBeVisible();
  await page.evaluate(({change,other})=>{if(change==='increase'||change==='recipient')v9.claimAmount='3000000000000000000';if(change==='lower')v9.claimAmount='2000000000000000000';if(change==='recipient')v9.claimRecipient=other;},{change,other});
  await page.getByTestId('btn-modal-confirm').click();
