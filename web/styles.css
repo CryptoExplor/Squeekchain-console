@@ -896,3 +896,8 @@ a { color: var(--sqk-blue); }
 .footer-links { flex-wrap: wrap; }
 @media (max-width: 900px) { .home-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .home-cards { grid-template-columns: 1fr; } }
+.hero-art .wheel-rim { stroke: var(--brand-yellow); }
+.hero-art .ear { fill: var(--brand-yellow); }
+.hero-art .sparkle { stroke: var(--brand-blue); }
+.hero-art .body { fill: color-mix(in srgb, var(--brand-yellow) 30%, var(--sqk-panel)); }
+.hero-art .hub { fill: var(--sqk-panel); }
