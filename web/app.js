@@ -496,7 +496,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('contracts-release').textContent = profile.addresses?`${profile.short.toUpperCase()} contracts`:'Not deployed';
     $('contracts-list').replaceChildren(...Object.entries(profile.addresses ?? {}).map(([name, address]) => {
       const row = doc.createElement('li'), label = doc.createElement('span'), link = doc.createElement('a'), copy = doc.createElement('button');
-      label.className = 'contract-name'; label.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+      label.className = 'contract-name'; label.textContent = name.length <= 3 ? name.toUpperCase() : name.charAt(0).toUpperCase() + name.slice(1);
       link.className = 'mono'; link.textContent = `${address.slice(0, 6)}…${address.slice(-4)}`; link.title = address; link.setAttribute('aria-label', `${name} contract ${address}`);
       link.href = `${EXPLORER}/address/${address}`; link.target = '_blank'; link.rel = 'noopener noreferrer';
       copy.type = 'button'; copy.className = 'btn btn-small'; copy.textContent = 'Copy'; copy.setAttribute('aria-label', `Copy ${name} address`);
