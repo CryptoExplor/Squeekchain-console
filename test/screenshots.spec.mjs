@@ -69,7 +69,8 @@ for (const theme of ['light', 'dark']) for (const width of [1280, 390]) for (con
 
 test('TokenCard keyboard opens isolated image; modal traps and restores focus', async ({ page }) => {
   await installReviewFixture(page);
-  await page.evaluate(async () => { window.squeek.selectTab('art'); await window.squeek.loadArt(['41']); });
+  // The DotGrid gallery panel is no longer routed (#art aliases to Squeeks); unhide it directly to keep TokenCard isolation/focus coverage.
+  await page.evaluate(async () => { document.getElementById('panel-art').classList.remove('hidden'); await window.squeek.loadArt(['41']); });
   const card = page.locator('[data-component="TokenCard"]');
   await card.focus(); await card.press('Enter');
   await expect(page.getByTestId('modal')).toBeVisible();
@@ -130,7 +131,7 @@ for (const width of [900, 1024]) test(`header: single desktop row at ${width}px,
 
 test('structure: hash navigation, Trust shortcut, Info and watch address', async ({ page }) => {
   await installReviewFixture(page);
-  await expect(page).toHaveURL(/#sepolia\/squeeks$/);
+  await expect(page).toHaveURL(/#sepolia\/network$/); // the review fixture boots on the Network route
   await page.getByTestId('tab-info').click();await page.getByTestId('info-link-how-it-works').click();
   await expect(page).toHaveURL(/#sepolia\/info\/how-it-works$/);
   await page.getByTestId('tab-info').click();
@@ -150,7 +151,7 @@ test('structure: hash navigation, Trust shortcut, Info and watch address', async
   await expect(page.getByTestId('btn-claim')).toBeDisabled();
   await expect(page.getByTestId('btn-custom-merge')).toBeDisabled();
   await page.evaluate(() => { location.hash = 'art'; });
-  await expect(page.getByTestId('panel-art')).toBeVisible();
+  await expect(page.getByTestId('panel-explore')).toBeVisible(); // legacy #art aliases to the Squeeks (explore) panel
   await page.goBack();
   await expect(page.getByTestId('panel-squeeks')).toBeVisible();
   await page.evaluate(() => window.squeek.destroy());

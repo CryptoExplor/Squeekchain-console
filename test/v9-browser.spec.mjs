@@ -14,11 +14,13 @@ for(const theme of ['light','dark'])for(const width of [1280,390])for(const view
  await capture(page,info,`v9-${view}-${theme}-${width}.png`);await page.evaluate(()=>window.squeek.destroy());
 });
 for(const action of ['deposit','withdraw','approveNft','approveAll','approveSqk','stake','unstake','claimAndStake'])test(`v9 ${action}: simulate, review, re-preview before mock wallet`,async({page})=>{
- await installV9Fixture(page);await page.evaluate(()=>window.squeek.connect());if(['deposit','approveNft'].includes(action))await page.getByRole('checkbox',{name:'Select Squeek #87',exact:true}).check();if(action==='withdraw')await page.getByRole('checkbox',{name:'Select Squeek #41',exact:true}).check();await page.locator(`[data-action="${action}"]`).first().click();
+ await installV9Fixture(page);await page.evaluate(()=>window.squeek.connect());if(['deposit','approveNft'].includes(action))await page.getByRole('checkbox',{name:'Select Squeek #87',exact:true}).check();if(action==='withdraw')await page.getByRole('checkbox',{name:'Select Squeek #41',exact:true}).check();
+ // Exact SQK approval has no button of its own any more (Stake asks for it as step 1); request it through the same human-review path.
+ if(action==='approveSqk')await page.evaluate(()=>{void squeek.requestAction('approveSqk',{amount:'1000000000000000000'});});else await page.locator(`[data-action="${action}"]`).first().click();
  if(['deposit','withdraw'].includes(action))await page.getByTestId('v9-ids').fill(action==='withdraw'?'41':'87');
  if(action==='approveNft')await page.getByTestId('v9-token').fill('87');
- if(['approveSqk','stake','unstake'].includes(action))await page.getByTestId('v9-amount').fill('1');
- if(action!=='claimAndStake')await page.getByTestId('v9-review').click(); // claimAndStake opens its review automatically
+ if(['stake','unstake'].includes(action))await page.getByTestId('v9-amount').fill('1');
+ if(!['claimAndStake','approveSqk'].includes(action))await page.getByTestId('v9-review').click(); // claimAndStake opens its review automatically
  await expect(page.getByTestId('modal')).toBeVisible();expect(await page.evaluate(()=>v9.sends)).toBe(0);
  await page.getByTestId('btn-modal-confirm').click();await expect(page.getByTestId('banner')).toContainText('Mock wallet stops');
  const h=await page.evaluate(()=>({previews:v9.previews,sends:v9.sends}));expect(h.previews).toHaveLength(2);expect(h.previews.every(p=>p.action===action)).toBe(true);expect(h.sends).toBe(1);
@@ -47,7 +49,7 @@ test('restored frontend: active policy, one footer, baseline copy, conditional w
  await page.getByTestId('settings-open').click();await expect(page.getByTestId('settings-sheet')).toBeVisible();expect(loaded).toContain('/settings.js');await page.getByTestId('rpc-url').fill('https://rpc.example/');await expect(page.getByTestId('rpc-secret-warning')).toBeHidden();await page.getByTestId('rpc-url').fill('https://rpc.example/?apiKey=private');await expect(page.getByTestId('rpc-secret-warning')).toBeVisible();await page.keyboard.press('Escape');
  await page.getByTestId('info-link-developers').click();await page.locator('#agent-setup>summary').click();await page.getByTestId('btn-copy-manifest').click();expect(loaded).toContain('/developers.js');
  const body=await page.locator('body').textContent();expect(body.match(/not affiliated with Squeekchain/g)).toHaveLength(1);expect(body).toMatch(/Powered by a hamster/);expect(body).toMatch(/Build with Squeekchain/);expect(body).toMatch(/Network/);expect(body).not.toMatch(/undocumented|no v9 transactions|read-only and unverified|all transactions disabled/);
- await page.getByTestId('tab-squeeks').click();await expect(page.locator('.telemetry-source')).toHaveCount(0);await expect(page.getByTestId('panel-explore')).toBeHidden();await expect(page.locator('.network-strip')).toContainText('Status ↗');await page.evaluate(()=>squeek.destroy());
+ await page.getByTestId('tab-squeeks').click();await expect(page.locator('.telemetry-source')).toHaveCount(0);await expect(page.getByTestId('panel-explore')).toBeHidden();await expect(page.locator('.network-strip')).toContainText('Live wheel status ↗');await page.evaluate(()=>squeek.destroy());
 });
 
 test('v9 Unknown holdings keep Claim and otherwise-ready Checkpoint disabled; known zero still allows SQK claim',async({page})=>{

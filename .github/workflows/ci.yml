@@ -9,8 +9,7 @@ permissions:
 jobs:
   offline:
     runs-on: ubuntu-latest
-    # Raised from 15 while the browser specs are ported; see PR #8.
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
