@@ -236,7 +236,7 @@ by [BUILD_PLAN.md](BUILD_PLAN.md). Tier definitions are in §6; scores in §7.
 
 | ID | Name | One-line concept | Tier |
 | --- | --- | --- | --- |
-| GE-01 | Daily Wheel Sprint | One-tap timing game: tap when the hamster crosses the gold arc; distance/speed of the *real* wheel sets the flavour and the day's seed. | A |
+| GE-01 | Daily Wheel Sprint | One-tap timing game: tap when the hamster crosses the gold arc. The run is seeded by the **UTC date** (stable for everyone, works offline); real wheel speed/RPM is optional flavour only and never determines difficulty or seed. | A |
 | GE-02 | Squeek Stack | Drop-and-match Squeek blocks; chain level-ups simulate the merge ladder without touching a token. | A |
 | GE-03 | Seed Catch | 60-second catch-the-dot-grid-seeds reflex game with a daily seeded field. | A |
 | GE-04 | Block Clock | Predict whether the next Squeek block forms before N seconds; scored by cadence accuracy, no wagering. | B |
@@ -565,7 +565,7 @@ engagement (E), feasibility (F), ecosystem fit (X), security/abuse resistance (S
 | 11 | Effort | **M** (3–4 days) |
 | 12 | Engagement | Medium — strong for a small community, weak for individuals. |
 | 13 | Maintenance | Low: reads only. |
-| 14 | Dependencies | Honest-state components; GE-23. |
+| 14 | Dependencies | Honest-state components; **GE-23** (this feature consumes its settlement events). |
 | 15 | Recommendation | **Prototype** in Phase 3 |
 
 ### GE-14 Friend Duels
@@ -765,7 +765,7 @@ engagement (E), feasibility (F), ecosystem fit (X), security/abuse resistance (S
 | 11 | Effort | **S** (1–2 days) |
 | 12 | Engagement | Low–medium. |
 | 13 | Maintenance | Low. |
-| 14 | Dependencies | GE-13. |
+| 14 | Dependencies | None. `GE-13` (Community Milestones) *depends on this* — not the reverse. |
 | 15 | Recommendation | **Build** in Phase 2 as a cheap, honest win |
 
 ### GE-24 Historical Network Quiz
@@ -900,9 +900,9 @@ be edited by anyone using it. They are not verified and are not part of the bloc
 
 ```mermaid
 flowchart TB
-  subgraph existing["Existing — must not be modified"]
-    IDX["web/index.html (hash-guarded selectors)"]
-    APP["web/app.js router + tabs"]
+  subgraph existing["Existing — frozen except the two integration points"]
+    IDX["web/index.html (hash-guarded selectors;<br/>tab markup only if gate G1 selects a tab)"]
+    APP["web/app.js router + tabs<br/>(one new import() site permitted)"]
     CMP["web/components.js (SHA-256 guarded)"]
     CSS["web/styles.css (prefix hash-guarded)"]
     HOLD["web/holdings.js / browse-grid.js / merge-planner.js"]
@@ -913,7 +913,7 @@ flowchart TB
     PINS["sdk/pins-core-20261103.js + deployments.js (byte-stable)"]
     HEAD["web/_headers CSP (4 origins)"]
   end
-  subgraph proposed["Proposed — new, lazy-loaded"]
+  subgraph proposed["Proposed — new, lazy-loaded (plus 2 build/route hooks)"]
     GPT["web/games-panel.js<br/>tab content, lazy root"]
     SHELL["web/games/shell.js<br/>loop + input + a11y + reduced motion"]
     DAILY["web/games/daily.js<br/>UTC day key + seeded PRNG"]
@@ -925,7 +925,8 @@ flowchart TB
     BADGE["web/games/badges.js (GE-19, Phase 2)"]
     LOT["web/games/ladder.js (GE-11, Phase 2)"]
   end
-  APP -->|"dynamic import()"| GPT
+  BUILD["build.mjs<br/>explicit dist file list + size report"] -.->|"must include nested games/*"| GPT
+  APP -->|"one dynamic import() site"| GPT
   GPT --> SHELL
   GPT --> DAILY
   GPT --> STORE
@@ -968,7 +969,11 @@ Nothing in that chain touches the wallet, the SDK, the network or a transaction.
   need series. Rationale: `createDiscoveryStore.clear()` clears the whole shared `discovery` store
   (C16) — do not put game data where the "Clear saved data" button can silently destroy console
   caches, or vice versa.
-- Document shape: `{version:1, address:null|'0x…', games:{'wheel-sprint':{days:{'2026-11-07':{best,runs}},...}}, badges:{…}}`.
+- Document shape: `{version:1, active:'anon'|'0x…', buckets:{<identity>:{games:{…},badges:{…}}}}`.
+  One bucket per identity (**required**, see the build plan §4.7): the anonymous bucket and each
+  address bucket are independent and never merged, so switching wallets does not destroy progress.
+  Only the 5 most recently used buckets are kept; an address bucket does not travel between
+  browsers.
 - Every read validates shape and version; malformed data is discarded with a single, quiet line of
   copy ("Saved progress in this browser was unreadable and has been reset.").
 - Address-scoped when connected; anonymous scope otherwise; **never** merged.

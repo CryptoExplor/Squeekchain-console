@@ -69,8 +69,8 @@ has a testable consequence, because a principle without a test is a slogan.
 | **P1 — Games are inert with respect to value.** No game module imports a signing path, a prepare/request tool, `web/activity.js` write helpers, or any code that builds calldata. | A static import-graph assertion fails if any `web/games/**` file imports `web/wallet.js` provider methods, `sdk/tool-runtime.js` prepare paths, or `web/activity.js`. |
 | **P2 — Verified reads are reused, never re-implemented.** Games read through existing adapters/components. | No `client.readContract`/`getLogs`/`fetch` call inside `web/games/**`; the only permitted chain entry is a passed-in snapshot or an existing component. |
 | **P3 — Local means local, and says so.** Every score surface carries the disclaimer string. | A copy test asserts the disclaimer renders on each score surface. |
-| **P4 — Lazy and small.** Each game is a separate dynamic import; the build's gzip budget is asserted. | `dist/js-size.json` total stays below the cap and each `games/*` chunk is under a stated ceiling (start: 20 KB gzip). |
-| **P5 — Baseline surfaces are frozen.** `web/components.js` and the `web/styles.css` prefix stay byte-identical. | `npm test` (which includes `test/frontend-baseline.mjs`) passes with **no fixture change**. |
+| **P4 — Lazy and small.** Each game is a separate dynamic import; the build's gzip budget is asserted. | The size report must cover **every** emitted script, including nested paths. Today `build.mjs:55` uses `fs.readdirSync(OUT)` with no `recursive` option, so chunks emitted under `dist/games/` would be **silently excluded** from both `dist/js-size.json` and the 500,000-byte check. Either emit game chunks flat in `dist/`, or extend the assertion to walk `dist/` recursively and assert that each expected game chunk is present in the report. Each `games/*` chunk also stays under a stated ceiling (start: 20 KB gzip). |
+| **P5 — Baseline surfaces are frozen.** `web/components.js` and the `web/styles.css` prefix stay byte-identical. | `npm test` (which includes `test/frontend-baseline.mjs`) passes with **no fixture change**, **and** a byte-identity check (`git diff --quiet` against the branch base for `web/components.js` and the recorded CSS prefix) passes. The hash test alone is not sufficient: it normalises `Toast` by substituting `test/fixtures/frontend-toast-b705683.txt` before hashing, so an edit *inside* `Toast` could pass the hash while changing shipped markup. |
 | **P6 — Honest states.** Missing data renders as `—` plus explanation; never `0`, and never the literal word "Unknown" in a rendered tab (that is asserted by `test/visual-qa.spec.mjs`). | A no-network Playwright run asserts the games panel is playable and free of fabricated zeros. |
 | **P7 — Accessible by default.** Keyboard parity, reduced-motion variant, 44 px targets, 390 px layout. | Keyboard-only spec completes one full run of each game; reduced-motion spec asserts no `requestAnimationFrame`-driven motion requirement. |
 | **P8 — Pure logic, impure edges.** Game rules are pure functions; canvas/storage/DOM live at the boundary. | Reducer/referee unit tests run in Node with no DOM. |
@@ -92,7 +92,7 @@ conventions that later phases depend on.
 
 | Item | Detail |
 | --- | --- |
-| P0.1 | Confirm `C01`–`C30` by re-running the audit against the merge base of the implementation branch; record any drift. |
+| P0.1 | Confirm `C01`–`C30` by re-running the audit against the merge base of the implementation branch. Drift is recorded in the PR description first; if it changes a *recommendation*, `docs/GAMES_AND_ENGAGEMENT.md` is updated as an explicit documentation-only commit **within** Phase 0 (this is the one permitted tracked change in the phase, and it is documentation, not source). |
 | P0.2 | **Spike A (≤0.5 day):** prove a lazy module can be added to `build.mjs`'s explicit file list, imported from `web/app.js` by `import()`, and pass `test/dist-imports.mjs`. |
 | P0.3 | **Spike B (≤0.5 day):** measure a trivial canvas module's gzip cost and confirm the total stays well under the cap. |
 | P0.4 | **Spike C (≤0.5 day):** confirm the Games entry point decision (gate **G1**): sixth tab vs. section inside an existing panel, given `test/frontend-baseline.mjs` guards tab markup. |
@@ -112,7 +112,7 @@ conventions that later phases depend on.
 - [ ] Spikes A–C produce measured numbers (bytes, import resolution, bundle total) recorded in the PR.
 - [ ] Store schema and shell contract are written down and reviewed.
 - [ ] **G1** (entry point) and **G2** (styling/baseline ownership, open question Q2) are decided.
-- [ ] No tracked file changed by Phase 0 itself.
+- [ ] No **source, contract, dependency or configuration** file changed by Phase 0. The only permitted tracked change is a documentation-only drift update to `docs/GAMES_AND_ENGAGEMENT.md` under P0.1, made in its own commit.
 
 ### 3.5 Effort
 
@@ -144,6 +144,13 @@ deployment, without a new infrastructure decision.
 
 Shared, non-feature modules: `games/shell.js`, `games/rng.js`, `games/daily.js`,
 `games/store.js`, `games-panel.js`.
+
+**Mandatory first task of the phase (budget integrity):** game chunks are emitted under
+`dist/games/`, which today's `build.mjs:55` (`fs.readdirSync(OUT)`, no `recursive`) does **not**
+walk. Before any game file is added, the size report must either (a) emit game chunks flat in
+`dist/`, or (b) walk `dist/` recursively and assert that every expected game chunk appears in
+`dist/js-size.json`. Without this, the 500,000-byte cap silently stops covering the new code and
+P4 is unenforced.
 
 ### 4.3 Prerequisites
 
@@ -195,18 +202,42 @@ Single localStorage document `wheelhouse:games:v1`, shape:
 ```json
 {
   "version": 1,
-  "address": null,
-  "games": {
-    "wheel-sprint": { "days": { "2026-11-07": { "best": 18, "runs": 3 } } },
-    "squeek-stack": { "days": { "2026-11-07": { "best": 5200, "runs": 1 } } },
-    "merge-puzzle": { "solved": { "2026-11-07:5": { "burns": 4, "optimal": 3 } } }
+  "active": "anon",
+  "buckets": {
+    "anon": {
+      "games": {
+        "wheel-sprint":  { "days": { "2026-11-07": { "best": 18,   "runs": 3 } } },
+        "squeek-stack":  { "days": { "2026-11-07": { "best": 5200, "runs": 1 } } },
+        "merge-puzzle":  { "solved": { "2026-11-07:5": { "burns": 4, "optimal": 3 } } }
+      }
+    }
   }
 }
 ```
 
-Caps: 14 days per game, ≤ 40 runs/day counted, whole document < 64 KB (else prune oldest days).
-Every read validates `version`, object shape and numeric ranges; anything else is discarded with one
-quiet line of copy. Address change resets the in-memory scope, never merges documents.
+Caps: 14 days per game, ≤ 40 runs/day counted, **≤ 5 identities**, whole document < 64 KB (else
+prune oldest days per identity).
+
+**Per-identity storage (required).** A single top-level `address` would mean wallet B's session
+destroys wallet A's progress. The document therefore holds **one bucket per identity**, keyed by
+address, plus one anonymous bucket:
+
+```json
+{
+  "version": 1,
+  "active": "anon",
+  "buckets": {
+    "anon":         { "games": { "wheel-sprint": { "days": {} } } },
+    "0xabc…(lowercase)": { "games": { "wheel-sprint": { "days": {} } } }
+  }
+}
+```
+
+Rules: the anonymous bucket is used when no wallet is connected and is **never** merged into an
+address bucket; connecting, disconnecting or switching accounts only changes `active`; buckets are
+independent and individually discardable; only the **5 most recently used** buckets are retained
+(least-recently-used is pruned with its copy notice). An address bucket is not portable — a fresh
+browser is a new player — and the UI must say so rather than implying an account.
 
 Rationale for localStorage over IndexedDB: the payload is small, the API is synchronous (no
 race/flight complexity), and it keeps game data out of the `discovery` store that
@@ -218,7 +249,7 @@ race/flight complexity), and it keeps game data out of the `discovery` store tha
 - `GE-06` must never render a `BURN-<id>` string; the hand-off is a plain link to the existing
   planner, which enforces its own review, simulation and typed confirmation
   (`sdk/squeekchain.js:24,32`).
-- The panel must render identically when there is no wallet, no RPC, no API and no IndexedDB.
+- The panel's **layout, controls and playability** must be unchanged when there is no wallet, no RPC, no API and no IndexedDB; only *content* differs (e.g. `GE-06` offers the seeded collection and shows `—` for "my collection"). No feature may be hidden or locked because a wallet or network is missing.
 - No user-supplied text is rendered as HTML (no `innerHTML` with URL or caption content).
 - Scores are never transmitted; nothing calls `fetch`/`sendBeacon`.
 
@@ -231,7 +262,7 @@ race/flight complexity), and it keeps game data out of the `discovery` store tha
       explanation is one tap away.
 - [ ] Best score persists across reload; it is labelled local and untrusted.
 - [ ] Reduced-motion mode is playable (no motion-dependency; frame-stepped or static cues).
-- [ ] Zero network requests are made during a run (asserted in a Playwright route log).
+- [ ] A network-free run is provable without pretending the app makes no requests: the spec aborts every non-`127.0.0.1` route (as `test/visual-qa.spec.mjs` does), plays a full run, and asserts that **no request originates from a game module** — i.e. the route log is filtered by initiator frame/stack to `games*` scripts, and a separate assertion confirms the app's existing display poller is the *only* source of any remaining traffic. Do not weaken the address-leak check to achieve this.
 
 `GE-02`
 
@@ -254,10 +285,9 @@ Cross-cutting
 
 - [ ] `npm run build` succeeds; total gzip < 500,000 and every `games/*` chunk < 20 KB.
 - [ ] `npm test` passes with **no** fixture changes (P5).
-- [ ] `npm run test:browser` passes; new specs cover 1280 px, 390 px, reduced motion and keyboard.
-- [ ] No new dependency in `package.json`; `package-lock.json` untouched.
-- [ ] `git diff --stat` touches only new files plus the two integration points approved under **G1**
-      (`build.mjs` file list and the single `import()` site).
+- [ ] `npm run test:browser` passes; new specs cover 1280 px, 390 px, reduced motion and keyboard. Under the G1 default, no existing spec or fixture changes; if a sixth tab is chosen, the fixture change is explicit in the diff and reviewed.
+- [ ] No new dependency; `package-lock.json` untouched. A `package.json` diff is permitted **only** inside `scripts` (wiring the new game tests into the existing chains).
+- [ ] `git diff --stat` touches only: new files, the `build.mjs` file list, the single `import()` site in `web/app.js`, `package.json` `scripts`, and — **only if G1 selects a sixth tab** — the tab markup in `web/index.html` plus the accompanying `test/fixtures/frontend-b705683.json` update that this forces. Anything else is a scope violation.
 
 ### 4.10 Testing requirements
 
@@ -267,8 +297,8 @@ Cross-cutting
 | Static | No forbidden imports/calls in `web/games/**`; no `BURN-` literal; no `fetch` | `test/games-guard.mjs` |
 | DOM (jsdom) | Panel renders with no wallet/no storage; disclaimer present; corrupt storage discarded | `test/games-panel.mjs` |
 | Browser | Keyboard-only run, reduced-motion run, 390 px layout, zero-network run, all-external-failure run | `test/games.spec.mjs`, `test/games-offline.spec.mjs` |
-| Budget | Gzip totals and per-chunk ceiling | extend `build.mjs` assertion or a test reading `dist/js-size.json` |
-| Regression | Existing 33 offline scripts + 20 Playwright specs unchanged and green | `npm test`, `npm run test:browser` |
+| Budget | Gzip totals **including nested `dist/games/*`**, per-chunk ceiling, and presence of every expected game chunk | extend `build.mjs:55` to walk recursively, or add a test that walks `dist/` itself and cross-checks `dist/js-size.json` |
+| Regression | Existing 33 offline scripts + 20 Playwright specs green. Under **G1's default** (section inside an existing panel) they must also remain **unchanged**. If G1 instead chooses a sixth tab, the affected baseline fixtures (`test/fixtures/frontend-b705683.json`) are updated deliberately in the same PR, and every selector that enumerates tabs is re-checked — `test/screenshots.spec.mjs:51` asserts exactly one selected tab, so tab-strip tests must be reviewed rather than assumed untouched. | `npm test`, `npm run test:browser` |
 
 ### 4.11 Effort estimate
 
@@ -304,7 +334,7 @@ the security checklist and the measured bundle numbers.
 | Item | Scope |
 | --- | --- |
 | `GE-16` Daily Rotation and Streaks | Day-seeded featured game; gentle streak with one grace token; explicit "this lives in this browser" copy; **S–M (2–3 d)** |
-| `GE-11` Local Ladder + Share Cards | Per-game personal series, best-of-day, canvas result card, opt-in address in share text; **S–M (1.5–3 d)** |
+| `GE-11` Local Ladder + Share Cards | Per-game personal series, best-of-day, canvas result card; share text contains **no** address by default and offers an explicit opt-in to include one (consistent with S10); **S–M (1.5–3 d)** |
 | `GE-19` Badge Ledger | Declarative badge table with three evaluators (`local play`, `browser history`, `chain-derived`); trust label on every badge; **M (3–4 d)** |
 | `GE-23` Settlement Celebrations | Non-blocking acknowledgement in Network using `wheelFeed`; **S (1–2 d)** |
 | `GE-17` Weekly Missions (prototype) | Read-only missions ("open your merge plan", "read what a checkpoint does"); **M (3–4 d)** |
@@ -319,6 +349,9 @@ the security checklist and the measured bundle numbers.
    value is attached; it becomes unacceptable the moment a gate, a reward or an allowlist appears.
 4. Clock changes can forge a "streak". Never reward clock-derived state with anything exclusive.
 5. Address-scoped data cannot be recovered from an address alone; a new browser is a new player.
+6. Progress is stored per identity (§4.7). Switching wallets shows that wallet's own progress; the
+   anonymous bucket is separate and never merged, so "my best" is always scoped to the identity in
+   use — and the 5-bucket cap means the least recently used identity's progress is pruned.
 
 **Prerequisites:** Phase 1 shipped and its success bar met; **G2** decided if any card-level styling
 is involved (`GE-08` would be first).
@@ -468,15 +501,26 @@ Reduced motion switches to frame-stepped or static cues while preserving the tim
 
 ## 8. Infrastructure decision gates
 
-No gate may be opened by a feature PR. Each is an owner decision with a written outcome.
+No gate may be **opened** by a feature PR. Each is an owner decision with a written outcome.
+
+**Gates and defaults.** A gate has three states:
+
+1. **Undecided (default in force)** — the default column applies immediately; work that the default
+   permits may proceed, and work that requires the gate to be *opened* may not start.
+2. **Decided** — a written owner decision is recorded in the PR or issue that needs it.
+3. **Opened** — only applies to G3/G4, where "open" means new infrastructure is authorised.
+
+This is why `G1` and `G2` do **not** block Phase 1: their defaults (a section inside an existing
+panel; new files only) are sufficient for the three MVP features, which restyle nothing and add no
+tab. A *written* G2 decision is required only before `GE-07`/`GE-08`, which are Phase 3/4.
 
 | Gate | Question | Blocks | Default if undecided |
 | --- | --- | --- | --- |
-| **G1** | Where does the Games entry live — a sixth top-level tab, a section inside Playground, or Home? | Phases 1–4 | Section inside an existing panel (lowest baseline risk) |
-| **G2** | May game code touch hash-guarded surfaces (`web/components.js`, the `web/styles.css` prefix, `index.html` structure) and who updates `test/fixtures/frontend-b705683.json`? | GE-07, GE-08, GE-09, GE-10 | New files only; no styling hooks into guarded markup |
+| **G1** | Where does the Games entry live — a sixth top-level tab, a section inside Playground, or Home? | Phases 1–4 | The **default applies without a written decision**: a section inside an existing panel (lowest baseline risk) |
+| **G2** | May game code touch hash-guarded surfaces (`web/components.js`, the `web/styles.css` prefix, `index.html` structure) and who updates `test/fixtures/frontend-b705683.json`? | GE-07, GE-08, GE-09, GE-10 | The **default applies without a written decision** (see *Gates and defaults* below): new files only, no styling hooks into guarded markup |
 | **G3** | Will any *shared competitive state* be introduced (a stateless score endpoint, a relay, signed submissions)? Requires: new origin in `connect-src`, abuse analysis, sybil plan, and an explicit statement that client scores are unverifiable. | GE-12, GE-18 (the shared-board halves) | **Not approved.** Competition stays local |
 | **G4** | Will any engagement analytics exist? Requires: first-party, CSP-listed, opt-in, wallet address never transmitted, retention stated. | Phase 4 analytics item | **Not approved.** Qualitative feedback only |
-| **G5** | Does "Clear saved data" also clear game progress (Q9)? | Phase 1 storage copy | Two separate actions; games clear separately and say so |
+| **G5** | Does "Clear saved data" also clear game progress (Q9)? | Phase 1 storage copy | **Default:** two separate actions. The existing button keeps clearing console caches only; the games panel exposes its own clearly labelled "Clear game progress" that clears **all identity buckets**, not just the active one |
 | **G6** | Is a repo-defined "season" (a table in the build) acceptable as the meaning of a season? | GE-18 | Yes, Tier A version, if Phase 4 happens |
 
 **Why simpler alternatives fail, stated explicitly (§5 of the brief):**
@@ -509,11 +553,11 @@ Run each checkpoint at the end of every phase; each is a pass/fail, not a review
 | S3 | No approval, claim, stake, unstake or merge is initiated by game UI | Manual review + import test |
 | S4 | No `BURN-` string is generated; hand-off pre-selects nothing | Static assertion + Playwright test on `GE-06` |
 | S5 | No new origin, header, or CSP change | `git diff web/_headers` empty; CSP assertions unchanged |
-| S6 | No new dependency | `git diff package.json package-lock.json` empty |
+| S6 | **No new dependency**; test-script changes are allowed | `package-lock.json` diff empty, and any `package.json` diff is confined to `scripts` (a new `test/games-*.mjs` entry joined into the existing `test`/`test:browser` chains, §7.2) |
 | S7 | No pin, ABI or deployment-record change | `git diff sdk/pins-* abi/ docs/deployments/` empty |
 | S8 | No fabricated zeros; `Unavailable`/`—` preserved | No-network Playwright run + code review of every formatted value |
 | S9 | Local-scores disclaimer on every score surface | Copy test |
-| S10 | No wallet address leaves the device | Route/request log in every game spec asserts zero outbound requests |
+| S10 | No wallet address leaves the device **as a side effect of gameplay**. Voluntary, user-initiated sharing is the single exception and is opt-in, never default. | Route/request log in every game spec asserts zero outbound request from game code; a copy test asserts share text contains no address unless the user ticks "include my address"; a spec asserts the default share text has none. (Note: sharing is inherently outside any request log — the exception is stated so I-checkpoint and code agree.) |
 | S11 | Storage is validated, capped, discardable | Unit tests on corrupt/oversize/forward-version fixtures |
 | S12 | Baseline surfaces unchanged | `test/frontend-baseline.mjs` green with no fixture edit |
 | S13 | Reduced motion and keyboard parity hold | Dedicated specs |
@@ -629,6 +673,8 @@ touches verified holdings.
 | R8 | Protocol revision invalidates quiz/milestone/ladder content | Low–medium | Content rot | Phase 4 maintenance note; single source for protocol rules |
 | R9 | Someone proposes a shared leaderboard mid-phase | Medium | Architecture drift past the gates | **G3** exists; the answer without it is "local only" |
 | R10 | Playwright flake from timing-based games | Medium | CI noise | Fixed-step simulation in tests, seeded input replay, no wall-clock assertions |
+| R11 | Nested `dist/games/*` chunks escape the 500,000-byte cap because `build.mjs:55` does not walk directories | **High if unaddressed** | Budget silently unenforced; CI passes while the deployment grows | Mandatory first task of Phase 1 (§4.4): emit flat **or** walk `dist/` recursively and assert every expected chunk is in the report |
+| R12 | Per-identity storage grows unbounded with wallet switching | Low | Quota exceeded; silent write failures | 5-bucket LRU cap with copy notice (§4.7); writes are best-effort and never throw into gameplay |
 
 ### 12.5 Rollback
 
