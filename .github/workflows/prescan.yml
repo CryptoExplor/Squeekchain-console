@@ -1,0 +1,48 @@
+name: Prescan Sepolia snapshot
+# Phase 10: daily display-only snapshot of the Explore index at a finalized block
+# (head - 64). The site verifies the block hash on two RPC peers before using it and
+# scans only N+1..head; transactions never read it. Commits only when it changed.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: prescan-sepolia
+  cancel-in-progress: false
+jobs:
+  prescan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Logs come from the bundle's logs role (Tenderly, then 0xRPC); PublicNode prunes old logs.
+      - name: Scan Sepolia to a finalized block
+        run: |
+          for attempt in 1 2 3; do
+            node scripts/prescan.mjs && exit 0
+            echo "prescan attempt $attempt failed; retrying in 60 s"; sleep 60
+          done
+          exit 1
+      - name: Check the snapshot decodes against the pinned profile
+        run: node test/explore-snapshot.mjs
+      - name: Commit when changed
+        run: |
+          if git diff --quiet -- web/snapshot/sepolia.json && git ls-files --error-unmatch web/snapshot/sepolia.json >/dev/null 2>&1; then
+            echo "Snapshot unchanged"; exit 0
+          fi
+          git config user.name "CryptoExplor"
+          git config user.email "102873939+CryptoExplor@users.noreply.github.com"
+          git add web/snapshot/sepolia.json
+          git commit -m "chore(snapshot): Sepolia prescan at block $(node -p "require('./web/snapshot/sepolia.json').blockNumber")"
+          git pull --rebase origin main
+          git push origin HEAD:main
