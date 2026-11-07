@@ -3,7 +3,7 @@ const owner='0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54',other='0x11111111111111
 async function boot({multiple=false,hold=false,disconnected=false,profile='sepolia',fail=false,empty=false,holdProfiles=false,initialChain='0xaa36a7',rejectSwitch=false,unknownChain=false,holdNetwork=false,ignoreSwitch=false,earlyNetworkEvent=false}={}){
  const {mount}=await import('/app.js');
  if(disconnected)localStorage.setItem('wheelhouse:disconnected','true');
- localStorage.setItem('squeekchain:profile',profile);history.replaceState(null,'',`#${profile}/squeeks`);
+ localStorage.setItem('squeekchain:profile',profile);history.replaceState(null,'',`#${profile}/playground`);
  const owner='0x598958Abf7d8DB8Dd468cb53DD6BA705581bFf54',verification={ok:true,trusted:true,blockNumber:'100'};
  const net={core:{settledThroughRound:'10',blockHeight:'100',paused:false},mining:{lagRounds:'0',minted:{sqk:'1'}},nft:{totalSupply:'3'},checkpoint:{canCheckpoint:true},verification};
  const h=window.sessions={calls:[],loads:[],reads:[],hold,fail,empty,holdProfiles,verification,rejectSwitch,unknownChain,holdNetwork,ignoreSwitch,earlyNetworkEvent};

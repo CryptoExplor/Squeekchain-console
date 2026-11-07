@@ -208,7 +208,7 @@ test('structure: wallet menu copy, pending dot, Activity drawer and confirmed cl
   await expect(page.getByTestId('settings-sheet')).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByTestId('wallet-button').click(); await page.getByTestId('btn-disconnect').click();
-  await expect(page).toHaveURL(/#sepolia\/squeeks$/);
+  await expect(page).toHaveURL(/#sepolia\/playground$/);
   await expect(page.getByTestId('wallet-chip')).toHaveCount(0);
   await page.evaluate(() => window.squeek.destroy());
 });
