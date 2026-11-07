@@ -6,6 +6,7 @@ import {
   CapsuleGeometry, PlaneGeometry, BoxGeometry, MeshPhysicalMaterial, MeshStandardMaterial, ShadowMaterial,
   HemisphereLight, DirectionalLight, PMREMGenerator, Color, SRGBColorSpace, ACESFilmicToneMapping,
   PCFSoftShadowMap, Vector3, BufferGeometry, LineBasicMaterial, LineSegments, Float32BufferAttribute,
+  CanvasTexture, MeshBasicMaterial, NoToneMapping,
 } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
@@ -215,4 +216,23 @@ export function mount(host, { reducedMotion = false } = {}) {
       scene.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); }); scene.environment?.dispose?.(); renderer.dispose();
     },
   };
+}
+
+
+// Share card stage: the flat card (a 2D canvas) on a thin slab that tilts gently. Shares three.js with the hero
+// so no second copy is downloaded. preserveDrawingBuffer lets the page save the canvas as a PNG.
+export function cardStage(source, { width = 1200, height = 675, dark = false } = {}) {
+  const renderer = new WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'low-power' });
+  renderer.setPixelRatio(1); renderer.setSize(width, height, false); renderer.outputColorSpace = SRGBColorSpace; renderer.toneMapping = NoToneMapping;
+  renderer.setClearColor(new Color(dark ? 0x050507 : 0xf3ead6), 1);
+  const scene = new Scene(), aspect = width / height;
+  const camera = new PerspectiveCamera(30, aspect, 0.1, 50); camera.position.set(0, 0, 4.1);
+  const texture = new CanvasTexture(source); texture.colorSpace = SRGBColorSpace; texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const cardH = 1.78, cardW = cardH * (source.width / source.height);
+  const edge = new MeshBasicMaterial({ color: BRAND.yellow }), face = new MeshBasicMaterial({ map: texture });
+  const card = new Mesh(new BoxGeometry(cardW, cardH, 0.05), [edge, edge, edge, edge, face, edge]);
+  scene.add(card);
+  const frame = t => { texture.needsUpdate = true; card.rotation.y = Math.sin(t * 0.9) * 0.16; card.rotation.x = Math.sin(t * 0.6) * 0.06; card.position.y = Math.sin(t * 1.3) * 0.02; renderer.render(scene, camera); };
+  const canvas = renderer.domElement; canvas.width = width; canvas.height = height;
+  return { canvas, frame, dispose: () => { texture.dispose(); face.dispose(); edge.dispose(); card.geometry.dispose(); renderer.dispose(); renderer.forceContextLoss?.(); } };
 }

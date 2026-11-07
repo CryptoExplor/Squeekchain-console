@@ -6,11 +6,10 @@ Wheelhouse is a static Cloudflare Pages app at https://wheel-house.pages.dev. Pu
 
 | Profile | Working capabilities |
 | --- | --- |
-| Sepolia v6 | Verified network/holdings, wallet-held NFT claims and merges, checkpoint, art, token detail, read-only address views, merge planning and local Activity (remote history/earnings unavailable). No staking or claim-and-stake. |
-| Sepolia v9 | Verified network, wallet/deposited NFTs, deposit/withdraw, scoped approvals, wallet/deposited merges, SQK stake/unstake, claim/claim-and-stake, checkpoint, art, token detail, read-only address views, merge planning, Activity and available earnings. |
+| Sepolia (`core-sepolia-20261103`) | Verified network, wallet/deposited NFTs, deposit/withdraw, scoped approvals, wallet/deposited merges, SQK stake/unstake, claim/claim-and-stake, checkpoint, art, token detail, read-only address views, merge planning, Activity and available earnings. |
 | Mainnet | Not deployed; no deployment reads or actions. |
 
-Keys are `sepolia-v6`, `sepolia-v9` and `mainnet`. v9 is the default; saved choices and qualified links preserve context. Wallet identity is independent of profile and watch mode. Connect/profile selection requests the wallet network; rejection allows a menu retry. Silent restore, cross-tab hints and watch-only navigation do not request network changes.
+Keys are `sepolia` and `mainnet`. Sepolia is the default; older v6/v9 graphs are no longer offered; saved choices and qualified links preserve context. Wallet identity is independent of profile and watch mode. Connect/profile selection requests the wallet network; rejection allows a menu retry. Silent restore, cross-tab hints and watch-only navigation do not request network changes.
 
 Connected pending reads show Loading; failed reads show Unavailable with Retry without reconnecting. A real empty portfolio is distinct from missing data. Account/profile generations reject late reads and simulations. Invalid links recover to owner mode on normal navigation; watched detail scope survives profile changes/reload. Account history excludes ownerless local records and clears pagination on disconnect.
 
