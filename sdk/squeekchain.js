@@ -153,6 +153,23 @@ export function createSqueekchain({ profileKey = DEFAULT_PROFILE, rpcUrl, provid
       staking:{principal:sqkAmount(principal[0]),fresh:sqkAmount(principal[1]),mature:BigInt(principal[1])<=BigInt(principal[0])?sqkAmount(principal[0]-principal[1]):null,power:String(power[0]),sqkPower:String(power[1])}, net };
     return { ...value, mergePlan: plan(value) };
   }
+  // Fresh on-chain custody for just the IDs an action names, at one verified block. Same answer as
+  // "is it in the owner's fresh inventory" (wallet-held or deposited by owner) without rescanning logs.
+  async function holdings(owner, ids) {
+    owner = getAddress(owner.toLowerCase());
+    const tokenIds = ids.map(positive);
+    const reads = tokenIds.flatMap(id => ['ownerOf','level','nextMergeHeight'].map(functionName => ({address:addr.nft,abi:A.nft,functionName,args:[id]})));
+    const values = await client.multicall({contracts:reads,allowFailure:true,blockNumber:activeSnapshot.blockNumber});
+    const staked = tokenIds.filter((_,i) => values[i*3].status==='success' && same(values[i*3].result, addr.staking));
+    const depositors = staked.length ? await client.multicall({contracts:staked.map(id=>({address:addr.staking,abi:A.staking,functionName:'depositor',args:[addr.nft,id]})),allowFailure:false,blockNumber:activeSnapshot.blockNumber}) : [];
+    return { owner, squeeks: tokenIds.map((id,i) => {
+      const [holder, level, next] = values.slice(i*3, i*3+3);
+      if (holder.status!=='success' || level.status!=='success' || next.status!=='success') throw new Error('Token not in fresh on-chain inventory');
+      const deposited = same(holder.result, addr.staking);
+      if (deposited ? !same(depositors[staked.indexOf(id)], owner) : !same(holder.result, owner)) throw new Error('Token not in fresh on-chain inventory');
+      return { tokenId:String(id), deposited, level:Number(level.result), nextMergeHeight:String(next.result) };
+    }) };
+  }
   function plan(status) {
     const pairs = [], height = BigInt(status.net.core.blockHeight), max = status.net.policy.maximumLevel;
     if (!status.net.policy.mergesOpen) return {pairs,note:ACTION_REASONS.mergesClosed};
@@ -246,7 +263,7 @@ export function createSqueekchain({ profileKey = DEFAULT_PROFILE, rpcUrl, provid
   }
   async function art(tokenId) { return {tokenId:String(tokenId),...parseSqueekMetadata(await read('nft',A.nft,'tokenURI',[positive(tokenId)]))}; }
   return { profile,addresses:addr,client,invalidateChain:context.invalidateChain,rpcDiagnostics:()=>context.rpcDiagnostics?.()??[],
-    verify:()=>run(async()=>verification),networkStatus:()=>run(networkStatus),walletStatus:owner=>run(()=>walletStatus(owner)),idsOwned:owner=>run(()=>idsOwned(owner)),
+    verify:()=>run(async()=>verification),networkStatus:()=>run(networkStatus),walletStatus:owner=>run(()=>walletStatus(owner)),holdings:(owner,ids)=>run(()=>holdings(owner,ids)),idsOwned:owner=>run(()=>idsOwned(owner)),
     actionPreview:(owner,action,input={})=>{ if(['merge','mergeDeposited'].includes(action))requireBurn(input.donor,input.confirm);return run(()=>actionPreview(owner,action,input)); },
     mergePreview:(owner,survivor,donor,options={})=>{requireBurn(donor,options.confirm);return run(()=>actionPreview(owner,'merge',{survivor,donor,...options}));},
     mergePlan:owner=>run(async()=>plan(await walletStatus(owner))),claimPreview:owner=>run(()=>claimPreview(owner)),checkpointPreview:owner=>run(()=>actionPreview(owner,'checkpoint')),

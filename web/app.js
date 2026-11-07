@@ -272,19 +272,35 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       }
     }
   });
+  // Previews and actions get their own adapter (its own run queue). The shared adapter serialises
+  // every read (network refreshes, inventory scans, art fallbacks), and a preview used to wait
+  // behind all of them while the RPC tab filled with successful calls and the panel stayed empty.
+  let actionAdapter=null;
+  function actionsFor(load){
+    if(adapterFactory||!load.adapter)return load.adapter;
+    if(actionAdapter?.generation!==load.generation)actionAdapter={generation:load.generation,adapter:buildAdapter(load.profileKey)};
+    return actionAdapter.adapter;
+  }
+  // Fresh on-chain custody check for only the named IDs (not a full inventory rescan).
+  async function freshHoldings(load,owner,ids){
+    const adapter=actionsFor(load);
+    const live=adapter.holdings?await adapter.holdings(owner,ids):await adapter.walletStatus(owner);assertCurrent(load);
+    return id=>{const found=live.squeeks.find(item=>String(item.tokenId)===String(BigInt(id)));if(!found)throw new Error('Token not in fresh on-chain inventory');return found;};
+  }
+  const PREVIEW_METHODS=['mergePreview','claimPreview','actionPreview','checkpointPreview'];
   const readOnce = async (load, method, args) => {
     if(['mergePreview','claimPreview','actionPreview','checkpointPreview'].includes(method)&&state.account&&state.chainId!==11155111)throw new Error('Wrong chain: Sepolia required');
     // API rows are display hints, NEVER a transaction ID/eligibility source.
     if(!adapterFactory&&['mergePreview','claimPreview','actionPreview'].includes(method)){
       const action=method==='mergePreview'?'merge':method==='claimPreview'?'claim':args[1];
       const needsIds=['merge','mergeDeposited','deposit','withdraw','approveNft'].includes(action);
-      if(needsIds){const live=await load.adapter.walletStatus(args[0]);assertCurrent(load);const owned=id=>{const found=live.squeeks.find(item=>String(item.tokenId)===String(id));if(!found)throw new Error('Token not in fresh on-chain inventory');return found.tokenId;};
+      if(needsIds){const input0=method==='mergePreview'?[args[1],args[2]]:method==='claimPreview'?args[1]:['survivor','donor','tokenId'].map(f=>args[2]?.[f]).filter(Boolean).concat(args[2]?.tokenIds??[]);const find=await freshHoldings(load,args[0],input0);const owned=id=>find(id).tokenId;
         if(method==='mergePreview')args=[args[0],owned(args[1]),owned(args[2]),args[3]];
         else if(method==='claimPreview')args=[args[0],args[1].map(owned)];
         else {const input={...args[2]};for(const field of ['survivor','donor','tokenId'])if(input[field])input[field]=owned(input[field]);if(input.tokenIds)input.tokenIds=input.tokenIds.map(owned);args=[args[0],action,input];}
       }
     }
-    const value=await load.adapter[method](...args);assertCurrent(load);
+    const value=await (PREVIEW_METHODS.includes(method)?actionsFor(load):load.adapter)[method](...args);assertCurrent(load);
     const verification=method==='verify'?value:value?.verification;if(verification)renderVerification(verification);
     return value;
   };
@@ -1121,7 +1137,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!capabilities().merge) throw new Error(capabilities().reasons.unavailable);
     const owner = state.account ?? state.inspected;
     const load = captureLoad();
-    if(!adapterFactory){const fresh=await load.adapter.walletStatus(owner);assertCurrent(load);const find=id=>{const token=fresh.squeeks.find(t=>String(t.tokenId)===String(BigInt(id)));if(!token)throw new Error('Token not in fresh on-chain inventory');return token;};const a=find(pair.survivor),b=find(pair.donor);pair={survivor:a.tokenId,donor:b.tokenId,nextLevel:a.level+1,deposited:a.deposited};}
+    if(!adapterFactory){const find=await freshHoldings(load,owner,[pair.survivor,pair.donor]);const a=find(pair.survivor),b=find(pair.donor);pair={survivor:a.tokenId,donor:b.tokenId,nextLevel:a.level+1,deposited:a.deposited};}
     const confirm = `BURN-${BigInt(pair.donor)}`;
     const confirmed = await confirmModal({
       title: `Keep #${pair.survivor} · burn #${pair.donor}`,
@@ -1172,12 +1188,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!capabilities().deposit) throw new Error(capabilities().reasons.unavailable);
     const load = captureLoad(), owner = state.account;
     if (!owner || owner.toLowerCase() !== state.inspected?.toLowerCase()) throw new Error('Connect the inspected owner wallet');
-    if(action==='mergeDeposited'&&!adapterFactory){const fresh=await load.adapter.walletStatus(owner);assertCurrent(load);const canonical=id=>{const token=fresh.squeeks.find(t=>String(t.tokenId)===String(BigInt(id)));if(!token)throw new Error('Token not in fresh on-chain inventory');return token.tokenId;};input={...input,survivor:canonical(input.survivor),donor:canonical(input.donor)};}
+    if(action==='mergeDeposited'&&!adapterFactory){const find=await freshHoldings(load,owner,[input.survivor,input.donor]);const canonical=id=>find(id).tokenId;input={...input,survivor:canonical(input.survivor),donor:canonical(input.donor)};}
     if (action === 'mergeDeposited') {
       const burn = `BURN-${BigInt(input.donor)}`;
       if (!await confirmModal({ title: `Keep #${input.survivor} · burn #${input.donor}`, body: `Keep #${input.survivor} · burn #${input.donor}. #${input.survivor} survives and goes up one level. You will review the simulation before your wallet opens.`, warning: `#${input.donor} is BURNED permanently and cannot be restored. Type ${burn} below before we build or simulate this call.`, requireText: burn, confirmLabel: 'Acknowledge burn & simulate' })) return {ok:false,reason:'cancelled'};
       input = {...input,confirm:burn};
     }
+    {const out=$('v9-result');out.replaceChildren();const p=doc.createElement('p');p.textContent='Simulating on chain…';p.setAttribute('role','status');out.append(p);out.classList.remove('hidden');}
     const preview = await readFor(load,'actionPreview',owner,action,input);
     showOut($('v9-result'),preview);
     if (!preview.ok&&action==='stake'&&preview.approvalRequired&&!opts.autoApproved) {
