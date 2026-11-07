@@ -277,7 +277,7 @@ export async function mountCard(host, initial, { reducedMotion = false, wide = t
   host.replaceChildren(out);
   const render = (t, turn) => {
     if (style === 'night') return styles.drawNight(ctx, data, { t });
-    if (style === 'classic') return styles.drawClassic(ctx, data, { t, dark });
+    if (style === 'classic') return turn === undefined ? styles.drawClassicMoving(ctx, data, { t, dark }) : styles.drawClassic(ctx, data, { t, dark });
     if (stage) stage.frame(t);
     return drawCard(ctx, data, { t, scene: stage?.canvas ?? null, ...(turn === undefined ? {} : { turn }) });
   };

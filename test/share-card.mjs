@@ -52,3 +52,5 @@ const { STYLES, styleSeconds } = await import('../web/share-card.js');
 assert.deepEqual(STYLES.map(s => s[0]), ['flip', 'night', 'classic']); assert.equal(styleSeconds('flip'), LOOP_SECONDS); assert.equal(styleSeconds('classic'), 5);
 const buildSrc = fs.readFileSync(new URL('../build.mjs', import.meta.url), 'utf8'); assert.equal((buildSrc.match(/share-styles\.js/g) || []).length, 2, 'build must ship share-styles.js');
 console.log('share-card: ok');
+
+const stylesMod = await import('../web/share-styles.js'); for (const fn of ['drawNight', 'drawClassic', 'drawClassicMoving']) assert.equal(typeof stylesMod[fn], 'function', fn);

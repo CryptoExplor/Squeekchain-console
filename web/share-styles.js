@@ -165,3 +165,39 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   ctx.restore();
 }
+
+// Classic in motion: the flat card floats as a slab over a plain backdrop. It turns a little left and right,
+// nods and bobs, with a light sheen. The PNG still uses the flat drawClassic.
+const makeFace = () => { if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(CARD_W, CARD_H); const c = document.createElement('canvas'); c.width = CARD_W; c.height = CARD_H; return c; };
+let classicFace = null;
+export function drawClassicMoving(ctx, data, { t = 0, dark = true, makeCanvas = makeFace } = {}) {
+  const W = CARD_W, H = CARD_H;
+  if (!classicFace) classicFace = makeCanvas(W, H);
+  const fctx = classicFace.getContext('2d');
+  fctx.save(); fctx.clearRect(0, 0, W, H); drawClassic(fctx, data, { t, dark });
+  fctx.globalCompositeOperation = 'destination-in'; roundRect(fctx, 0, 0, W, H, 22); fctx.fill(); fctx.globalCompositeOperation = 'source-over';
+  roundRect(fctx, 2, 2, W - 4, H - 4, 20); fctx.strokeStyle = dark ? 'rgba(255,255,255,.16)' : 'rgba(10,10,12,.12)'; fctx.lineWidth = 4; fctx.stroke(); fctx.restore();
+  ctx.save(); ctx.clearRect(0, 0, W, H);
+  const bg = ctx.createRadialGradient(W / 2, H * 0.4, 40, W / 2, H / 2, W * 0.7);
+  bg.addColorStop(0, dark ? '#1C1D23' : '#FFFFFF'); bg.addColorStop(1, dark ? '#050506' : '#E9E2D2');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  const s = 0.8, fw = W * s, fh = H * s, cx = W / 2, cy = H / 2 - 6 + Math.sin(t * 1.3) * 7;
+  // same motion as the first share card's 3D slab: turn ±0.16 rad, nod ±0.06 rad, small bob
+  const yaw = Math.sin(t * 0.9) * 0.16, pitch = Math.sin(t * 0.6) * 0.03, roll = 0, D = 2400, c = Math.cos(yaw), sn = Math.sin(yaw);
+  const sh = ctx.createRadialGradient(cx, H - 40, 10, cx, H - 40, fw * 0.55); sh.addColorStop(0, dark ? 'rgba(0,0,0,.6)' : 'rgba(60,45,20,.28)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.save(); ctx.scale(1, 0.12); ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(cx, (H - 34) / 0.12, fw * 0.55, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.translate(cx, cy); ctx.rotate(roll); ctx.translate(-cx, -cy);
+  const N = 150, sw = W / N, proj = u => { const xl = (u - 0.5) * fw, k = D / (D + xl * sn); return { x: cx + xl * c * k, k, dy: (u - 0.5) * fw * pitch }; };
+  // yellow slab edge on the side turned toward the viewer, like the 3D box's gold sides
+  { const a = proj(0), b = proj(1), e = sn * 16, ka = a.k, kb = b.k; ctx.fillStyle = BRAND.yellow; ctx.beginPath();
+    ctx.moveTo(a.x - Math.max(0, -e), cy - fh * ka / 2 + a.dy); ctx.lineTo(b.x + Math.max(0, e), cy - fh * kb / 2 + b.dy);
+    ctx.lineTo(b.x + Math.max(0, e), cy + fh * kb / 2 + b.dy); ctx.lineTo(a.x - Math.max(0, -e), cy + fh * ka / 2 + a.dy); ctx.closePath(); ctx.fill(); }
+  for (let i = 0; i < N; i++) {
+    const a = proj(i / N), b = proj((i + 1) / N), k = (a.k + b.k) / 2, hgt = fh * k;
+    ctx.drawImage(classicFace, i * sw, 0, sw, H, Math.min(a.x, b.x), cy - hgt / 2 + (a.dy + b.dy) / 2, Math.abs(b.x - a.x) + 0.6, hgt);
+  }
+  ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over'; const sx = cx + sn * 520, gl = ctx.createLinearGradient(sx - 140, 0, sx + 140, 0);
+  gl.addColorStop(0, 'rgba(255,255,255,0)'); gl.addColorStop(0.5, `rgba(255,255,255,${dark ? 0.07 : 0.22})`); gl.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gl; ctx.fillRect(cx - fw / 2, cy - fh / 2 + 24, fw, fh - 48);
+  ctx.restore();
+}
