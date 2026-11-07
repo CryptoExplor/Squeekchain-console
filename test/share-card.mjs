@@ -20,7 +20,7 @@ assert.equal(levelColor(1), '#FCBE46'); assert.equal(levelColor(2), '#597AF7');
   const def = applyShow(base);
   assert.deepEqual(def.stats.map(s => s[1]), ['Squeeks', 'Deposited', 'Claimable SQK']);
   const anon = applyShow(base, { ...DEFAULT_SHOW, address: false, claimable: false, claimed: true, compounded: true, levels: false });
-  assert.equal(anon.address, null); assert.deepEqual(anon.levels, []); assert.deepEqual(anon.orbLevels.map(l => l.level), [1, 2]);
+  assert.equal(anon.address, null); assert.deepEqual(anon.levels, []); assert.deepEqual(anon.orbLevels, []);
   assert.deepEqual(anon.stats, [['10', 'Squeeks'], ['10', 'Deposited'], ['12.5', 'SQK claimed']]); // compounded unknown, skipped
   assert.equal(fileName(anon, 'png').startsWith('wheelhouse-holder-'), true);
   const all = applyShow({ ...base, compounded: '3 SQK' }, { claimed: true, compounded: true });
@@ -52,3 +52,27 @@ const { STYLES, styleSeconds } = await import('../web/share-card.js');
 assert.deepEqual(STYLES.map(s => s[0]), ['flip', 'night', 'classic']); assert.equal(styleSeconds('flip'), LOOP_SECONDS); assert.equal(styleSeconds('classic'), 5);
 const buildSrc = fs.readFileSync(new URL('../build.mjs', import.meta.url), 'utf8'); assert.equal((buildSrc.match(/share-styles\.js/g) || []).length, 2, 'build must ship share-styles.js');
 console.log('share-card: ok');
+
+// Cancellation before capture and constructor failures must not leak tracks.
+const { recordCanvas } = await import('../web/share-card.js');
+const previousRecorder = globalThis.MediaRecorder;
+const previousCancel = globalThis.cancelAnimationFrame;
+let stopped = 0;
+globalThis.cancelAnimationFrame = () => {};
+globalThis.MediaRecorder = class {
+  static isTypeSupported() { return true; }
+  constructor() { throw new Error('Encoder unavailable'); }
+};
+try {
+  const canvas = { captureStream: () => ({ getTracks: () => [{ stop: () => stopped++ }] }) };
+  await assert.rejects(recordCanvas(canvas, () => {}), /Encoder unavailable/);
+  assert.equal(stopped, 1);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(recordCanvas(canvas, () => {}, { signal: controller.signal }), /cancelled/);
+  assert.equal(stopped, 1);
+  await assert.rejects(recordCanvas(canvas, () => {}, { seconds: 0 }), /Invalid recording/);
+} finally {
+  globalThis.MediaRecorder = previousRecorder;
+  globalThis.cancelAnimationFrame = previousCancel;
+}
+console.log('share-card recording lifecycle: ok');

@@ -44,7 +44,7 @@ export function applyShow(data, show = DEFAULT_SHOW) {
   const value = { count: data.count, power: data.power, claimable: sqkNum(data.claimable), claimed: sqkNum(data.claimed), compounded: sqkNum(data.compounded) };
   const pick = keys => keys.filter(k => on[k] && data[k] !== '—').map(k => [value[k], label[k]]);
   const front = pick(FRONT_KEYS), back = pick(BACK_KEYS);
-  return { ...data, address: on.address ? data.address : null, front, back, stats: [...front, ...back], levels: on.levels ? data.levels : [], orbLevels: data.levels, meta: on.meta };
+  return { ...data, address: on.address ? data.address : null, front, back, stats: [...front, ...back], levels: on.levels ? data.levels : [], orbLevels: on.levels ? data.levels : [], meta: on.meta };
 }
 
 export function fileName(data, ext) {
@@ -82,19 +82,19 @@ const ease = x => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
 export function cardTurn(t) {
   const p = ((t % LOOP_SECONDS) + LOOP_SECONDS) % LOOP_SECONDS;
   const base = p < 3 ? 0 : p < 4 ? ease(p - 3) * Math.PI : p < 7 ? Math.PI : Math.PI + ease(p - 7) * Math.PI;
-  return base + Math.sin(t * 1.1) * 0.22;
+  return base + Math.sin(p * Math.PI * 2 / LOOP_SECONDS) * 0.12;
 }
 
 // Grey studio backdrop with grain, like a product shot.
 let grain = null;
 function drawStudio(ctx, make) {
   const W = CARD_W, H = CARD_H;
-  const g = ctx.createLinearGradient(0, 0, W * 0.55, H); g.addColorStop(0, '#E4E4E7'); g.addColorStop(0.4, '#A3A3A9'); g.addColorStop(0.72, '#2A2A2F'); g.addColorStop(1, '#0B0B0D');
+  const g = ctx.createLinearGradient(0, 0, W * 0.55, H); g.addColorStop(0, '#414757'); g.addColorStop(0.4, '#252936'); g.addColorStop(0.72, '#13151D'); g.addColorStop(1, '#08090D');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  const band = ctx.createLinearGradient(W, 0, W * 0.35, H); band.addColorStop(0, 'rgba(255,255,255,.55)'); band.addColorStop(0.35, 'rgba(255,255,255,0)'); band.addColorStop(0.7, 'rgba(0,0,0,.55)');
+  const band = ctx.createLinearGradient(W, 0, W * 0.35, H); band.addColorStop(0, 'rgba(163,183,255,.18)'); band.addColorStop(0.35, 'rgba(255,255,255,0)'); band.addColorStop(0.7, 'rgba(0,0,0,.55)');
   ctx.fillStyle = band; ctx.fillRect(0, 0, W, H);
   if (!grain) { grain = make(W, H); const gc = grain.getContext('2d'); let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let i = 0; i < 42000; i++) { const v = rnd() > 0.5 ? 255 : 0; gc.fillStyle = `rgba(${v},${v},${v},${0.05 + rnd() * 0.08})`; gc.fillRect(rnd() * W, rnd() * H, 1.4, 1.4); } }
+    for (let i = 0; i < 42000; i++) { const v = rnd() > 0.5 ? 255 : 0; gc.fillStyle = `rgba(${v},${v},${v},${0.008 + rnd() * 0.02})`; gc.fillRect(rnd() * W, rnd() * H, 1.4, 1.4); } }
   ctx.drawImage(grain, 0, 0);
 }
 
@@ -188,6 +188,7 @@ export function drawBack(ctx, data, { t = 0 } = {}) {
   ctx.lineWidth = 22; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 165, Math.sin(a) * 165); ctx.stroke(); }
   ctx.restore();
   logo(ctx, data); holo(ctx, FACE_W - 92, 36, 50, t);
+  if (!data.back.length && data.meta === false) { label(ctx, 'HOLDER CHECKPOINT', 44, 182); ctx.fillStyle='#FFFFFF'; ctx.font=`600 28px ${SANS}`; ctx.fillText('No reward metrics selected',44,238); }
   ctx.textBaseline = 'alphabetic';
   const back = data.back.length ? data.back : (data.meta !== false ? [[data.date, 'Checked']] : []);
   if (back[0]) { label(ctx, back[0][1], 44, 182); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, back[0][0], 460, 60, 700, SANS); ctx.fillText(back[0][0], 42, 244); }
@@ -235,21 +236,44 @@ export function pickVideoType(isSupported = type => globalThis.MediaRecorder?.is
 }
 
 // Records `seconds` of the canvas while frame(t) draws each step. Resolves { blob, ext }.
-export function recordCanvas(canvas, frame, { seconds = 5, fps = 30, signal } = {}) {
+export function recordCanvas(canvas, frame, { seconds = 5, fps = 30, signal, onProgress } = {}) {
   const kind = pickVideoType();
   if (!kind || typeof canvas.captureStream !== 'function') return Promise.reject(new Error('Video recording is not supported in this browser.'));
-  const stream = canvas.captureStream(fps), chunks = [];
-  const recorder = new MediaRecorder(stream, { mimeType: kind.type, videoBitsPerSecond: 6_000_000 });
-  recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 30 || !Number.isFinite(fps) || fps <= 0 || fps > 60) return Promise.reject(new Error('Invalid recording duration or frame rate.'));
   return new Promise((resolve, reject) => {
-    recorder.onerror = event => reject(event.error ?? new Error('Recording failed.'));
-    recorder.onstop = () => { stream.getTracks().forEach(track => track.stop()); const blob = new Blob(chunks, { type: kind.type.split(';')[0] }); blob.size ? resolve({ blob, ext: kind.ext }) : reject(new Error('Recording came out empty.')); };
-    const start = performance.now();
-    let cancelled = false;
-    signal?.addEventListener('abort', () => { cancelled = true; if (recorder.state !== 'inactive') recorder.stop(); }, { once: true });
-    recorder.onstop = (orig => () => { if (cancelled) { stream.getTracks().forEach(track => track.stop()); reject(new Error('Recording cancelled.')); } else orig(); })(recorder.onstop);
-    const step = now => { if (cancelled) return; const t = (now - start) / 1000; frame(t); if (t < seconds) requestAnimationFrame(step); else recorder.stop(); };
-    recorder.start(250); requestAnimationFrame(step);
+    let stream, recorder, raf = 0, timer, settled = false;
+    const chunks = [];
+    const finish = (error, result) => {
+      if (settled) return;
+      settled = true; cancelAnimationFrame(raf); clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      if (recorder && recorder.state !== 'inactive') { try { recorder.stop(); } catch {} }
+      stream?.getTracks().forEach(track => track.stop());
+      error ? reject(error) : resolve(result);
+    };
+    const abort = () => finish(new Error('Recording cancelled.'));
+    if (signal?.aborted) return abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      frame(0);
+      stream = canvas.captureStream(fps);
+      recorder = new MediaRecorder(stream, { mimeType: kind.type, videoBitsPerSecond: 8_000_000 });
+      recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+      recorder.onerror = event => finish(event.error ?? new Error('Recording failed.'));
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: kind.type.split(';')[0] });
+        finish(blob.size ? null : new Error('Recording came out empty.'), { blob, ext: kind.ext });
+      };
+      const start = performance.now();
+      const step = now => {
+        if (settled || recorder.state !== 'recording') return;
+        try { const t = Math.min((now - start) / 1000, seconds); frame(t); onProgress?.(t / seconds); }
+        catch (error) { finish(error); return; }
+        raf = requestAnimationFrame(step);
+      };
+      recorder.start(250); raf = requestAnimationFrame(step);
+      timer = setTimeout(() => { if (!settled && recorder.state === 'recording') recorder.stop(); }, seconds * 1000);
+    } catch (error) { finish(error); }
   });
 }
 
@@ -271,30 +295,71 @@ export async function mountCard(host, initial, { reducedMotion = false, wide = t
   await loadFonts(); let data = initial, style = STYLES.some(([k]) => k === firstStyle) ? firstStyle : 'flip';
   const styles = await import('./share-styles.js');
   const out = document.createElement('canvas'); out.width = CARD_W; out.height = CARD_H; const ctx = out.getContext('2d');
-  let stage = null;
-  if (wide && loadStage && webglAvailable()) { try { stage = (await loadStage())({ width: WIN.w * 2, height: WIN.h * 2 }); } catch { stage = null; } }
+  let stage = null, flip = null, stagePromise = null, alive = true, recording = false;
+  const front = defaultCanvas(FACE_W, FACE_H), back = defaultCanvas(FACE_W, FACE_H);
+  const frontCtx = front.getContext('2d'), backCtx = back.getContext('2d');
   out.classList.add('share-canvas'); out.setAttribute('aria-label', 'Holder share card preview'); out.setAttribute('role', 'img');
   host.replaceChildren(out);
+  const ensureStage = () => {
+    if (!wide || !loadStage || !webglAvailable() || stagePromise) return stagePromise;
+    stagePromise = Promise.resolve().then(loadStage).then(factory => {
+      if (!alive) return;
+      stage = factory({ width: WIN.w * 2, height: WIN.h * 2 });
+      flip = stage.createFlip?.(front, back);
+      if (!alive) { flip?.dispose(); stage.dispose(); flip = stage = null; }
+    }).catch(() => { flip?.dispose(); stage?.dispose(); flip = stage = null; });
+    return stagePromise;
+  };
   const render = (t, turn) => {
+    if (!alive) return;
     if (style === 'night') return styles.drawNight(ctx, data, { t });
     if (style === 'classic') return styles.drawClassic(ctx, data, { t, dark });
-    if (stage) stage.frame(t);
-    return drawCard(ctx, data, { t, scene: stage?.canvas ?? null, ...(turn === undefined ? {} : { turn }) });
+    const phase = ((t % LOOP_SECONDS) + LOOP_SECONDS) % LOOP_SECONDS;
+    stage?.frame(phase);
+    if (!flip) return drawCard(ctx, data, { t: phase, scene: stage?.canvas ?? null, ...(turn === undefined ? {} : { turn }) });
+    drawFront(frontCtx, data, { t: phase, scene: stage.canvas });
+    drawBack(backCtx, data, { t: phase });
+    drawStudio(ctx, defaultCanvas);
+    flip.frame(phase, turn ?? cardTurn(phase));
+    const shadow = ctx.createRadialGradient(600, 573, 4, 600, 573, 365);
+    shadow.addColorStop(0, 'rgba(0,0,0,.6)'); shadow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.save(); ctx.translate(600,573); ctx.scale(1,0.12); ctx.fillStyle=shadow; ctx.translate(-600,-573); ctx.fillRect(200,173,800,800); ctx.restore();
+    ctx.drawImage(flip.canvas, 0, 0);
+    ctx.fillStyle = '#ddd'; ctx.font = `500 15px ${MONO}`; ctx.textAlign = 'center';
+    ctx.fillText('WHEEL-HOUSE.PAGES.DEV', CARD_W / 2, 640); ctx.textAlign = 'start';
   };
-  const draw = t => render(t);
-  draw(0.6);
-  let raf = 0, alive = true, recording = false; const start = performance.now(), abort = new AbortController();
-  const loop = now => { if (!alive) return; if (!recording) draw(0.8 + (now - start) / 1000); raf = requestAnimationFrame(loop); };
+  if (style === 'flip') await ensureStage();
+  render(0.6);
+  let raf = 0; const start = performance.now(), abort = new AbortController();
+  const loop = now => { if (!alive) return; if (!recording && document.visibilityState !== 'hidden') render(0.8 + (now - start) / 1000); raf = requestAnimationFrame(loop); };
   if (!reducedMotion) raf = requestAnimationFrame(loop);
   return {
-    mode: stage ? '3d' : '2d',
+    get mode() { return flip ? '3d' : '2d'; },
     get style() { return style; },
-    update: next => { data = next; if (reducedMotion) draw(0.8); },
-    setStyle: next => { if (recording || !STYLES.some(([k]) => k === next)) return false; style = next; draw(0.8); return true; },
-    // The picture is held still; the flip card always shows its front.
-    png: () => new Promise((resolve, reject) => { render(0.6, 0); out.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not make the picture.')), 'image/png'); }),
-    video: async seconds => { if (recording) throw new Error('Already recording.'); recording = true; try { return await recordCanvas(out, draw, { seconds: seconds ?? styleSeconds(style), signal: abort.signal }); } finally { recording = false; } },
-    stop: () => { alive = false; abort.abort(); cancelAnimationFrame(raf); stage?.dispose(); host.replaceChildren(); },
+    update: next => { if (!recording && alive) { data = next; render(0.8); } },
+    setStyle: next => {
+      if (recording || !alive || !STYLES.some(([k]) => k === next)) return false;
+      style = next; render(0.8);
+      if (style === 'flip') ensureStage()?.then(() => { if (alive && !recording) render(0.8); });
+      return true;
+    },
+    png: (side = 'front') => new Promise((resolve, reject) => {
+      if (!alive || recording) return reject(new Error('Wait for the current export to finish.'));
+      render(side === 'back' ? 4.5 : 0.6, side === 'back' ? Math.PI : 0);
+      out.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not make the picture.')), 'image/png');
+    }),
+    video: async (seconds, onProgress) => {
+      if (recording || !alive) throw new Error('Already recording or closed.');
+      recording = true;
+      const controller = new AbortController();
+      const cancel = () => controller.abort();
+      const visibility = () => { if (document.visibilityState === 'hidden') controller.abort(); };
+      abort.signal.addEventListener('abort', cancel, { once: true });
+      document.addEventListener('visibilitychange', visibility);
+      try { return await recordCanvas(out, t => render(t), { seconds: seconds ?? styleSeconds(style), signal: controller.signal, onProgress }); }
+      finally { recording = false; abort.signal.removeEventListener('abort', cancel); document.removeEventListener('visibilitychange', visibility); }
+    },
+    stop: () => { alive = false; abort.abort(); cancelAnimationFrame(raf); flip?.dispose(); stage?.dispose(); host.replaceChildren(); },
   };
 }
 
