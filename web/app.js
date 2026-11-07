@@ -354,7 +354,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const profile = getProfile(profileKey);
     if (!profile.addresses) return null;
     if (adapterFactory) return adapterFactory(profileKey, { signal: loadController.signal, generation });
-    return createSqueekchain({ profileKey, cache: store, verificationCache, chainCache, discoveryCache, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined, provider: () => state.account ? provider() : null });
+    return createSqueekchain({ profileKey, cache: store, verificationCache, chainCache, discoveryCache, signal: loadController.signal, rpcUrl: store.get("wheelhouse:rpc") || undefined });
+    // Phase 11: chain reads (previews, simulations, inventory) never go through the wallet's RPC.
+    // Wallet RPCs cap/serialise eth_getLogs and made previews hang for minutes; the two public
+    // peers verify every read. The wallet is used only to check the chain and to sign.
   }
 
   function renderProfileOptions() {
