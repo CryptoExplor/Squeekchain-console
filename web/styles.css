@@ -990,3 +990,11 @@ a { color: var(--sqk-blue); }
   .network-strip > a#strip-status { margin-left: 0; }
   #checkpoint-panel .row .btn { width: 100%; }
 }
+
+/* Refresh buttons: spin while reading, brief green tick when done. */
+#btn-refresh.is-refreshing svg, #btn-holder-refresh.is-refreshing { cursor: progress; }
+#btn-refresh.is-refreshing svg { animation: sqk-spin .8s linear infinite; }
+#btn-holder-refresh.is-refreshing { color: transparent; position: relative; }
+#btn-holder-refresh.is-refreshing::after { content: ""; position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--sqk-ink); border-right-color: transparent; animation: sqk-spin .7s linear infinite; }
+#btn-refresh.is-refreshed, #btn-holder-refresh.is-refreshed { border-color: var(--sqk-green); color: var(--sqk-green); transition: border-color .2s, color .2s; }
+@media (prefers-reduced-motion: reduce) { #btn-refresh.is-refreshing svg, #btn-holder-refresh.is-refreshing::after { animation-duration: 2.4s; } }
