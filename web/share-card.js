@@ -263,24 +263,37 @@ export async function loadFonts(doc = document) {
 
 // Opens the card in `host`. Desktop with WebGL renders the scene in 3D (three.js, shared with the hero) under the
 // text layer; phones or no WebGL get the flat scene. One 2D output canvas is what you see, save and record.
-export async function mountCard(host, initial, { reducedMotion = false, wide = true, loadStage } = {}) {
-  await loadFonts(); let data = initial;
+// Card styles the share sheet offers. Flip is the default and the only one with the 3D hamster.
+export const STYLES = [['flip', 'Flip card'], ['night', 'Night scene'], ['classic', 'Classic']];
+export const styleSeconds = style => style === 'flip' ? LOOP_SECONDS : 5;
+
+export async function mountCard(host, initial, { reducedMotion = false, wide = true, loadStage, style: firstStyle = 'flip', dark = true } = {}) {
+  await loadFonts(); let data = initial, style = STYLES.some(([k]) => k === firstStyle) ? firstStyle : 'flip';
+  const styles = await import('./share-styles.js');
   const out = document.createElement('canvas'); out.width = CARD_W; out.height = CARD_H; const ctx = out.getContext('2d');
   let stage = null;
   if (wide && loadStage && webglAvailable()) { try { stage = (await loadStage())({ width: WIN.w * 2, height: WIN.h * 2 }); } catch { stage = null; } }
   out.classList.add('share-canvas'); out.setAttribute('aria-label', 'Holder share card preview'); out.setAttribute('role', 'img');
   host.replaceChildren(out);
-  const draw = t => { if (stage) stage.frame(t); drawCard(ctx, data, { t, scene: stage?.canvas ?? null }); };
+  const render = (t, turn) => {
+    if (style === 'night') return styles.drawNight(ctx, data, { t });
+    if (style === 'classic') return styles.drawClassic(ctx, data, { t, dark });
+    if (stage) stage.frame(t);
+    return drawCard(ctx, data, { t, scene: stage?.canvas ?? null, ...(turn === undefined ? {} : { turn }) });
+  };
+  const draw = t => render(t);
   draw(0.6);
   let raf = 0, alive = true, recording = false; const start = performance.now(), abort = new AbortController();
   const loop = now => { if (!alive) return; if (!recording) draw(0.8 + (now - start) / 1000); raf = requestAnimationFrame(loop); };
   if (!reducedMotion) raf = requestAnimationFrame(loop);
   return {
     mode: stage ? '3d' : '2d',
+    get style() { return style; },
     update: next => { data = next; if (reducedMotion) draw(0.8); },
-    // The picture is always the front, held still, whatever side the preview shows.
-    png: () => new Promise((resolve, reject) => { if (stage) stage.frame(0.6); drawCard(ctx, data, { t: 0.6, scene: stage?.canvas ?? null, turn: 0 }); out.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not make the picture.')), 'image/png'); }),
-    video: async seconds => { if (recording) throw new Error('Already recording.'); recording = true; try { return await recordCanvas(out, draw, { seconds, signal: abort.signal }); } finally { recording = false; } },
+    setStyle: next => { if (recording || !STYLES.some(([k]) => k === next)) return false; style = next; draw(0.8); return true; },
+    // The picture is held still; the flip card always shows its front.
+    png: () => new Promise((resolve, reject) => { render(0.6, 0); out.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not make the picture.')), 'image/png'); }),
+    video: async seconds => { if (recording) throw new Error('Already recording.'); recording = true; try { return await recordCanvas(out, draw, { seconds: seconds ?? styleSeconds(style), signal: abort.signal }); } finally { recording = false; } },
     stop: () => { alive = false; abort.abort(); cancelAnimationFrame(raf); stage?.dispose(); host.replaceChildren(); },
   };
 }

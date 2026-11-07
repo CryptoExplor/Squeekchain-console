@@ -1004,6 +1004,9 @@ a { color: var(--sqk-blue); }
 .share-preview { margin: 12px 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--sqk-line); background: var(--sqk-bg); aspect-ratio: 16 / 9; }
 .share-preview .share-canvas { display: block; width: 100%; height: 100%; }
 .share-actions { gap: 8px; }
+.share-style { gap: 6px; margin: 0 0 10px; flex-wrap: wrap; }
+.share-style .btn { min-height: 36px; }
+.share-style .btn[aria-pressed="true"] { background: #FCBE46; color: #0A0A0C; border-color: #FCBE46; }
 .share-options { display: flex; flex-wrap: wrap; gap: 6px 14px; border: 0; padding: 0; margin: 0 0 8px; }
 .share-options legend { padding: 0; margin-bottom: 6px; color: var(--sqk-muted); }
 .share-options label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; }

@@ -46,4 +46,9 @@ assert.equal(pickVideoType(() => false), null);
 // Read-only: the card module never touches wallets, signing or transactions.
 const src = fs.readFileSync(new URL('../web/share-card.js', import.meta.url), 'utf8');
 for (const word of ['sendTransaction', 'eth_sendTransaction', 'signMessage', 'request(', 'writeContract']) assert.ok(!src.includes(word), `share-card.js must not use ${word}`);
+const styleSrc = fs.readFileSync(new URL('../web/share-styles.js', import.meta.url), 'utf8');
+for (const word of ['sendTransaction', 'eth_sendTransaction', 'signMessage', 'request(', 'writeContract']) assert.ok(!styleSrc.includes(word), `share-styles.js must not use ${word}`);
+const { STYLES, styleSeconds } = await import('../web/share-card.js');
+assert.deepEqual(STYLES.map(s => s[0]), ['flip', 'night', 'classic']); assert.equal(styleSeconds('flip'), LOOP_SECONDS); assert.equal(styleSeconds('classic'), 5);
+const buildSrc = fs.readFileSync(new URL('../build.mjs', import.meta.url), 'utf8'); assert.equal((buildSrc.match(/share-styles\.js/g) || []).length, 2, 'build must ship share-styles.js');
 console.log('share-card: ok');

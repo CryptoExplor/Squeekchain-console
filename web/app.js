@@ -1475,6 +1475,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const SHARE_SHOW_KEY='wheelhouse.shareShow.v1';
   const loadShareShow=card=>{try{const saved=JSON.parse(win.localStorage.getItem(SHARE_SHOW_KEY)||'{}');return {...card.DEFAULT_SHOW,...Object.fromEntries(Object.entries(saved).filter(([k,v])=>k in card.DEFAULT_SHOW&&typeof v==='boolean'))};}catch{return {...card.DEFAULT_SHOW};}};
   const syncShareLink=()=>{const btn=$('share-link');btn.disabled=!shareShow?.address;btn.title=btn.disabled?'The link shows the wallet address, which is hidden on this card.':'';};
+  const renderShareStyles=(card,current)=>{const box=$('share-style');box.querySelectorAll('button').forEach(n=>n.remove());
+    for(const [key,text] of card.STYLES){const btn=doc.createElement('button');btn.type='button';btn.className='btn';btn.textContent=text;btn.setAttribute('data-testid',`share-style-${key}`);btn.setAttribute('aria-pressed',String(key===current));
+      btn.onclick=()=>{if(!shareView?.setStyle(key)){$('share-status').textContent='Wait for the recording to finish.';return;}try{win.localStorage.setItem('wheelhouse.shareStyle.v1',key);}catch{}box.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));$('share-status').textContent='';};
+      box.append(btn);}};
   const renderShareOptions=card=>{const box=$('share-options');box.querySelectorAll('label').forEach(n=>n.remove());
     for(const [key,text] of card.SHOW_FIELDS){const label=doc.createElement('label'),input=doc.createElement('input');input.type='checkbox';input.dataset.key=key;input.setAttribute('data-testid',`share-show-${key}`);
       const missing=card.statKeys.includes(key)&&shareBase[key]==='—';input.checked=!missing&&!!shareShow[key];input.disabled=missing;if(missing){label.classList.add('off');label.title='Not loaded for this wallet yet.';}
@@ -1594,11 +1598,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     shareShow=loadShareShow(card);shareData=card.applyShow(shareBase,shareShow);renderShareOptions(card);
     openSheet('share-sheet');$('share-status').textContent='';
     const wide=win.matchMedia('(min-width: 761px)').matches,reducedMotion=win.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    shareView=await card.mountCard($('share-preview'),shareData,{reducedMotion,wide,loadStage:()=>import('./hero3d.js').then(m=>m.cardStage)});
+    const shareStyleKey='wheelhouse.shareStyle.v1';let firstStyle='flip';try{firstStyle=win.localStorage.getItem(shareStyleKey)||'flip';}catch{}
+    renderShareStyles(card,firstStyle);
+    shareView=await card.mountCard($('share-preview'),shareData,{reducedMotion,wide,style:firstStyle,dark:doc.documentElement.dataset.theme!=='light',loadStage:()=>import('./hero3d.js').then(m=>m.cardStage)});
     if(activeSheet?.id!=='share-sheet'){shareView.stop();shareView=null;}
   });
   $('share-png').onclick=()=>withBusy($('share-png'),async()=>{if(!shareView)return;try{const card=await import('./share-card.js');card.download(await shareView.png(),card.fileName(shareData,'png'));$('share-status').textContent='Picture saved.';}catch(error){$('share-status').textContent=error.message||'Could not make the picture.';}});
-  $('share-video').onclick=()=>withBusy($('share-video'),async()=>{if(!shareView)return;const card=await import('./share-card.js');$('share-status').textContent=`Recording a ${card.LOOP_SECONDS} second clip (both sides)…`;try{const {blob,ext}=await shareView.video(card.LOOP_SECONDS);card.download(blob,card.fileName(shareData,ext));$('share-status').textContent=ext==='mp4'?'Clip saved (MP4).':'Clip saved as WebM. X may not accept WebM; use the picture there.';}catch(error){$('share-status').textContent=`${error.message||'Recording failed.'} The picture still works.`;}});
+  $('share-video').onclick=()=>withBusy($('share-video'),async()=>{if(!shareView)return;const card=await import('./share-card.js');$('share-status').textContent=shareView.style==='flip'?`Recording a ${card.LOOP_SECONDS} second clip (both sides)…`:'Recording a 5 second clip…';try{const {blob,ext}=await shareView.video();card.download(blob,card.fileName(shareData,ext));$('share-status').textContent=ext==='mp4'?'Clip saved (MP4).':'Clip saved as WebM. X may not accept WebM; use the picture there.';}catch(error){$('share-status').textContent=`${error.message||'Recording failed.'} The picture still works.`;}});
   $('share-link').onclick=async()=>{try{await win.navigator.clipboard.writeText(watchLink());$('share-status').textContent='Link copied.';}catch{$('share-status').textContent='Clipboard unavailable.';}};
   $('holder-copy-link').onclick=async()=>{try{await win.navigator.clipboard.writeText(new URL(watchHash(state.profileKey,state.inspected??state.account),win.location.href).href);toast('Link copied','ok');}catch{toast('Clipboard unavailable','warn');}};
   el.art.one.onclick = () => {
