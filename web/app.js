@@ -907,7 +907,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const isV9 = Boolean(getProfile(state.profileKey).addresses);
     el.holder.power.parentElement.querySelector('.label').textContent = isV9 ? 'Deposited' : 'Power';
     const inspected=status?.owner??state.inspected??state.account;
-    el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);$('holder-history-link').classList.toggle('hidden',!inspected);
+    el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);
     el.holder.refresh.disabled=!state.adapter||!inspected;
     $('holder-copy-link').classList.toggle('hidden',!inspected);$('btn-planner').disabled=!(status?.squeeks?.length);$('btn-planner').hidden=!status?.squeeks?.some(token=>Number.isInteger(token.level)&&token.level>0&&token.level<state.net?.policy?.maximumLevel);
     el.holder.empty.classList.toggle("hidden", Boolean(status));
