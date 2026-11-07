@@ -1,7 +1,7 @@
 // Share card: pure data shaping and file naming. Drawing and recording are covered in the browser spec.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { cardData, shortAddress, fileName, pickVideoType, orbList, levelColor, applyShow, DEFAULT_SHOW, MAX_STATS } from '../web/share-card.js';
+import { cardData, shortAddress, fileName, pickVideoType, orbList, levelColor, applyShow, DEFAULT_SHOW, MAX_STATS, cardTurn, LOOP_SECONDS } from '../web/share-card.js';
 
 const owner = '0x5C5a38168517B610fe06b00c07a2D45BBB10c2e8';
 const d = cardData({ owner, count: '10', power: '1,234', claimable: '9.00 SQK', levels: [2, 1, 1, null, 3, 0, 1], network: 'Sepolia', date: new Date(2026, 10, 8) });
@@ -18,13 +18,19 @@ assert.equal(levelColor(1), '#FCBE46'); assert.equal(levelColor(2), '#597AF7');
 {
   const base = cardData({ owner: '0x5C5a38168517B610fe06b00c07a2D45BBB10c2e8', count: '10', power: '10', powerLabel: 'Deposited', claimable: '0 SQK', claimed: '12.5 SQK', levels: [1, 2] });
   const def = applyShow(base);
-  assert.deepEqual(def.stats.map(s => s[1]), ['SQUEEKS', 'DEPOSITED', 'SQK CLAIMABLE']);
+  assert.deepEqual(def.stats.map(s => s[1]), ['Squeeks', 'Deposited', 'Claimable SQK']);
   const anon = applyShow(base, { ...DEFAULT_SHOW, address: false, claimable: false, claimed: true, compounded: true, levels: false });
   assert.equal(anon.address, null); assert.deepEqual(anon.levels, []); assert.deepEqual(anon.orbLevels.map(l => l.level), [1, 2]);
-  assert.deepEqual(anon.stats, [['10', 'SQUEEKS'], ['10', 'DEPOSITED'], ['12.5', 'SQK CLAIMED']]); // compounded unknown, skipped
+  assert.deepEqual(anon.stats, [['10', 'Squeeks'], ['10', 'Deposited'], ['12.5', 'SQK claimed']]); // compounded unknown, skipped
   assert.equal(fileName(anon, 'png').startsWith('wheelhouse-holder-'), true);
   const all = applyShow({ ...base, compounded: '3 SQK' }, { claimed: true, compounded: true });
   assert.equal(all.stats.length, MAX_STATS);
+}
+// Two sides: front numbers vs back SQK numbers, and the card turns over within one loop
+{
+  const two = applyShow(cardData({ count: '3', power: '3', claimable: '1 SQK', claimed: '2 SQK' }), { claimed: true });
+  assert.deepEqual(two.front.map(s => s[1]), ['Squeeks', 'Power']); assert.deepEqual(two.back.map(s => s[1]), ['Claimable SQK', 'SQK claimed']);
+  assert.ok(Math.cos(cardTurn(1)) > 0.5 && Math.cos(cardTurn(5)) < -0.5 && Math.cos(cardTurn(1 + LOOP_SECONDS)) > 0.5);
 }
 // Unknown stays unknown: never invent a zero.
 const empty = cardData({ owner: 'nope', count: '', power: null, claimable: 'Not available' });
