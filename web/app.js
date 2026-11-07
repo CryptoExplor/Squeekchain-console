@@ -189,6 +189,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       trustDisplay({kind:'unavailable',chipText:'Unavailable'});
       renderTrust(null);$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;
       if(shown)showBanner(BANNER_REFRESH_FAILURE,'warn');
+      state.stale=true;holdActionsWhileStale();
       readBanner=true;return;
     }
     el.verified.textContent='Stopped';
@@ -453,7 +454,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     state.adapter = null;
     if(!watching())state.inspected=state.account;
     state.net = state.status = state.plan = null;
-    state.lastReadFailure=null;state.holderReadState='idle';
+    state.lastReadFailure=null;state.stale=false;state.holderReadState='idle';
 
     state.receipts = [];
     wheelOffline=false;clearWheelFeed();
@@ -792,9 +793,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── rendering ─────────────────────────────────────────────────────────────
   const observedRounds = new Map();
+  // The kept view stays readable while the chain is unreachable, but writes wait for a fresh read.
+  const STALE_REASON="Can't reach the chain right now. Actions come back when it reconnects.";
+  function holdActionsWhileStale(){if(!state.stale)return;for(const button of [el.holder.claim,$("btn-custom-merge"),$("v9-review"),el.cp.button]){if(!button)continue;button.disabled=true;button.title=STALE_REASON;}}
   function renderCheckpointGate() {
     const unknownHoldings=Boolean(state.inspected) && (state.status?.owner?.toLowerCase()!==state.inspected.toLowerCase() || num(state.status?.totals?.count)===UNKNOWN);
-    el.cp.button.disabled=state.watchOnly || state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
+    el.cp.button.disabled=Boolean(state.stale) || state.watchOnly || state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
   }
   let liveSupply=null,explorePrefetched=false,explorePrefetchTimer=null,artSampled=false,lastTabHash=null;
   const closeSqueek=()=>{if(!$('squeek-modal')||$('squeek-modal').classList.contains('hidden'))return;const tab=[...el.tabs].find(t=>t.getAttribute('aria-selected')==='true')?.dataset.tab??'squeeks';win.location.hash=lastTabHash??(state.watchOnly&&state.inspected?`#/${state.profileKey}/address/${state.inspected}/${tabSlug(tab)}`:`#${state.profileKey}/${tabSlug(tab)}`);};
@@ -931,7 +935,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     holdings.render(status);if(state.claimQuote)workspace?.claim(state.claimQuote,status.owner);
     if(!isV9&&$('v9-action').value!=='merge'){$('v9-action').value='merge';renderActionFields();}
     else if(isV9&&$('v9-action').value==='merge'){$('v9-action').value='deposit';renderActionFields();}
-    updatePreviewGate();
+    updatePreviewGate();holdActionsWhileStale();
 
     // merge plan
     el.holder.mergeList.replaceChildren();
@@ -960,7 +964,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── refresh ───────────────────────────────────────────────────────────────
   function renderVerification(v) {
-      verifiedForGeneration=v;state.lastReadFailure=null;
+      verifiedForGeneration=v;state.lastReadFailure=null;state.stale=false;
       renderTrust(v);
       el.verified.textContent = v.ok && v.trusted ? "Verified" : "Stopped";
       el.verified.className = "sr-only";
@@ -1024,8 +1028,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         plan = await readFor(load, "mergePlan", owner, { status });
       }
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
-      state.holderReadState='ready';
-      renderHolder(status, plan);
+      state.holderReadState='ready';state.stale=false;
+      renderHolder(status, plan);renderCheckpointGate();
       if(status.net&&(status.verification||status.source)){renderNetwork({...status.net,snapshot:status.snapshot??status.net.snapshot});if(status.source){displayVerification(status);displayStamp(status);}else renderVerification(status.verification);}
       clearReadBanner();
       return status;
