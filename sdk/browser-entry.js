@@ -34,4 +34,4 @@ export { createWheelPoller } from './display-poller.js';
 export { retryAfterMs } from './retry-after.js';
 export { createChainVerifier } from './verify-chain.js';
 export { coreAbi, nftAbi, stakingAbi, tokenAbi, miningAbi } from './abi-core-20261103.js';
-export { isLogRangeError } from './rpc-errors.js';
+export { isLogRangeError, isRpcAvailabilityError } from './rpc-errors.js';

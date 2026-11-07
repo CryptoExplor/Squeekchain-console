@@ -25,6 +25,7 @@ import {
   rpcToolError,
   ACTION_REASONS,
   PUBLIC_RPC_ENDPOINTS,
+  isRpcAvailabilityError,
   readToolResult, runPublicReadTool, toolProfile, settlementStatus, requireBurn,
   profileFromHash, profileInput, canonicalHash, parseEther, formatEther, unstakeQuoteError, SQUEEKS_POLICY,
 } from "./bundle.js";
@@ -244,7 +245,21 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     assertCurrent(load);
     return value;
   }
-  const readFor = (load, method, ...args) => viewAwait(load, async () => {
+  // Previews retry on another RPC when an endpoint is down or rate-limited. Failing endpoints
+  // are cooled down by the RPC context, so the next attempt goes to a different peer.
+  // Reverts, trust/identity failures and programming errors are never retried.
+  const RETRY_PREVIEWS=['walletStatus','mergePreview','claimPreview','actionPreview','checkpointPreview'];
+  const readFor = (load, method, ...input) => viewAwait(load, async () => {
+    for(let attempt=0;;attempt++){
+      try{return await readOnce(load,method,[...input]);}
+      catch(error){
+        if(!RETRY_PREVIEWS.includes(method)||attempt>=2||!isCurrent(load)||error?.name==='AbortError'||!isRpcAvailabilityError(error))throw error;
+        if(attempt===0&&method!=='walletStatus')toast('RPC busy. Retrying on another RPC…','warn');
+        await new Promise(resolve=>win.setTimeout(resolve,500*(attempt+1)));assertCurrent(load);
+      }
+    }
+  });
+  const readOnce = async (load, method, args) => {
     if(['mergePreview','claimPreview','actionPreview','checkpointPreview'].includes(method)&&state.account&&state.chainId!==11155111)throw new Error('Wrong chain: Sepolia required');
     // API rows are display hints, NEVER a transaction ID/eligibility source.
     if(!adapterFactory&&['mergePreview','claimPreview','actionPreview'].includes(method)){
@@ -259,7 +274,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const value=await load.adapter[method](...args);assertCurrent(load);
     const verification=method==='verify'?value:value?.verification;if(verification)renderVerification(verification);
     return value;
-  });
+  };
   function resetLoad(){networkView.reset(getProfile(state.profileKey));displaySources.clear();$('display-sources').replaceChildren();state.holderReadState='idle';workspace?.clear();state.claimQuote=null;verifiedForGeneration=null;loadController.abort();generation++;loadController=new AbortController();state.adapter=buildAdapter(state.profileKey);}
   const displayCache=createDisplayCache(win.indexedDB),lastGood=new Map();let apiScope;
   const displaySources=new Map();
@@ -293,7 +308,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       else if(api){if(kind==='network'){const economy=await api.economy(),core=await api.core();value=apiNetwork(core,economy);}
         else {const net=!force&&state.net?.source?.kind==='api'?state.net:await displayRead(load,'network',null,{force});value=apiWallet(await api.account(owner),net,owner);}
       }else value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
-      assertCurrent(load);if(!value.source)value={...value,source:{kind:'rpc',at:Date.now()}};const entry={value,at:value.source.at};lastGood.set(key,entry);return value;
+      assertCurrent(load);if(!value.source)value={...value,source:{kind:'rpc',at:Date.now()}};const entry={value,at:value.source.at};lastGood.set(key,entry);if(kind==='wallet')void Promise.resolve().then(()=>displayCache.set(key,entry)).catch(()=>{});return value;
     }catch(error){assertCurrent(load);if(error.name==='TypeError'&&!error.kind)throw error;if(error.name==='RpcTrustError'||error.kind==='mismatch'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
       if(error.kind==='unavailable'||error.kind==='schema'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
       if(saved&&Date.now()-saved.at<ttl&&(error.kind==='transport'||error.name==='TypeError'))return {...saved.value,source:{...saved.value.source,kind:saved.value.source?.kind==='api'?'api':'cached-rpc',at:saved.at,stale:true}};
@@ -737,7 +752,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.cp.button.disabled=state.watchOnly || state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
   }
   let liveSupply=null,explorePrefetched=false,explorePrefetchTimer=null,artSampled=false,lastTabHash=null;
-  const closeSqueek=()=>{if(!$('squeek-modal')||$('squeek-modal').classList.contains('hidden'))return;const tab=[...el.tabs].find(t=>t.getAttribute('aria-selected')==='true')?.dataset.tab??'squeeks';win.location.hash=lastTabHash??(state.watchOnly&&state.inspected?`#/${state.profileKey}/address/${state.inspected}/${tab}`:`#${state.profileKey}/${tab}`);};
+  const closeSqueek=()=>{if(!$('squeek-modal')||$('squeek-modal').classList.contains('hidden'))return;const tab=[...el.tabs].find(t=>t.getAttribute('aria-selected')==='true')?.dataset.tab??'squeeks';win.location.hash=lastTabHash??(state.watchOnly&&state.inspected?`#/${state.profileKey}/address/${state.inspected}/${tabSlug(tab)}`:`#${state.profileKey}/${tabSlug(tab)}`);};
   if($('squeek-modal-close'))$('squeek-modal-close').onclick=closeSqueek;
   $('squeek-modal')?.addEventListener('click',e=>{if(e.target===$('squeek-modal'))closeSqueek();});
   doc.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('squeek-modal')&&!$('squeek-modal').classList.contains('hidden')&&!doc.querySelector('#modal:not(.hidden)'))closeSqueek();});
@@ -932,6 +947,18 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
   }
 
+  // Never hold the Playground blank on a slow chain read: show the last saved view for this
+  // wallet at once, marked with its age, then replace it when the fresh read lands.
+  // Display only: every action re-reads the chain and simulates before signing.
+  const HOLDER_CACHE_MAX=7*DAY;
+  async function showCachedHolder(load,owner){
+    if(adapterFactory)return;
+    try{const key=displayKey(getProfile(load.profileKey),'wallet:'+owner);const saved=lastGood.get(key)??await displayCache.get(key);
+      if(!saved?.value||!isCurrent(load)||state.status||owner.toLowerCase()!==(state.inspected??state.account)?.toLowerCase()||Date.now()-saved.at>HOLDER_CACHE_MAX)return;
+      const value={...saved.value,source:{...saved.value.source,kind:'cached',at:saved.at,stale:true}};
+      renderHolder(value,value.mergePlan??null);displayStamp(value);
+    }catch{/* Cache miss or blocked storage: keep the loading placeholder. */}
+  }
   async function refreshWallet(options={}) {
     const owner = state.inspected ?? state.account;
     if (!state.adapter || !owner) {
@@ -940,7 +967,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     const load = captureLoad();
     state.holderReadState='loading';
-    if(!state.status)renderHolderPlaceholder();
+    if(!state.status){renderHolderPlaceholder();await showCachedHolder(load,owner);}
     try {
       const status = options.prefetched??await displayRead(load,"wallet",owner,options);
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
@@ -958,7 +985,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     } catch (err) {
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       state.holderReadState='unavailable';
-      renderHolder(null);
+      // Keep a saved view on a transport failure; a trust/identity failure always clears it.
+      if(err.name==='RpcTrustError'||err.kind==='mismatch'||state.status?.source?.kind!=='cached')renderHolder(null);
       renderWalletChip();if(err.name==='RpcTrustError'){state.net=null;renderNetworkPlaceholder();}
       showReadFailure(err,'Wallet read');
       return null;
@@ -1303,16 +1331,22 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
   }
 
+  // URL slugs follow the visible tab labels: Playground = #…/playground, Squeeks = #…/squeeks.
+  // Internal tab ids stay 'squeeks' (Playground) and 'explore' (Squeeks); 'explore' still opens Squeeks.
+  const URL_TAB={squeeks:'playground',explore:'squeeks'},TAB_URL={playground:'squeeks',squeeks:'explore'};
+  const tabSlug=name=>URL_TAB[name]??name;
+  const routeFromUrl=path=>{const parts=String(path).split('/');if(parts[0]==='address'){if(parts[2])parts[2]=TAB_URL[parts[2]]??parts[2];}else if(TAB_URL[parts[0]])parts[0]=TAB_URL[parts[0]];return parts.join('/');};
+  const routeToUrl=path=>{const parts=String(path).split('/');if(parts[0]==='address'){if(parts[2])parts[2]=tabSlug(parts[2]);}else parts[0]=tabSlug(parts[0]);return parts.join('/');};
   // Routes are display-only; legacy API tab names remain aliases for integrations.
   function currentRoute() {
     const parts = win.location.hash.split('?')[0].replace(/^#\/?/,'').split('/');
     if (profileFromHash(win.location.hash)) parts.shift();
-    const hash = parts.join('/');
+    const hash = routeFromUrl(parts.join('/'));
     return /^(home|squeeks|squeek|address|activity|art|explore|network|info)(\/|$)/.test(hash) ? hash+(win.location.hash.includes('?')?'?'+win.location.hash.split('?')[1]:'') : (state.account?'squeeks':'home');
   }
   function selectTab(route) {
     const aliases = { overview: 'squeeks', holdings: 'squeeks', playground: 'squeeks', art: 'explore', agent: 'info/developers' };
-    const query=String(route).split('?')[1]??(win.location.hash.split('?')[0].endsWith('/'+String(route))?win.location.hash.split('?')[1]:'');route=String(route).split('?')[0];route = aliases[route] ?? route;
+    const query=String(route).split('?')[1]??(win.location.hash.split('?')[0].endsWith('/'+tabSlug(String(route).split('?')[0]))?win.location.hash.split('?')[1]:'');route=String(route).split('?')[0];route = aliases[route] ?? route;
     const special=/^(address|squeek)\//.test(route);
     const squeekRoute=special&&String(route).startsWith('squeek/');
     // A Squeek opens as a popup over whichever tab is showing (Squeeks or Playground).
@@ -1331,7 +1365,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     el.tabs.forEach(t => { t.setAttribute('aria-selected', String(t.dataset.tab === name)); t.tabIndex = t.dataset.tab === name ? 0 : -1; });
     el.panels.forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== name || (!deployed && name !== 'info')));
     if(name==='home')ensureHero3d();
-    let hash = special?`#/${state.profileKey}/${route}`:`#${state.profileKey}/${name}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers'].includes(section) ? '/' + section : ''}`;
+    let hash = special?`#/${state.profileKey}/${routeToUrl(route)}`:`#${state.profileKey}/${tabSlug(name)}${name === 'info' && ['how-it-works', 'trust', 'status', 'contracts', 'developers'].includes(section) ? '/' + section : ''}`;
     if(query&&['squeeks','explore'].includes(name))hash+='?'+query;
     // replaceState avoids hashchange loops, while tab clicks below create history entries.
     if (win.location.hash !== hash) win.history.replaceState(null, '', hash);
@@ -1366,7 +1400,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }catch(error){routeError(error);}};
   win.addEventListener('hashchange', onHashChange);
   for (const tab of el.tabs) {
-    tab.onclick = () => {if(state.watchOnly&&state.inspected){win.location.hash=`${watchHash(state.profileKey,state.inspected)}/${tab.dataset.tab}`;void onHashChange();}else{win.location.hash = `${state.profileKey}/${tab.dataset.tab}`;selectTab(tab.dataset.tab);} };
+    tab.onclick = () => {if(state.watchOnly&&state.inspected){win.location.hash=`${watchHash(state.profileKey,state.inspected)}/${tabSlug(tab.dataset.tab)}`;void onHashChange();}else{win.location.hash = `${state.profileKey}/${tabSlug(tab.dataset.tab)}`;selectTab(tab.dataset.tab);} };
     tab.onkeydown = event => {
       const index = el.tabs.indexOf(tab);
       const next = event.key === 'ArrowRight' ? (index + 1) % el.tabs.length : event.key === 'ArrowLeft' ? (index + el.tabs.length - 1) % el.tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? el.tabs.length - 1 : -1;
@@ -1457,7 +1491,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   $('btn-switch-chain').onclick = () => {closeWalletMenu();return viewTask(requestProfileChain);};
   el.holder.owner.onclick=async()=>{const address=el.holder.owner.title;if(!address)return;try{await win.navigator.clipboard.writeText(address);toast('Address copied','ok');}catch{toast('Clipboard unavailable','warn');}};
   $('btn-exit-watch').onclick = () => viewTask(async()=>{
-    state.watchOnly=false;activeWatchRoute=null;state.inspected=state.account;resetLoad();el.holder.watchInput.value='';renderHolder(null);win.history.pushState(null,'',`#${state.profileKey}/squeeks`);selectTab('squeeks');
+    state.watchOnly=false;activeWatchRoute=null;state.inspected=state.account;resetLoad();el.holder.watchInput.value='';renderHolder(null);win.history.pushState(null,'',`#${state.profileKey}/playground`);selectTab('squeeks');
     await refreshWallet();
   });
   el.holder.watch.onclick = async () => {
@@ -1520,7 +1554,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   let explore,exploreReady,exploreClosed=false;
   const closedExplore=Object.freeze({supply(){},prefetch:()=>Promise.resolve(),show:()=>Promise.resolve(),tick:()=>Promise.resolve(),history:()=>Promise.resolve({unknown:true,rows:[]}),destroy(){}});
   async function ensureExplore(){if(exploreClosed)return closedExplore;exploreReady??=import('./explore.js').then(({createExploreView})=>exploreClosed?closedExplore:explore=createExploreView({doc,win,root:$('explore-content'),capture:captureLoad,current:isCurrent,readerOptions:load=>({profile:getProfile(load.profileKey),rpcUrl:store.get('wheelhouse:rpc')||undefined,signal:load.signal,chainCache,verificationCache}),loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),source:recordSource,onTrustError:clearDisplayMismatch}));return exploreReady;}
-  async function ensureWorkspace(){workspaceReady??=import('./holder-workspace.js').then(({initHolderWorkspace})=>workspace=initHolderWorkspace({doc,win,state,captureLoad,isCurrent,read:readFor,getApi:load=>displayApi(load)??state.adapter?.holderApi,loadImage:loadHolderImage,canAct:canUseHolder,getIndexedHistory:id=>win.history.state?.exploreReadOnly?(explore?.history(id)??Promise.resolve({unknown:true,rows:[]})):null,onPair:selectPlannerStep,onAction:async(action,id)=>{if(!canUseHolder())return;selectTab('squeeks');if(action==='claim')return viewTask(()=>requestClaim([id]));const load=captureLoad(),fresh=await readFor(load,'walletStatus',state.account);if(!fresh.squeeks.some(t=>String(t.tokenId)===id))return;renderHolder(fresh,fresh.mergePlan);holdings.selectAction(action,[id]);},onOverview:()=>{win.location.hash=`${state.profileKey}/squeeks`;selectTab('squeeks');},onError:error=>{if(error.name==='RpcTrustError')clearDisplayMismatch(error);},local:()=>activity.list(),quote:!adapterFactory?(load,owner)=>readFor(load,'claimPreview',owner):state.adapter?.holderClaimPreview?(load,owner)=>viewAwait(load,()=>load.adapter.holderClaimPreview(owner)):null}));return workspaceReady;}
+  async function ensureWorkspace(){workspaceReady??=import('./holder-workspace.js').then(({initHolderWorkspace})=>workspace=initHolderWorkspace({doc,win,state,captureLoad,isCurrent,read:readFor,getApi:load=>displayApi(load)??state.adapter?.holderApi,loadImage:loadHolderImage,canAct:canUseHolder,getIndexedHistory:id=>win.history.state?.exploreReadOnly?(explore?.history(id)??Promise.resolve({unknown:true,rows:[]})):null,onPair:selectPlannerStep,onAction:async(action,id)=>{if(!canUseHolder())return;selectTab('squeeks');if(action==='claim')return viewTask(()=>requestClaim([id]));const load=captureLoad(),fresh=await readFor(load,'walletStatus',state.account);if(!fresh.squeeks.some(t=>String(t.tokenId)===id))return;renderHolder(fresh,fresh.mergePlan);holdings.selectAction(action,[id]);},onOverview:()=>{win.location.hash=`${state.profileKey}/playground`;selectTab('squeeks');},onError:error=>{if(error.name==='RpcTrustError')clearDisplayMismatch(error);},local:()=>activity.list(),quote:!adapterFactory?(load,owner)=>readFor(load,'claimPreview',owner):state.adapter?.holderClaimPreview?(load,owner)=>viewAwait(load,()=>load.adapter.holderClaimPreview(owner)):null}));return workspaceReady;}
   const holdings=createHoldings({doc,win,state,onSelection:updatePreviewGate,onConnect:()=>viewTask(connect),onMerge:()=>$('btn-custom-merge').click(),onAction:action=>{$('v9-action').value=action;renderActionFields();if(action==='claimAndStake'&&!$('v9-review').disabled)$('v9-review').click();else $('v9-review').focus();},loadImage:(token,stage)=>loadHolderImage(token,captureLoad(),stage),onPairs:()=>ensureWorkspace().then(w=>w.planner())});
   $('btn-planner').onclick=()=>ensureWorkspace().then(w=>w.planner());
   $('sqk-claim-host').append($('btn-claim'),$('claim-ids'),$('holder-rewards-notice'));
