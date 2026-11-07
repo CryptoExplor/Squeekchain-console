@@ -175,13 +175,26 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     else showBanner(BANNER_READ_FAILURE,bannerKind??(kind==='unavailable'?'warn':'bad'));
   }
   const BANNER_READ_FAILURE="Can't verify right now";
+  const BANNER_REFRESH_FAILURE="Can't refresh right now. Showing the last data; it updates when the connection is back.";
   function showReadFailure(error,scope) {
     const failure=rpcToolError(error,state.adapter?.rpcDiagnostics?.()??[]);
     state.lastReadFailure={scope,profile:state.profileKey,...failure};
-    const availability=failure.diagnostics.availability;
-    el.verified.textContent=availability?'Unavailable':'Stopped';
-    trustDisplay({kind:availability?'unavailable':'mismatch',chipText:availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Unverified'});
-    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;$('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
+    // Only a trust/identity failure is a stop. A slow or silent API or RPC is "can't refresh":
+    // the chip keeps its last on-chain verdict and whatever is on screen stays, with its age.
+    const trust=failure.diagnostics.trust||error?.name==='RpcTrustError'||error?.kind==='mismatch';
+    $('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
+    if(!trust){
+      const shown=/wallet/i.test(scope)?Boolean(state.status):/network/i.test(scope)?Boolean(state.net):Boolean(state.net||state.status);
+      if(verifiedForGeneration){showBanner(shown?BANNER_REFRESH_FAILURE:BANNER_READ_FAILURE,'warn');readBanner=true;return;}
+      el.verified.textContent='Unavailable';
+      trustDisplay({kind:'unavailable',chipText:'Unavailable'});
+      if(shown){showBanner(BANNER_REFRESH_FAILURE,'warn');}
+      renderTrust(null);$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;
+      readBanner=true;return;
+    }
+    el.verified.textContent='Stopped';
+    trustDisplay({kind:'mismatch',chipText:'Mismatch: stop'});
+    renderTrust({ok:false,trusted:false});$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;
     readBanner=true;
   }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
@@ -285,7 +298,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const networkView=createNetworkView({doc,source:recordSource,current:isCurrent,visible:()=>!$('panel-squeeks').classList.contains('hidden'),readContext:()=>{const load=captureLoad();return {load,api:displayApi(load)};}});
   function refreshNetworkExtras(){const load=captureLoad();return networkView.refresh(load,displayApi(load),state.account);}
 
-  function displayApi(load){if(adapterFactory||!getProfile(load.profileKey).apiBase)return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
+  let apiDisabled=-1;
+  function displayApi(load){if(adapterFactory||apiDisabled===load.generation||!getProfile(load.profileKey).apiBase)return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
   function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000));$('display-age').textContent=age?`as of ${age} min`:'';}
 
   function displayVerification(value){
@@ -310,15 +324,31 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       }else value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
       assertCurrent(load);if(!value.source)value={...value,source:{kind:'rpc',at:Date.now()}};const entry={value,at:value.source.at};lastGood.set(key,entry);if(kind==='wallet')void Promise.resolve().then(()=>displayCache.set(key,entry)).catch(()=>{});return value;
     }catch(error){assertCurrent(load);if(error.name==='TypeError'&&!error.kind)throw error;if(error.name==='RpcTrustError'||error.kind==='mismatch'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
-      if(error.kind==='unavailable'||error.kind==='schema'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
+      // API rescanning/unavailable or a bad response is not a reason to forget the last good view.
       if(saved&&Date.now()-saved.at<ttl&&(error.kind==='transport'||error.name==='TypeError'))return {...saved.value,source:{...saved.value.source,kind:saved.value.source?.kind==='api'?'api':'cached-rpc',at:saved.at,stale:true}};
       // Unavailable API is not zero. Only the fresh guarded SDK may supply fallback.
-      if(displayApi(load)){for(const panel of kind==='network'?['Network']:['Squeeks'])recordSource(panel,'rpc',error.message);const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);return {...value,source:{kind:'rpc',at:Date.now(),reason:error.message}};}
+      if(displayApi(load)){for(const panel of kind==='network'?['Network']:['Squeeks'])recordSource(panel,'rpc',error.message);
+        try{const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);const fresh={...value,source:{kind:'rpc',at:Date.now(),reason:error.message}};lastGood.set(key,{value:fresh,at:fresh.source.at});return fresh;}
+        catch(chainError){assertCurrent(load);if(saved&&chainError.name!=='RpcTrustError'&&error.kind!=='mismatch')return {...saved.value,source:{...saved.value.source,kind:'cached',at:saved.at,stale:true}};throw chainError;}}
       throw error;
     }
   }
   function clearWheelFeed(){for(const id of ['account-activity','provisional-blocks'])$(id).replaceChildren();$('provisional-blocks').classList.add('hidden');}
-  function clearDisplayMismatch(error){lastGood.clear();state.net=null;state.holderReadState='unavailable';renderNetworkPlaceholder();renderHolder(null);networkStrip.invalidate();for(const id of ['wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;clearWheelFeed();recordSource('Display validation','api',error.message);showReadFailure(Object.assign(new Error('Display source does not match this network.'),{name:'RpcTrustError',kind:'mismatch'}),'Display validation');}
+  function clearDisplayMismatch(error){
+    // The display API disagrees with the pinned deployment (e.g. it is rescanning for a new contract).
+    // API-sourced values are dropped (never trusted), the API is skipped for this load, and the view
+    // is re-read from chain. Chain-verified values already on screen stay; the trust chip is untouched
+    // because the on-chain verification did not fail.
+    apiDisabled=generation;
+    for(const [key,entry] of lastGood)if(entry.value?.source?.kind==='api'){lastGood.delete(key);void displayCache.delete(key);}
+    recordSource('Display validation','api',error.message);
+    let dropped=false;
+    if(state.net?.source?.kind==='api'){state.net=null;renderNetworkPlaceholder();dropped=true;}
+    if(state.status?.source?.kind==='api'){state.holderReadState='loading';renderHolder(null);dropped=true;}
+    networkStrip.invalidate();for(const id of ['wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;clearWheelFeed();
+    showBanner('Display service is out of sync with this deployment. Reading straight from the chain.','warn');readBanner=true;
+    if(dropped)void Promise.resolve().then(()=>refreshAll({force:true}));
+  }
 
   let destroyed = false;
   const telemetry = createTelemetry({ fetcher });
@@ -398,7 +428,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
     // Navigation ALWAYS wins, including while a simulation or wallet prompt is pending.
     workspace?.clear();state.claimQuote=null;loadController.abort();
-    generation++;verifiedForGeneration=null;
+    generation++;verifiedForGeneration=null;state.net=null;
     loadController = new AbortController();
     dialog.close();
     closeSheet();
@@ -938,8 +968,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       return net;
     } catch (err) {
       if (!isCurrent(load)) return null;
-      state.net = null;
-      renderNetworkPlaceholder();
+      // Keep the last network view on a slow/failed refresh; clear it only on a trust failure.
+      if(err.name==='RpcTrustError'||err.kind==='mismatch'||!state.net){state.net = null;renderNetworkPlaceholder();}
       showReadFailure(err,'Network read');
       return null;
     } finally {
@@ -986,7 +1016,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       state.holderReadState='unavailable';
       // Keep a saved view on a transport failure; a trust/identity failure always clears it.
-      if(err.name==='RpcTrustError'||err.kind==='mismatch'||state.status?.source?.kind!=='cached')renderHolder(null);
+      if(err.name==='RpcTrustError'||err.kind==='mismatch'||!state.status)renderHolder(null);
       renderWalletChip();if(err.name==='RpcTrustError'){state.net=null;renderNetworkPlaceholder();}
       showReadFailure(err,'Wallet read');
       return null;
