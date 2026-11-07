@@ -75,25 +75,25 @@ function drawOverlay(ctx, data) {
   ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `600 22px ${COND}`; ctx.fillText(data.address ? 'SQUEEK HOLDER CHECKPOINT' : 'WHEELHOUSE CHECKPOINT', 72, 452);
   ctx.fillStyle = '#FFFFFF'; fitFont(ctx, title, 640, 68, 700, SANS); ctx.fillText(title, 70, 520);
 
-  // stats row
-  const stats = data.stats;
-  // Shrink the row until it fits left of the level chips (or the full width when levels are hidden).
-  const room = (data.levels.length ? 700 : W - 128);
-  let big = 44, small = 20, gap = 34;
-  const rowWidth = () => stats.reduce((w, [v, l]) => { ctx.font = `600 ${big}px ${COND}`; const a = ctx.measureText(v).width; ctx.font = `500 ${small}px ${COND}`; return w + a + 10 + ctx.measureText(l).width + gap; }, -gap);
-  while (big > 26 && rowWidth() > room) { big -= 2; small = Math.max(14, small - 1); gap = Math.max(20, gap - 2); }
-  let x = 72; for (const [value, label] of stats) {
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `600 ${big}px ${COND}`; ctx.fillText(value, x, 590); const vw = ctx.measureText(value).width;
-    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `500 ${small}px ${COND}`; ctx.fillText(label, x + vw + 10, 590); x += vw + 10 + ctx.measureText(label).width + gap;
+  // Fixed metric cells prevent long numbers or five selected fields from spilling into each other.
+  const stats = data.stats, gap = 18, left = 72, room = W - 144;
+  const cell = stats.length ? (room - gap * (stats.length - 1)) / stats.length : room;
+  stats.forEach(([value, name], i) => {
+    const x = left + i * (cell + gap);
+    ctx.fillStyle = '#FFFFFF'; fitFont(ctx,value,cell,42,600,COND); ctx.fillText(value,x,565,cell);
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; fitFont(ctx,name,cell,19,500,COND); ctx.fillText(name,x,590,cell);
+  });
+  // Level summary occupies its own row; hidden levels also remove level-derived scene orbs.
+  ctx.font = `600 18px ${COND}`; let x = left;
+  for(let i=0;i<data.levels.length;i++) {
+    const {level,count}=data.levels[i], text=`L${level} × ${count}`, width=ctx.measureText(text).width+32;
+    if(x+width+(i<data.levels.length-1?60:0)>W-72){ctx.fillStyle='#FFFFFF';ctx.fillText(`+${data.levels.length-i} levels`,x,620,W-72-x);break;}
+    ctx.fillStyle=levelColor(level);ctx.beginPath();ctx.arc(x+5,614,5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.75)';ctx.fillText(text,x+17,620);x+=width;
   }
-  // level chips, right side bottom
-  ctx.font = `600 22px ${COND}`; let rx = W - 56; const chips = data.levels.length ? [...data.levels].reverse() : [];
-  for (const { level, count } of chips) {
-    const text = `L${level} × ${count}`, w = ctx.measureText(text).width + 44; rx -= w; if (rx < Math.max(760, x + 10)) break;
-    roundRect(ctx, rx, 558, w, 40, 20); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.fillStyle = levelColor(level); ctx.beginPath(); ctx.arc(rx + 18, 578, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#FFFFFF'; ctx.fillText(text, rx + 32, 586); rx -= 10;
-  }
+  const illustrated = orbList(data.orbLevels ?? data.levels).length;
+  const total = (data.orbLevels ?? data.levels).reduce((sum,item)=>sum+item.count,0);
+  if(illustrated && total>illustrated){ctx.font=`500 14px ${MONO}`;ctx.fillStyle='rgba(255,255,255,.5)';ctx.textAlign='right';ctx.fillText(`Showing ${illustrated} of ${total} Squeeks`,W-72,434);ctx.textAlign='start';}
   ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.font = `500 16px ${MONO}`;
   ctx.fillText(data.network === 'Mainnet' ? 'Not financial advice' : 'Testnet values · not financial advice', 72, 640);
   const site = 'wheel-house.pages.dev'; ctx.fillText(site, W - 56 - ctx.measureText(site).width, 640);
@@ -140,8 +140,8 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
     const x = 64 + i * (boxW + gap); const accent = i === stats.length - 1 && /SQK/.test(label);
     roundRect(ctx, x, top, boxW, boxH, 20); ctx.fillStyle = accent ? BRAND.yellow : panel; ctx.fill();
     if (!accent) { ctx.strokeStyle = line; ctx.lineWidth = 2; ctx.stroke(); }
-    ctx.fillStyle = accent ? BRAND.night : muted; ctx.font = '600 20px ' + MONO; fitFont(ctx, label, boxW - 48, 20, 600, MONO); ctx.fillText(label, x + 24, top + 44);
-    ctx.fillStyle = accent ? BRAND.night : ink; fit(ctx, value, boxW - 48, stats.length > 3 ? 44 : 56, 800); ctx.fillText(value, x + 24, top + 116);
+    ctx.fillStyle = accent ? BRAND.night : muted; ctx.font = '600 20px ' + MONO; fitFont(ctx, label, boxW - 48, 20, 600, MONO); ctx.fillText(label, x + 24, top + 44, boxW-48);
+    ctx.fillStyle = accent ? BRAND.night : ink; fit(ctx, value, boxW - 48, stats.length > 3 ? 44 : 56, 800); ctx.fillText(value, x + 24, top + 116, boxW-48);
   });
 
   // levels
@@ -163,5 +163,41 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
   const pos = ((t * 0.35) % 1.6) - 0.3; const g = ctx.createLinearGradient(W * pos - 200, 0, W * pos + 200, H);
   g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, dark ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+// Classic in motion: the flat card floats as a slab over a plain backdrop. It turns a little left and right,
+// nods and bobs, with a light sheen. The PNG still uses the flat drawClassic.
+const makeFace = () => { if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(CARD_W, CARD_H); const c = document.createElement('canvas'); c.width = CARD_W; c.height = CARD_H; return c; };
+let classicFace = null;
+export function drawClassicMoving(ctx, data, { t = 0, dark = true, makeCanvas = makeFace } = {}) {
+  const W = CARD_W, H = CARD_H;
+  if (!classicFace) classicFace = makeCanvas(W, H);
+  const fctx = classicFace.getContext('2d');
+  fctx.save(); fctx.clearRect(0, 0, W, H); drawClassic(fctx, data, { t, dark });
+  fctx.globalCompositeOperation = 'destination-in'; roundRect(fctx, 0, 0, W, H, 22); fctx.fill(); fctx.globalCompositeOperation = 'source-over';
+  roundRect(fctx, 2, 2, W - 4, H - 4, 20); fctx.strokeStyle = dark ? 'rgba(255,255,255,.16)' : 'rgba(10,10,12,.12)'; fctx.lineWidth = 4; fctx.stroke(); fctx.restore();
+  ctx.save(); ctx.clearRect(0, 0, W, H);
+  const bg = ctx.createRadialGradient(W / 2, H * 0.4, 40, W / 2, H / 2, W * 0.7);
+  bg.addColorStop(0, dark ? '#1C1D23' : '#FFFFFF'); bg.addColorStop(1, dark ? '#050506' : '#E9E2D2');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  const s = 0.8, fw = W * s, fh = H * s, cx = W / 2, cy = H / 2 - 6 + Math.sin(t * 1.3) * 7;
+  // same motion as the first share card's 3D slab: turn ±0.16 rad, nod ±0.06 rad, small bob
+  const yaw = Math.sin(t * 0.9) * 0.16, pitch = Math.sin(t * 0.6) * 0.03, roll = 0, D = 2400, c = Math.cos(yaw), sn = Math.sin(yaw);
+  const sh = ctx.createRadialGradient(cx, H - 40, 10, cx, H - 40, fw * 0.55); sh.addColorStop(0, dark ? 'rgba(0,0,0,.6)' : 'rgba(60,45,20,.28)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.save(); ctx.scale(1, 0.12); ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(cx, (H - 34) / 0.12, fw * 0.55, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.translate(cx, cy); ctx.rotate(roll); ctx.translate(-cx, -cy);
+  const N = 150, sw = W / N, proj = u => { const xl = (u - 0.5) * fw, k = D / (D + xl * sn); return { x: cx + xl * c * k, k, dy: (u - 0.5) * fw * pitch }; };
+  // yellow slab edge on the side turned toward the viewer, like the 3D box's gold sides
+  { const a = proj(0), b = proj(1), e = sn * 16, ka = a.k, kb = b.k; ctx.fillStyle = BRAND.yellow; ctx.beginPath();
+    ctx.moveTo(a.x - Math.max(0, -e), cy - fh * ka / 2 + a.dy); ctx.lineTo(b.x + Math.max(0, e), cy - fh * kb / 2 + b.dy);
+    ctx.lineTo(b.x + Math.max(0, e), cy + fh * kb / 2 + b.dy); ctx.lineTo(a.x - Math.max(0, -e), cy + fh * ka / 2 + a.dy); ctx.closePath(); ctx.fill(); }
+  for (let i = 0; i < N; i++) {
+    const a = proj(i / N), b = proj((i + 1) / N), k = (a.k + b.k) / 2, hgt = fh * k;
+    ctx.drawImage(classicFace, i * sw, 0, sw, H, Math.min(a.x, b.x), cy - hgt / 2 + (a.dy + b.dy) / 2, Math.abs(b.x - a.x) + 0.6, hgt);
+  }
+  ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over'; const sx = cx + sn * 520, gl = ctx.createLinearGradient(sx - 140, 0, sx + 140, 0);
+  gl.addColorStop(0, 'rgba(255,255,255,0)'); gl.addColorStop(0.5, `rgba(255,255,255,${dark ? 0.07 : 0.22})`); gl.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gl; ctx.fillRect(cx - fw / 2, cy - fh / 2 + 24, fw, fh - 48);
   ctx.restore();
 }

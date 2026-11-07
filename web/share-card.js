@@ -53,7 +53,7 @@ export function fileName(data, ext) {
 }
 
 export const LEVEL_COLORS = ['#FCBE46', '#597AF7', '#FF5FA2', '#3DDC97', '#9B6BFF', '#FF8A3D', '#4FD1E8', '#F2F2F2'];
-export const levelColor = level => LEVEL_COLORS[(Math.max(1, level) - 1) % LEVEL_COLORS.length];
+export const levelColor = level => LEVEL_COLORS[((Number.isInteger(level) && level > 0 ? level : 1) - 1) % LEVEL_COLORS.length];
 const SANS = '"Quicksand", ui-rounded, system-ui, sans-serif', COND = '"Barlow Condensed", "Arial Narrow", sans-serif', MONO = '"IBM Plex Mono", ui-monospace, monospace';
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -67,7 +67,12 @@ function fitFont(ctx, text, max, size, weight, family) {
 }
 // The Squeeks as glossy orbs, one per Squeek (max 14), coloured and sized by level.
 export function orbList(levels, max = 14) {
-  const out = []; for (const { level, count } of levels) for (let i = 0; i < count && out.length < max; i++) out.push(level);
+  const limit = Number.isFinite(max) ? Math.max(0, Math.min(14, Math.floor(max))) : 14;
+  const out = []; for (const { level, count } of levels ?? []) {
+    if (!Number.isInteger(level) || level < 1 || !Number.isFinite(count) || count < 1) continue;
+    for (let i = 0; i < Math.floor(count) && out.length < limit; i++) out.push(level);
+    if (out.length === limit) break;
+  }
   return out;
 }
 
@@ -98,6 +103,13 @@ function drawStudio(ctx, make) {
   ctx.drawImage(grain, 0, 0);
 }
 
+export function drawDisclaimer(ctx, data, x, y, centered = false) {
+  ctx.save(); ctx.textAlign = centered ? 'center' : 'start';
+  ctx.font = `500 12px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,.62)';
+  ctx.fillText(data.network.toLowerCase() === 'mainnet' ? 'Holder snapshot · Not financial advice' : 'Testnet snapshot · Not financial advice', x, y);
+  ctx.restore();
+}
+
 function cardBase(ctx) {
   const w = FACE_W, h = FACE_H;
   roundRect(ctx, 0, 0, w, h, 30); const g = ctx.createLinearGradient(0, 0, w, h); g.addColorStop(0, '#17181E'); g.addColorStop(1, '#0C0D11'); ctx.fillStyle = g; ctx.fill();
@@ -111,7 +123,7 @@ function logo(ctx, data) {
   ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#FFFFFF'; ctx.font = `700 30px ${SANS}`; ctx.fillText('wheelhouse', 84, 72); const ww = ctx.measureText('wheelhouse').width;
   if (data.meta !== false) { ctx.font = `600 13px ${MONO}`; ctx.fillStyle = BRAND.yellow; const n = data.network.toUpperCase(); ctx.fillText(n, 84 + ww - ctx.measureText(n).width, 92); }
 }
-function label(ctx, text, x, y) { ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = `500 13px ${MONO}`; ctx.fillText(text.toUpperCase().split('').join('\u200A'), x, y); }
+function label(ctx, text, x, y, max = 340) { ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = `500 13px ${MONO}`; ctx.fillText(text.toUpperCase().split('').join('\u200A'), x, y, max); }
 function holder(ctx, data, x, y) {
   const name = data.address || 'A Squeek holder', seed = [...(data.address || 'holder')].reduce((n, c) => (n * 31 + c.charCodeAt(0)) >>> 0, 7);
   const g = ctx.createLinearGradient(x, y - 14, x + 28, y + 14); g.addColorStop(0, LEVEL_COLORS[seed % 8]); g.addColorStop(1, LEVEL_COLORS[(seed >>> 3) % 8]);
@@ -120,10 +132,13 @@ function holder(ctx, data, x, y) {
 }
 function levelChips(ctx, levels, x, y, maxX) {
   ctx.font = `600 20px ${SANS}`;
-  for (const { level, count } of levels) {
-    const text = `L${level} × ${count}`, w = ctx.measureText(text).width + 30; if (x + w > maxX) break;
+  for (let i = 0; i < levels.length; i++) {
+    const {level,count} = levels[i];
+    const text = `L${level} × ${count}`, w = ctx.measureText(text).width + 38;
+    const reserve = i < levels.length - 1 ? 50 : 0;
+    if (x + w + reserve > maxX) { ctx.fillStyle='#FFFFFF'; ctx.fillText(`+${levels.length-i}`,x,y,Math.max(1,maxX-x)); break; }
     ctx.fillStyle = levelColor(level); ctx.beginPath(); ctx.arc(x + 8, y - 7, 8, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#FFFFFF'; ctx.fillText(text, x + 24, y); x += w + 14;
+    ctx.fillStyle = '#FFFFFF'; ctx.fillText(text, x + 24, y); x += w;
   }
 }
 // Flat window scene: the hamster in its wheel (used when there is no WebGL).
@@ -168,7 +183,7 @@ function drawWindow(ctx, data, t, scene) {
 export function drawFront(ctx, data, { t = 0, scene = null } = {}) {
   ctx.clearRect(0, 0, FACE_W, FACE_H); cardBase(ctx); logo(ctx, data); ctx.textBaseline = 'alphabetic';
   let y = 152; data.front.forEach(([value, name], i) => {
-    label(ctx, name, 44, y); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, value, 340, i ? 34 : 50, 700, SANS); ctx.fillText(value, 42, y + (i ? 42 : 56)); y += i ? 78 : 92;
+    label(ctx, name, 44, y); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, value, 340, i ? 34 : 50, 700, SANS); ctx.fillText(value, 42, y + (i ? 42 : 56), 340); y += i ? 78 : 92;
   });
   if (data.levels.length) { label(ctx, 'Levels', 44, y); levelChips(ctx, data.levels, 44, y + 36, 396); }
   holder(ctx, data, 44, FACE_H - 46);
@@ -191,8 +206,8 @@ export function drawBack(ctx, data, { t = 0 } = {}) {
   if (!data.back.length && data.meta === false) { label(ctx, 'HOLDER CHECKPOINT', 44, 182); ctx.fillStyle='#FFFFFF'; ctx.font=`600 28px ${SANS}`; ctx.fillText('No reward metrics selected',44,238); }
   ctx.textBaseline = 'alphabetic';
   const back = data.back.length ? data.back : (data.meta !== false ? [[data.date, 'Checked']] : []);
-  if (back[0]) { label(ctx, back[0][1], 44, 182); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, back[0][0], 460, 60, 700, SANS); ctx.fillText(back[0][0], 42, 244); }
-  back.slice(1).forEach(([value, name], i) => { const x = 44 + i * 240; label(ctx, name, x, 298); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, value, 220, 30, 700, SANS); ctx.fillText(value, x - 1, 336); });
+  if (back[0]) { label(ctx, back[0][1], 44, 182); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, back[0][0], 460, 60, 700, SANS); ctx.fillText(back[0][0], 42, 244, 460); }
+  back.slice(1).forEach(([value, name], i) => { const x = 44 + i * 240; label(ctx, name, x, 298, 220); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, value, 220, 30, 700, SANS); ctx.fillText(value, x - 1, 336, 220); });
   holder(ctx, data, 44, FACE_H - 46);
 }
 
@@ -223,7 +238,8 @@ export function drawCard(ctx, input, { t = 0, scene = null, makeCanvas = default
   gl.addColorStop(0, 'rgba(255,255,255,0)'); gl.addColorStop(0.5, `rgba(255,255,255,${0.06 * Math.abs(c)})`); gl.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = gl; ctx.fillRect(cx - FACE_W / 2 - 40, cy - FACE_H / 2 - 20, FACE_W + 80, FACE_H + 40); ctx.restore();
   ctx.restore();
-  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `500 15px ${MONO}`; const site = 'WHEEL-HOUSE.PAGES.DEV'.split('').join('\u200A'); ctx.fillText(site, cx - ctx.measureText(site).width / 2, 640);
+  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `500 15px ${MONO}`; const site = 'WHEEL-HOUSE.PAGES.DEV'.split('').join('\u200A'); ctx.fillText(site, cx - ctx.measureText(site).width / 2, 635);
+  drawDisclaimer(ctx, data, cx, 659, true);
 }
 
 
@@ -241,21 +257,21 @@ export function recordCanvas(canvas, frame, { seconds = 5, fps = 30, signal, onP
   if (!kind || typeof canvas.captureStream !== 'function') return Promise.reject(new Error('Video recording is not supported in this browser.'));
   if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 30 || !Number.isFinite(fps) || fps <= 0 || fps > 60) return Promise.reject(new Error('Invalid recording duration or frame rate.'));
   return new Promise((resolve, reject) => {
-    let stream, recorder, raf = 0, timer, settled = false;
+    let stream, recorder, raf = 0, timer, watchdog, settled = false;
     const chunks = [];
     const finish = (error, result) => {
       if (settled) return;
-      settled = true; cancelAnimationFrame(raf); clearTimeout(timer);
+      settled = true; cancelAnimationFrame(raf); clearTimeout(timer); clearTimeout(watchdog);
       signal?.removeEventListener('abort', abort);
       if (recorder && recorder.state !== 'inactive') { try { recorder.stop(); } catch {} }
-      stream?.getTracks().forEach(track => track.stop());
+      stream?.getTracks().forEach(track => { try { track.stop(); } catch {} });
       error ? reject(error) : resolve(result);
     };
     const abort = () => finish(new Error('Recording cancelled.'));
     if (signal?.aborted) return abort();
     signal?.addEventListener('abort', abort, { once: true });
     try {
-      frame(0);
+      frame(0); if (settled) return;
       stream = canvas.captureStream(fps);
       recorder = new MediaRecorder(stream, { mimeType: kind.type, videoBitsPerSecond: 8_000_000 });
       recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
@@ -269,97 +285,165 @@ export function recordCanvas(canvas, frame, { seconds = 5, fps = 30, signal, onP
         if (settled || recorder.state !== 'recording') return;
         try { const t = Math.min((now - start) / 1000, seconds); frame(t); onProgress?.(t / seconds); }
         catch (error) { finish(error); return; }
-        raf = requestAnimationFrame(step);
+        if (!settled) raf = requestAnimationFrame(step);
       };
-      recorder.start(250); raf = requestAnimationFrame(step);
-      timer = setTimeout(() => { if (!settled && recorder.state === 'recording') recorder.stop(); }, seconds * 1000);
+      recorder.start(250); if (settled) return; raf = requestAnimationFrame(step);
+      timer = setTimeout(() => { try { if (!settled && recorder.state === 'recording') { onProgress?.(1); recorder.stop(); } } catch (error) { finish(error); } }, seconds * 1000);
+      watchdog = setTimeout(() => finish(new Error('Video encoder timed out. Try the picture instead.')), seconds * 1000 + 10_000);
     } catch (error) { finish(error); }
   });
 }
 
 export function webglAvailable(doc = document) {
-  try { const c = doc.createElement('canvas'); return Boolean(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; }
+  // Three.js requires WebGL2. Release the probe immediately instead of leaking one context per style switch.
+  let gl;
+  try { gl = doc.createElement('canvas').getContext('webgl2'); return Boolean(gl); }
+  catch { return false; }
+  finally { try { gl?.getExtension?.('WEBGL_lose_context')?.loseContext(); } catch { /* capability probes must fail closed */ } }
 }
 
 export async function loadFonts(doc = document) {
-  try { await Promise.all([`700 68px ${SANS}`, `600 44px ${COND}`, `500 20px ${COND}`, `600 20px ${MONO}`].map(f => doc.fonts?.load(f))); } catch { /* system fallback */ }
+  let timer;
+  try { await Promise.race([Promise.all([`500 20px ${SANS}`, `600 30px ${SANS}`, `700 68px ${SANS}`, `600 44px ${COND}`, `500 20px ${COND}`, `500 20px ${MONO}`, `600 20px ${MONO}`].map(font => doc.fonts?.load(font))),new Promise(resolve=>{timer=setTimeout(resolve,3000);})]); } catch { /* system fallback */ } finally {clearTimeout(timer);}
 }
 
 // Opens the card in `host`. Desktop with WebGL renders the scene in 3D (three.js, shared with the hero) under the
 // text layer; phones or no WebGL get the flat scene. One 2D output canvas is what you see, save and record.
-// Card styles the share sheet offers. Flip is the default and the only one with the 3D hamster.
+// Card styles the share sheet offers. Flip is the default and the default; Night also has its own optional 3D stage.
 export const STYLES = [['flip', 'Flip card'], ['night', 'Night scene'], ['classic', 'Classic']];
 export const styleSeconds = style => style === 'flip' ? LOOP_SECONDS : 5;
 
-export async function mountCard(host, initial, { reducedMotion = false, wide = true, loadStage, style: firstStyle = 'flip', dark = true } = {}) {
-  await loadFonts(); let data = initial, style = STYLES.some(([k]) => k === firstStyle) ? firstStyle : 'flip';
-  const styles = await import('./share-styles.js');
-  const out = document.createElement('canvas'); out.width = CARD_W; out.height = CARD_H; const ctx = out.getContext('2d');
-  let stage = null, flip = null, stagePromise = null, alive = true, recording = false;
+export async function mountCard(host, initial, { reducedMotion = false, wide = true, loadStage, loadNight, style: firstStyle = 'flip', dark = true, signal } = {}) {
+  const doc = host.ownerDocument;
+  const assertOpen = () => { if (signal?.aborted) throw new Error('Card closed.'); };
+  assertOpen(); await loadFonts(doc); assertOpen();
+  let data = initial, style = STYLES.some(([key]) => key === firstStyle) ? firstStyle : 'flip';
+  const styles = await import('./share-styles.js'); assertOpen();
+  const out = doc.createElement('canvas'); out.width = CARD_W; out.height = CARD_H;
+  const ctx = out.getContext('2d');
+  if (!ctx) throw new Error('Canvas drawing is not supported in this browser.');
+  let stage = null, flip = null, night = null, stagePromise = null, nightPromise = null;
+  let alive = true, exporting = false, raf = 0, lastPreview = 0;
+  const abort = new AbortController();
+  const scratch = new Map();
+  const makeScratch = (w,h) => { const key=`${w}x${h}`; if(!scratch.has(key))scratch.set(key,defaultCanvas(w,h));return scratch.get(key); };
   const front = defaultCanvas(FACE_W, FACE_H), back = defaultCanvas(FACE_W, FACE_H);
   const frontCtx = front.getContext('2d'), backCtx = back.getContext('2d');
+  if (!frontCtx || !backCtx) throw new Error('Canvas drawing is not supported in this browser.');
   out.classList.add('share-canvas'); out.setAttribute('aria-label', 'Holder share card preview'); out.setAttribute('role', 'img');
-  host.replaceChildren(out);
+  const capable = wide && (loadStage || loadNight) ? webglAvailable(doc) : false;
+  const lossHandlers = new Map();
+  const unwatch = resource => { const listener=lossHandlers.get(resource); if(listener){resource.canvas.removeEventListener('webglcontextlost',listener);lossHandlers.delete(resource);} };
+  const releaseFlip = () => { unwatch(flip); unwatch(stage); flip?.dispose(); stage?.dispose(); flip = stage = null; };
+  const releaseNight = () => { unwatch(night); night?.dispose(); night = null; };
+  const watch = (resource, release) => {
+    if(!resource?.canvas?.addEventListener)return;
+    const listener = () => { release(); if(alive && !exporting) render(0.8); };
+    lossHandlers.set(resource,listener);resource.canvas.addEventListener('webglcontextlost',listener);
+  };
+  const stop = () => {
+    if (!alive) return;
+    alive = false; abort.abort(); cancelAnimationFrame(raf);
+    signal?.removeEventListener('abort', stop); releaseFlip(); releaseNight();
+    // A late old mount must never remove a newer card's canvas.
+    if (out.parentNode === host) out.remove();
+  };
+  signal?.addEventListener('abort', stop, { once: true });
   const ensureStage = () => {
-    if (!wide || !loadStage || !webglAvailable() || stagePromise) return stagePromise;
-    stagePromise = Promise.resolve().then(loadStage).then(factory => {
+    if (!alive || !capable || !loadStage) return Promise.resolve();
+    return stagePromise ??= Promise.resolve().then(loadStage).then(factory => {
       if (!alive) return;
       stage = factory({ width: WIN.w * 2, height: WIN.h * 2 });
       flip = stage.createFlip?.(front, back);
-      if (!alive) { flip?.dispose(); stage.dispose(); flip = stage = null; }
-    }).catch(() => { flip?.dispose(); stage?.dispose(); flip = stage = null; });
-    return stagePromise;
+      watch(stage,releaseFlip);watch(flip,releaseFlip);
+    }).catch(releaseFlip);
   };
+  const ensureNight = () => {
+    if (!alive || !capable || !loadNight) return Promise.resolve();
+    return nightPromise ??= Promise.resolve().then(loadNight).then(factory => {
+      if (alive) { night = factory({ width: CARD_W, height: CARD_H, orbs: orbList(data.orbLevels ?? data.levels) }); watch(night,releaseNight); }
+    }).catch(releaseNight);
+  };
+  const prepare = () => style === 'flip' ? ensureStage() : style === 'night' ? ensureNight() : Promise.resolve();
   const render = (t, turn) => {
     if (!alive) return;
-    if (style === 'night') return styles.drawNight(ctx, data, { t });
-    if (style === 'classic') return styles.drawClassic(ctx, data, { t, dark });
+    if (style === 'night') {
+      try { night?.frame(t); } catch { releaseNight(); }
+      return styles.drawNight(ctx, data, { t, scene: night?.canvas ?? null });
+    }
+    if (style === 'classic') return turn === undefined ? styles.drawClassicMoving(ctx, data, { t, dark }) : styles.drawClassic(ctx, data, { t, dark });
     const phase = ((t % LOOP_SECONDS) + LOOP_SECONDS) % LOOP_SECONDS;
-    stage?.frame(phase);
-    if (!flip) return drawCard(ctx, data, { t: phase, scene: stage?.canvas ?? null, ...(turn === undefined ? {} : { turn }) });
-    drawFront(frontCtx, data, { t: phase, scene: stage.canvas });
-    drawBack(backCtx, data, { t: phase });
+    try {
+      stage?.frame(phase);
+      if (flip) {
+        drawFront(frontCtx, data, { t: phase, scene: stage.canvas });
+        drawBack(backCtx, data, { t: phase });
+        flip.frame(phase, turn ?? cardTurn(phase));
+      }
+    } catch { releaseFlip(); }
+    if (!flip) return drawCard(ctx, data, { t: phase, scene: stage?.canvas ?? null, makeCanvas:makeScratch, ...(turn === undefined ? {} : { turn }) });
     drawStudio(ctx, defaultCanvas);
-    flip.frame(phase, turn ?? cardTurn(phase));
     const shadow = ctx.createRadialGradient(600, 573, 4, 600, 573, 365);
     shadow.addColorStop(0, 'rgba(0,0,0,.6)'); shadow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.save(); ctx.translate(600,573); ctx.scale(1,0.12); ctx.fillStyle=shadow; ctx.translate(-600,-573); ctx.fillRect(200,173,800,800); ctx.restore();
     ctx.drawImage(flip.canvas, 0, 0);
     ctx.fillStyle = '#ddd'; ctx.font = `500 15px ${MONO}`; ctx.textAlign = 'center';
-    ctx.fillText('WHEEL-HOUSE.PAGES.DEV', CARD_W / 2, 640); ctx.textAlign = 'start';
+    ctx.fillText('WHEEL-HOUSE.PAGES.DEV', CARD_W / 2, 635); ctx.textAlign = 'start';
+    drawDisclaimer(ctx, data, 600, 659, true);
   };
-  if (style === 'flip') await ensureStage();
-  render(0.6);
-  let raf = 0; const start = performance.now(), abort = new AbortController();
-  const loop = now => { if (!alive) return; if (!recording && document.visibilityState !== 'hidden') render(0.8 + (now - start) / 1000); raf = requestAnimationFrame(loop); };
+  try { await prepare(); assertOpen(); if (!alive) throw new Error('Card closed.'); render(0.6); host.replaceChildren(out); }
+  catch (error) { stop(); throw error; }
+  const start = performance.now();
+  const loop = now => {
+    if (!alive) return;
+    // Preview at 24 FPS; export renders separately at its requested rate.
+    if (!exporting && doc.visibilityState !== 'hidden' && now - lastPreview >= 1000 / 24) { render(0.8 + (now - start) / 1000); lastPreview = now; }
+    raf = requestAnimationFrame(loop);
+  };
   if (!reducedMotion) raf = requestAnimationFrame(loop);
   return {
-    get mode() { return flip ? '3d' : '2d'; },
+    get mode() { return (style === 'night' ? night : style === 'flip' ? stage : null) ? '3d' : '2d'; },
     get style() { return style; },
-    update: next => { if (!recording && alive) { data = next; render(0.8); } },
+    get videoSupported() { return Boolean(pickVideoType() && typeof out.captureStream === 'function'); },
+    update: next => {
+      if (exporting || !alive) return false;
+      data = next;
+      // Synchronize both visible labels and GPU orbs immediately when privacy options change.
+      night?.setOrbs(orbList(data.orbLevels ?? data.levels));
+      render(0.8); return true;
+    },
     setStyle: next => {
-      if (recording || !alive || !STYLES.some(([k]) => k === next)) return false;
+      if (exporting || !alive || !STYLES.some(([key]) => key === next)) return false;
       style = next; render(0.8);
-      if (style === 'flip') ensureStage()?.then(() => { if (alive && !recording) render(0.8); });
+      prepare().then(() => { if (alive && !exporting) render(0.8); });
       return true;
     },
-    png: (side = 'front') => new Promise((resolve, reject) => {
-      if (!alive || recording) return reject(new Error('Wait for the current export to finish.'));
-      render(side === 'back' ? 4.5 : 0.6, side === 'back' ? Math.PI : 0);
-      out.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not make the picture.')), 'image/png');
-    }),
+    png: async (side = 'front') => {
+      if (!alive || exporting) throw new Error('Wait for the current export to finish.');
+      exporting = true;
+      try {
+        await prepare(); if (!alive) throw new Error('Card closed.');
+        render(side === 'back' ? 4.5 : 0.6, side === 'back' ? Math.PI : 0);
+        const blob = await new Promise((resolve, reject) => out.toBlob(value => value ? resolve(value) : reject(new Error('Could not make the picture.')), 'image/png'));
+        if (!alive) throw new Error('Card closed.');
+        return blob;
+      } finally { exporting = false; }
+    },
     video: async (seconds, onProgress) => {
-      if (recording || !alive) throw new Error('Already recording or closed.');
-      recording = true;
+      if (exporting || !alive) throw new Error('Already exporting or closed.');
+      exporting = true;
       const controller = new AbortController();
       const cancel = () => controller.abort();
-      const visibility = () => { if (document.visibilityState === 'hidden') controller.abort(); };
+      const visibility = () => { if (doc.visibilityState === 'hidden') controller.abort(); };
       abort.signal.addEventListener('abort', cancel, { once: true });
-      document.addEventListener('visibilitychange', visibility);
-      try { return await recordCanvas(out, t => render(t), { seconds: seconds ?? styleSeconds(style), signal: controller.signal, onProgress }); }
-      finally { recording = false; abort.signal.removeEventListener('abort', cancel); document.removeEventListener('visibilitychange', visibility); }
+      doc.addEventListener('visibilitychange', visibility);
+      try {
+        await prepare();
+        if (!alive || doc.visibilityState === 'hidden') controller.abort();
+        return await recordCanvas(out, t => render(t), { seconds: seconds ?? styleSeconds(style), signal: controller.signal, onProgress });
+      } finally { exporting = false; abort.signal.removeEventListener('abort', cancel); doc.removeEventListener('visibilitychange', visibility); }
     },
-    stop: () => { alive = false; abort.abort(); cancelAnimationFrame(raf); flip?.dispose(); stage?.dispose(); host.replaceChildren(); },
+    stop,
   };
 }
 

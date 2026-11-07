@@ -76,3 +76,38 @@ try {
   globalThis.cancelAnimationFrame = previousCancel;
 }
 console.log('share-card recording lifecycle: ok');
+
+const stylesMod = await import('../web/share-styles.js');
+for (const fn of ['drawNight', 'drawClassic', 'drawClassicMoving']) assert.equal(typeof stylesMod[fn], 'function', fn);
+const heroSrc = fs.readFileSync(new URL('../web/hero3d-src.js', import.meta.url), 'utf8');
+assert.match(heroSrc, /export function nightStage\(/); assert.match(heroSrc, /export function cardStage\(/);
+assert.deepEqual(orbList([{level:1,count:Infinity},{level:-1,count:3},{level:2,count:999}], Infinity), Array(14).fill(2));
+assert.deepEqual(orbList([{level:1,count:2}], -1), []);
+assert.equal(levelColor(NaN), levelColor(1));
+
+// Recorder settlement: error, draw failure, abort, success and stale callbacks all release the stream once.
+{
+ const saved = {recorder:globalThis.MediaRecorder,raf:globalThis.requestAnimationFrame,cancel:globalThis.cancelAnimationFrame};
+ let current, scheduled, stops=0;
+ globalThis.requestAnimationFrame=fn=>{scheduled=fn;return 1;};
+ globalThis.cancelAnimationFrame=()=>{};
+ globalThis.MediaRecorder=class {
+  static isTypeSupported(){return true;}
+  state='inactive';
+  constructor(){current=this;}
+  start(){this.state='recording';}
+  stop(){this.state='inactive';queueMicrotask(()=>{this.ondataavailable?.({data:new Blob(['video'])});this.onstop?.();});}
+ };
+ const canvas={captureStream:()=>({getTracks:()=>[{stop:()=>{stops++;}}]})};
+ try{
+  const error=recordCanvas(canvas,()=>{});current.onerror({error:new Error('encoder error')});
+  await assert.rejects(error,/encoder error/);assert.equal(stops,1);
+  let frames=0;const drawError=recordCanvas(canvas,()=>{if(frames++)throw new Error('draw error');});
+  scheduled(performance.now()+16);await assert.rejects(drawError,/draw error/);assert.equal(stops,2);
+  const controller=new AbortController(), cancel=recordCanvas(canvas,()=>{},{signal:controller.signal});
+  controller.abort();await assert.rejects(cancel,/cancelled/);assert.equal(stops,3);
+  const ok=await recordCanvas(canvas,()=>{},{seconds:0.005});
+  assert.ok(ok.blob.size>0);assert.equal(stops,4);
+ }finally{globalThis.MediaRecorder=saved.recorder;globalThis.requestAnimationFrame=saved.raf;globalThis.cancelAnimationFrame=saved.cancel;}
+}
+console.log('share-card recorder settlement: ok');
