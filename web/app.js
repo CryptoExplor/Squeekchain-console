@@ -172,9 +172,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     chip.title=el.verified.title=title;
     $('trust-checklist').dataset.state=kind==='verified'?'verified':kind==='unavailable'?'unknown':'stopped';
     if(kind==='verified')clearReadBanner();
-    else showBanner(BANNER_READ_FAILURE,bannerKind??(kind==='unavailable'?'warn':'bad'));
+    else showBanner(kind==='unavailable'?BANNER_READ_FAILURE:BANNER_TRUST_FAILED,bannerKind??(kind==='unavailable'?'warn':'bad'));
   }
-  const BANNER_READ_FAILURE="Can't verify right now";
+  const BANNER_READ_FAILURE="Couldn't check the contracts just now. Actions stay off until the check passes.";
+  const BANNER_TRUST_FAILED="Contract check failed. Actions are stopped.";
   const BANNER_REFRESH_FAILURE="Can't refresh right now. Showing the last data; it updates when the connection is back.";
   function showReadFailure(error,scope) {
     const failure=rpcToolError(error,state.adapter?.rpcDiagnostics?.()??[]);
@@ -184,7 +185,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const trust=failure.diagnostics.trust||error?.name==='RpcTrustError'||error?.kind==='mismatch';
     $('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
     if(!trust){
-      const shown=/wallet/i.test(scope)?Boolean(state.status):/network/i.test(scope)?Boolean(state.net):Boolean(state.net||state.status);
+      // Anything already on screen (wallet or network) keeps the "showing last data" note.
+      const shown=Boolean(state.net||state.status);
       el.verified.textContent='Unavailable';
       trustDisplay({kind:'unavailable',chipText:'Unavailable'});
       renderTrust(null);$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;
@@ -194,7 +196,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     el.verified.textContent='Stopped';
     trustDisplay({kind:'mismatch',chipText:'Mismatch: stop'});
-    renderTrust({ok:false,trusted:false});$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;
+    renderTrust({ok:false,trusted:false});$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_TRUST_FAILED;
     readBanner=true;
   }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
@@ -585,7 +587,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     lastVerificationTime=v?Date.now():null;
     {const block=formatNumber(v?.blockNumber ?? state.net?.snapshot?.blockNumber);$('trust-block').textContent=block===UNKNOWN?'Not available':`block ${block} on Sepolia`;}
     if(v?.ok||!v&&!state.lastReadFailure)$('rpc-diagnostics').textContent='';
-    $('trust-result').textContent=v?.ok&&v?.trusted?'Verified':v?"Can't verify right now":UNKNOWN;
+    $('trust-result').textContent=v?.ok&&v?.trusted?'Verified':v?(v.ok?BANNER_TRUST_FAILED:BANNER_READ_FAILURE):UNKNOWN;
     for(const id of ['trust-block','trust-time'])$(id).parentElement.hidden=!(v?.ok&&v?.trusted);
     $('trust-checklist').hidden=!(v?.ok&&v?.trusted);
     updateTrustAge();
@@ -905,7 +907,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const isV9 = Boolean(getProfile(state.profileKey).addresses);
     el.holder.power.parentElement.querySelector('.label').textContent = isV9 ? 'Deposited' : 'Power';
     const inspected=status?.owner??state.inspected??state.account;
-    el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);
+    el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);$('holder-history-link').classList.toggle('hidden',!inspected);
     el.holder.refresh.disabled=!state.adapter||!inspected;
     $('holder-copy-link').classList.toggle('hidden',!inspected);$('btn-planner').disabled=!(status?.squeeks?.length);$('btn-planner').hidden=!status?.squeeks?.some(token=>Number.isInteger(token.level)&&token.level>0&&token.level<state.net?.policy?.maximumLevel);
     el.holder.empty.classList.toggle("hidden", Boolean(status));

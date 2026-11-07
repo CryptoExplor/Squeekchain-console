@@ -2,9 +2,9 @@ import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
 import {installReviewFixture} from './review-fixture.mjs';
 import {installV9Fixture} from './v9-fixture.mjs';
-const availability="Can't verify right now";
+const availability="Couldn't check the contracts just now. Actions stay off until the check passes.";
 const refreshFailure="Can't refresh right now. Showing the last data; it updates when the connection is back.";
-const trustFailure="Can't verify right now";
+const trustFailure="Contract check failed. Actions are stopped.";
 async function capture(page,info,name){await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({animations:'disabled'});await info.attach(name,{body:image,contentType:'image/png'});fs.mkdirSync('artifacts/screenshots',{recursive:true});fs.writeFileSync('artifacts/screenshots/'+name,image);}
 for(const theme of ['light','dark'])for(const width of [1280,390])test(`connected v9 diagnostics below header / ${theme} / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);if(theme==='dark')await page.getByTestId('btn-theme').click();await page.evaluate(()=>squeek.connect());

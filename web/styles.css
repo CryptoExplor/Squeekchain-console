@@ -761,7 +761,7 @@ footer > p.label { font-size: var(--sqk-caption-size); letter-spacing: .03em; }
 
 
 /* Shared, compact browsing. Fixed image frames prevent layout shifts. */
-.network-strip{display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:6px 32px;margin:16px 0 29px;padding:10px 0;border-bottom:1px solid var(--sqk-line);font:12px var(--sqk-font-label)}
+.network-strip{display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:8px;margin:8px 0 16px;padding:8px 10px;background:var(--sqk-panel);border:1px solid var(--sqk-line);border-radius:var(--sqk-r-panel);font:12px var(--sqk-font-label)}
 .network-strip a{min-height:44px;display:inline-flex;align-items:center;color:var(--sqk-ink);text-decoration:none}
 .network-strip strong{font-weight:500;font-variant-numeric:tabular-nums}
 
@@ -955,4 +955,38 @@ a { color: var(--sqk-blue); }
 @media (max-width: 600px) {
   .permission-group { padding-left: 0; border-left: 0; padding-top: 10px; border-top: 1px solid var(--sqk-line-soft); }
   .squeek-action-grid > section { padding: 14px; }
+}
+
+/* SQK section: same toolbar card and action card as the Squeeks area. */
+.sqk-actions { background: var(--sqk-panel); border: 1px solid var(--sqk-line); border-radius: var(--sqk-r-panel); padding: 10px 12px; margin: 0 0 16px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sqk-actions #claim-ids { flex: 1 1 240px; min-width: 0; min-height: 36px; }
+.sqk-actions .btn { min-height: 36px; padding: 6px 12px; }
+#sqk-v9-buttons { display: flex; gap: 6px; margin: 0; padding-left: 12px; border-left: 1px solid var(--sqk-line-soft); }
+.sqk-actions #holder-rewards-notice:not(.hidden) { flex-basis: 100%; margin: 4px 0 0; }
+#sqk-action-host:not(:empty) { background: var(--sqk-panel); border: 1px solid var(--sqk-line); border-radius: var(--sqk-r-panel); padding: 16px 18px; margin-bottom: 16px; }
+#sqk-action-host .action-fields { margin: 0; }
+#sqk-action-host input { min-height: 44px; }
+.wallet-heading-actions #holder-history-link { min-height: 44px; }
+@media (max-width: 600px) {
+  #sqk-v9-buttons { padding-left: 0; border-left: 0; padding-top: 8px; border-top: 1px solid var(--sqk-line-soft); width: 100%; }
+  .sqk-actions .btn { flex: 1 1 auto; }
+}
+
+/* Network tab: summary strip as a card of chips, even wheel facts, tidy checkpoint card. */
+.network-strip > span { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 10px; border-radius: 999px; background: var(--sqk-panel-alt); border: 1px solid var(--sqk-line-soft); }
+.network-strip > a#strip-status { margin-left: auto; min-height: 32px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--sqk-line); }
+.network-strip > a#strip-status:hover { border-color: var(--sqk-ink); }
+#wheel-panel .squeek-detail-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto; grid-auto-flow: column; gap: 4px 0; margin: 8px 0 0; }
+#wheel-panel .squeek-detail-facts dt { font-size: var(--sqk-caption-size); color: var(--sqk-gray); padding: 0 12px; }
+#wheel-panel .squeek-detail-facts dd { margin: 0; padding: 0 12px; font: 400 24px var(--sqk-font-display); }
+#wheel-panel .squeek-detail-facts dt:first-of-type, #wheel-panel .squeek-detail-facts dd:first-of-type { border-right: 1px solid var(--sqk-line-soft); }
+#wheel-note:empty { display: none; }
+#checkpoint-panel .panel-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+#checkpoint-panel .panel-head .panel-note { color: var(--sqk-gray); }
+#checkpoint-panel #cp-explain { margin: 8px 0 12px; max-width: 70ch; }
+#checkpoint-panel .row { flex-direction: column; align-items: flex-start; gap: 8px; }
+#checkpoint-panel #cp-reason { max-width: none; color: var(--sqk-gray-lit); }
+@media (max-width: 600px) {
+  .network-strip > a#strip-status { margin-left: 0; }
+  #checkpoint-panel .row .btn { width: 100%; }
 }
