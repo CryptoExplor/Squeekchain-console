@@ -160,7 +160,10 @@ export function createExploreIndex({profile,store,reader,signal,seed=null,progre
  // A seeded scan that throws (e.g. a snapshot token whose history no longer chains) is
  // retried once as a full scan with the seed switched off for this index's lifetime.
  async function run(options){usedSeed=false;try{return await perform(options);}catch(error){check();if(!usedSeed||seedDisabled||error?.name==='AbortError')throw error;seedDisabled=true;return perform({...options,restart:true});}}
- return {sync(options){if(flight)return flight;flight=run(options).finally(()=>flight=null);return flight;},
+ return {
+  // Last complete index saved on this device, shown at once (display only) while a scan catches up.
+  async peek(){try{const value=await bounded(()=>store.get(indexKey(profile)),5000);return validCache(value,profile)&&value.complete&&!value.validationFailed&&value.snapshot?value:null;}catch{return null;}},
+  sync(options){if(flight)return flight;flight=run(options).finally(()=>flight=null);return flight;},
   // Per-Squeek history is resolved when its page opens, not during the scan.
   async history(state,id){
     const events=state?.events?.filter(e=>['tokenId','survivor','donor'].some(k=>String(e.args[k])===String(id)))??[];

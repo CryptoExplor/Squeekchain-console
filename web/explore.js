@@ -33,12 +33,14 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
   if(closed||!current(load)||scope!==key)return;
   root.dataset.phase=p.phase;root.dataset.resumed=String(p.resumed??false);
   if(p.tokenTotal!=null){root.dataset.hydrated=String(p.tokens);root.dataset.hydrationTotal=String(p.tokenTotal);}
-  if(p.state){state=p.state;if(p.tokens>0){root.dataset.indexStatus='partial';render(false);}}
+  if(p.state&&kept?.key!==key){state=p.state;if(p.tokens>0){root.dataset.indexStatus='partial';render(false);}}
+  if(kept?.key===key){status.textContent=`Updating · showing data as of ${asOf(kept.state)}`;return;}
   status.textContent=p.phase==='seed'?`Loaded the saved snapshot · catching up with the latest blocks…`:p.phase==='final'?'Almost there · checking the latest totals…':p.phase==='hydrate'?`Partial · Loading Squeeks: ${p.tokens} of ${p.tokenTotal}`:p.phase==='history'?`Loading merge times: ${p.headers} of ${p.headerTotal}`:`Reading the chain: ${p.done} of ${p.total}`;
  }
  // Phase 10: the prescanned snapshot ships with the site (snapshot/<profile>.json). Display only; a missing file means a full scan.
  const snapshotLoader=(profile,signal)=>profile?.addresses&&typeof win.fetch==='function'?async()=>{const res=await win.fetch(new URL(`snapshot/${profile.key}.json`,doc.baseURI),{cache:'no-cache',signal});return res.ok?res.json():null;}:null;
- let autoRetries=0;
+ let autoRetries=0,kept=null,quietRetry=null;
+ const asOf=r=>`${new Date(Number(r.snapshot.timestamp)*1000).toISOString().replace('T',' ').slice(0,19)} UTC · ${Math.max(0,Math.floor((Date.now()/1000-Number(r.snapshot.timestamp))/60))} min ago`;
  async function sync({restart=false}={}){
   if(!visible()&&!background)return;const load=capture(),key=`${load.generation}:${load.profileKey}`;
   if(scope===key&&(busy||failed&&!restart))return;
@@ -46,23 +48,37 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
    scanController?.abort();scanController=new AbortController();sequence++;scope=key;state=null;failed=false;leaderOrder=[];
    const profile=getProfile(load.profileKey),signal=AbortSignal.any([load.signal,scanController.signal]);
    service=createExploreIndex({profile,store,reader:createExploreReader({...readerOptions(load),signal}),signal,seed:snapshotLoader(profile,signal),progress:p=>progress(load,key,p)});
-   clear();stats.hidden=false;root.dataset.indexStatus='loading';status.textContent='Reading the chain…';
+   // Never blank what is already on screen: a retry or rescan for the same network keeps the
+   // last complete view until the new scan replaces it.
+   if(kept?.key===key){state=kept.state;stats.hidden=false;render(false);status.textContent=`Updating · showing data as of ${asOf(kept.state)}`;}
+   else{clear();stats.hidden=false;root.dataset.indexStatus='loading';status.textContent='Reading the chain…';
+    const svc=service;void svc.peek?.().then(saved=>{if(!saved||closed||!current(load)||scope!==key||service!==svc||kept?.key===key||state?.complete)return;kept={key,state:saved};state=saved;failed=false;stats.hidden=false;render(false);status.textContent=`Updating · showing data as of ${asOf(saved)}`;});}
   }
   const seq=++sequence;busy=true;scan.hidden=true;
   try{
    const result=await service.sync({restart});if(closed||!current(load)||scope!==key||seq!==sequence)return;
-   state=result;failed=!result.complete;if(result.complete)autoRetries=0;root.dataset.indexStatus=result.complete?'complete':'incomplete';root.dataset.phase='done';
+   if(!result.complete&&kept?.key===key){state=kept.state;failed=false;status.textContent=`Couldn't refresh · showing data as of ${asOf(kept.state)}`;scan.textContent='Retry';scan.hidden=false;source('Explore','rpc',`Final supply mismatch: ${result.totalSupply} totalSupply`);render(false);scheduleQuiet();return;}
+   state=result;failed=!result.complete;if(result.complete){autoRetries=0;kept={key,state:result};}root.dataset.indexStatus=result.complete?'complete':'incomplete';root.dataset.phase='done';
    root.dataset.indexed=String(Object.values(result.tokens).filter(t=>t.minted&&!t.burned).length);root.dataset.supply=result.totalSupply;root.dataset.scanBlock=result.snapshot.blockNumber;
    scan.hidden=result.complete;scan.textContent=result.complete?'Rescan':'Retry';
    status.textContent=result.complete?`As of ${new Date(Number(result.snapshot.timestamp)*1000).toISOString().replace('T',' ').slice(0,19)} UTC · ${Math.max(0,Math.floor((Date.now()/1000-Number(result.snapshot.timestamp))/60))} min ago`:"Couldn't finish, retry";
    source('Explore','rpc',result.complete?null:`Final supply mismatch: ${root.dataset.indexed} indexed / ${result.totalSupply} totalSupply`);render();
   }catch(error){
    if(closed||!current(load)||scope!==key||seq!==sequence)return;
-   scanController.abort(error);clear();state=null;failed=true;stats.hidden=true;root.dataset.indexStatus='unavailable';root.dataset.phase='failed';
-   if(error?.name!=='AbortError'&&autoRetries<2){autoRetries++;status.textContent='Network busy · retrying…';scope=null;busy=false;setTimeout(()=>{if(!closed&&scope===null)sync();},2500*autoRetries);return;}
-   status.textContent="Couldn't finish, retry";scan.textContent='Retry';scan.hidden=false;source('Explore','rpc',error.message);if(error.name==='RpcTrustError')onTrustError(error);
+   scanController.abort(error);root.dataset.phase='failed';
+   if(error.name==='RpcTrustError'){clear();state=kept=null;failed=true;stats.hidden=true;root.dataset.indexStatus='unavailable';status.textContent="Couldn't finish, retry";scan.textContent='Retry';scan.hidden=false;source('Explore','rpc',error.message);onTrustError(error);return;}
+   // A busy or failed RPC never wipes the view: keep the last complete scan (or the partial one
+   // in progress), say how old it is, and keep retrying quietly.
+   const keep=kept?.key===key?kept.state:(state&&Object.keys(state.tokens??{}).length?state:null);
+   source('Explore','rpc',error.message);
+   if(keep){state=keep;failed=false;stats.hidden=false;root.dataset.indexStatus=keep.complete?'stale':'partial';render(false);}
+   else{clear();state=null;failed=true;root.dataset.indexStatus='unavailable';}
+   const age=keep?.snapshot?.timestamp?` · showing data as of ${asOf(keep)}`:keep?' · showing what loaded so far':'';
+   if(error?.name!=='AbortError'&&autoRetries<2){autoRetries++;status.textContent=`Network busy · retrying…${age}`;scope=null;busy=false;setTimeout(()=>{if(!closed&&scope===null)sync();},2500*autoRetries);return;}
+   status.textContent=`Couldn't refresh${age}`;scan.textContent='Retry';scan.hidden=false;scheduleQuiet();
   }finally{if(scope===key&&seq===sequence)busy=false;}
  }
+ function scheduleQuiet(){if(quietRetry||closed)return;quietRetry=setTimeout(()=>{quietRetry=null;if(!closed&&!busy&&visible()){autoRetries=0;scope=null;void sync();}},60000);}
  scan.onclick=()=>{const restart=state?.validationFailed===true;scope=null;void sync({restart});};show.onclick=()=>{hourTable.hidden=!hourTable.hidden;show.textContent=hourTable.hidden?'Show table':'Hide table';show.setAttribute('aria-expanded',String(!hourTable.hidden));};sort.onchange=()=>navigate({rankSort:sort.value,rankPage:1});
  const pause=()=>{if(busy){scanController?.abort();sequence++;scope=null;busy=false;root.dataset.indexStatus='paused';status.textContent='Paused · progress saved';scan.textContent='Retry';scan.hidden=false;}},visibility=()=>{if(doc.hidden)pause();else if(visible())void sync();};doc.addEventListener('visibilitychange',visibility);
  const route=()=>{if(!visible()&&!background)pause();render(false);};win.addEventListener('hashchange',route);win.addEventListener('popstate',route);
@@ -73,5 +89,5 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
      const events=await service.history(state,id);
      const text=({Transfer:'Transferred',Deposited:'Deposited',Withdrawn:'Withdrew',Recovered:'Withdrew',Merged:'Merged',DepositedMerge:'Merged',PositionsMerged:'Merged'});
      return {unknown:false,rows:events.map(e=>{const known=e.timestamp!=null&&Number.isFinite(Number(e.timestamp));return {key:e.transactionHash+':'+e.logIndex,hash:e.transactionHash,text:text[e.eventName]+` #${e.args.tokenId??e.args.survivor}`,time:known?new Date(Number(e.timestamp)*1000).toISOString():null,age:known?new Date(Number(e.timestamp)*1000).toISOString().slice(0,16).replace('T',' ')+' UTC':'Time unavailable'};}).reverse()};
-   },destroy(){closed=true;scanController?.abort();doc.removeEventListener('visibilitychange',visibility);sequence++;grid.destroy();win.removeEventListener('hashchange',route);win.removeEventListener('popstate',route);root.replaceChildren();}};
+   },destroy(){closed=true;clearTimeout(quietRetry);scanController?.abort();doc.removeEventListener('visibilitychange',visibility);sequence++;grid.destroy();win.removeEventListener('hashchange',route);win.removeEventListener('popstate',route);root.replaceChildren();}};
 }
