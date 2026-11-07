@@ -11,7 +11,7 @@ export function shortAddress(address) {
 }
 
 // Turns what the holder view shows into the card's fields. Unknown values stay "—", never 0.
-export function cardData({ owner, count, powerLabel = 'Power', power, claimable, levels = [], network = 'Sepolia', date = new Date() } = {}) {
+export function cardData({ owner, count, powerLabel = 'Power', power, claimable, claimed, compounded, levels = [], network = 'Sepolia', date = new Date() } = {}) {
   const clean = value => { const text = String(value ?? '').trim(); return text && text !== 'Not available' ? text : '—'; };
   const byLevel = new Map();
   for (const level of levels) if (Number.isInteger(level) && level > 0) byLevel.set(level, (byLevel.get(level) ?? 0) + 1);
@@ -22,10 +22,27 @@ export function cardData({ owner, count, powerLabel = 'Power', power, claimable,
     powerLabel: clean(powerLabel) === '—' ? 'Power' : String(powerLabel).trim(),
     power: clean(power),
     claimable: clean(claimable),
+    claimed: clean(claimed),
+    compounded: clean(compounded),
     levels: [...byLevel.entries()].sort((a, b) => a[0] - b[0]).map(([level, n]) => ({ level, count: n })),
     network: clean(network),
     date: `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`,
   };
+}
+
+// What the holder chose to show. Address off = "A Squeek holder"; at most MAX_STATS numbers fit the row.
+export const MAX_STATS = 4;
+export const DEFAULT_SHOW = { address: true, count: true, power: true, claimable: true, claimed: false, compounded: false, levels: true, meta: true };
+export const SHOW_FIELDS = [['address', 'Wallet address'], ['count', 'Squeeks'], ['power', 'Deposited / power'], ['claimable', 'Claimable SQK'], ['claimed', 'SQK claimed (lifetime)'], ['compounded', 'SQK compounded (lifetime)'], ['levels', 'Levels'], ['meta', 'Network and date']];
+const STAT_KEYS = ['count', 'power', 'claimable', 'claimed', 'compounded'];
+export const statKeys = STAT_KEYS;
+const sqkNum = v => String(v).replace(/\s*SQK$/i, '');
+export function applyShow(data, show = DEFAULT_SHOW) {
+  const on = { ...DEFAULT_SHOW, ...show };
+  const label = { count: 'SQUEEKS', power: String(data.powerLabel).toUpperCase(), claimable: 'SQK CLAIMABLE', claimed: 'SQK CLAIMED', compounded: 'SQK COMPOUNDED' };
+  const value = { count: data.count, power: data.power, claimable: sqkNum(data.claimable), claimed: sqkNum(data.claimed), compounded: sqkNum(data.compounded) };
+  const stats = STAT_KEYS.filter(k => on[k] && data[k] !== '—').slice(0, MAX_STATS).map(k => [value[k], label[k]]);
+  return { ...data, address: on.address ? data.address : null, stats, levels: on.levels ? data.levels : [], orbLevels: data.levels, meta: on.meta };
 }
 
 export function fileName(data, ext) {
@@ -77,7 +94,7 @@ export function drawBackdrop(ctx, data, t = 0) {
   ctx.fillStyle = '#FCBE46'; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
   // orbs roll along the rail (bezier sampled), bigger for higher levels
-  const orbs = orbList(data.levels); const P = (u) => { const a = [-40, 330], b = [260, 400], c = [520, 250], d = [860, 420], m = 1 - u; return [m*m*m*a[0] + 3*m*m*u*b[0] + 3*m*u*u*c[0] + u*u*u*d[0], m*m*m*a[1] + 3*m*m*u*b[1] + 3*m*u*u*c[1] + u*u*u*d[1]]; };
+  const orbs = orbList(data.orbLevels ?? data.levels); const P = (u) => { const a = [-40, 330], b = [260, 400], c = [520, 250], d = [860, 420], m = 1 - u; return [m*m*m*a[0] + 3*m*m*u*b[0] + 3*m*u*u*c[0] + u*u*u*d[0], m*m*m*a[1] + 3*m*m*u*b[1] + 3*m*u*u*c[1] + u*u*u*d[1]]; };
   orbs.forEach((level, i) => {
     const u = 0.06 + (((i + 0.5) / Math.max(orbs.length, 4) + t * 0.02) % 1) * 0.8; const [x, y] = P(u); const rr = 15 + Math.min(level, 8) * 3 + u * 8;
     ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.beginPath(); ctx.ellipse(x + 4, y + rr * 0.15, rr * 1.05, rr * 0.35, 0, 0, Math.PI * 2); ctx.fill();
@@ -101,30 +118,38 @@ export function drawOverlay(ctx, data) {
   for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 18, Math.sin(a) * 18); ctx.lineWidth = 2.5; ctx.stroke(); }
   ctx.restore();
   ctx.fillStyle = '#FFFFFF'; ctx.font = `700 36px ${SANS}`; ctx.fillText('wheelhouse', 108, 82);
-  ctx.font = `600 20px ${MONO}`; const chip = `${data.network.toUpperCase()} · ${data.date}`; const cw = ctx.measureText(chip).width + 32;
-  roundRect(ctx, W - 56 - cw, 48, cw, 42, 21); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillText(chip, W - 56 - cw + 16, 76);
+  if (data.meta !== false) {
+    ctx.font = `600 20px ${MONO}`; const chip = `${data.network.toUpperCase()} · ${data.date}`; const cw = ctx.measureText(chip).width + 32;
+    roundRect(ctx, W - 56 - cw, 48, cw, 42, 21); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillText(chip, W - 56 - cw + 16, 76);
+  }
 
   // title: address, like "Checkpoint example"
-  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `600 22px ${COND}`; ctx.fillText('SQUEEK HOLDER CHECKPOINT', 72, 452);
-  ctx.fillStyle = '#FFFFFF'; fitFont(ctx, data.address || 'Unknown wallet', 640, 68, 700, SANS); ctx.fillText(data.address || 'Unknown wallet', 70, 520);
+  const title = data.address || 'A Squeek holder';
+  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `600 22px ${COND}`; ctx.fillText(data.address ? 'SQUEEK HOLDER CHECKPOINT' : 'WHEELHOUSE CHECKPOINT', 72, 452);
+  ctx.fillStyle = '#FFFFFF'; fitFont(ctx, title, 640, 68, 700, SANS); ctx.fillText(title, 70, 520);
 
   // stats row
-  const stats = [[data.count, 'SQUEEKS'], [data.power, data.powerLabel.toUpperCase()], [data.claimable.replace(/\s*SQK$/i, ''), 'SQK CLAIMABLE']];
+  const stats = data.stats ?? applyShow(data).stats;
+  // Shrink the row until it fits left of the level chips (or the full width when levels are hidden).
+  const room = (data.levels.length ? 700 : W - 128);
+  let big = 44, small = 20, gap = 34;
+  const rowWidth = () => stats.reduce((w, [v, l]) => { ctx.font = `600 ${big}px ${COND}`; const a = ctx.measureText(v).width; ctx.font = `500 ${small}px ${COND}`; return w + a + 10 + ctx.measureText(l).width + gap; }, -gap);
+  while (big > 26 && rowWidth() > room) { big -= 2; small = Math.max(14, small - 1); gap = Math.max(20, gap - 2); }
   let x = 72; for (const [value, label] of stats) {
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `600 44px ${COND}`; ctx.fillText(value, x, 590); const vw = ctx.measureText(value).width;
-    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `500 20px ${COND}`; ctx.fillText(label, x + vw + 10, 590); x += vw + 10 + ctx.measureText(label).width + 34;
+    ctx.fillStyle = '#FFFFFF'; ctx.font = `600 ${big}px ${COND}`; ctx.fillText(value, x, 590); const vw = ctx.measureText(value).width;
+    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `500 ${small}px ${COND}`; ctx.fillText(label, x + vw + 10, 590); x += vw + 10 + ctx.measureText(label).width + gap;
   }
   // level chips, right side bottom
   ctx.font = `600 22px ${COND}`; let rx = W - 56; const chips = data.levels.length ? [...data.levels].reverse() : [];
   for (const { level, count } of chips) {
-    const text = `L${level} × ${count}`, w = ctx.measureText(text).width + 44; rx -= w; if (rx < 760) break;
+    const text = `L${level} × ${count}`, w = ctx.measureText(text).width + 44; rx -= w; if (rx < Math.max(760, x + 10)) break;
     roundRect(ctx, rx, 558, w, 40, 20); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.fillStyle = levelColor(level); ctx.beginPath(); ctx.arc(rx + 18, 578, 7, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#FFFFFF'; ctx.fillText(text, rx + 32, 586); rx -= 10;
   }
   ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.font = `500 16px ${MONO}`;
-  ctx.fillText('Testnet values · not financial advice', 72, 640);
+  ctx.fillText(data.network === 'Mainnet' ? 'Not financial advice' : 'Testnet values · not financial advice', 72, 640);
   const site = 'wheel-house.pages.dev'; ctx.fillText(site, W - 56 - ctx.measureText(site).width, 640);
 }
 
@@ -132,7 +157,7 @@ export function drawOverlay(ctx, data) {
 export function drawCard(ctx, data, { t = 0, scene = null } = {}) {
   ctx.save(); ctx.clearRect(0, 0, CARD_W, CARD_H);
   if (scene) ctx.drawImage(scene, 0, 0, CARD_W, CARD_H); else drawBackdrop(ctx, data, t);
-  drawOverlay(ctx, data); ctx.restore();
+  drawOverlay(ctx, data.stats ? data : applyShow(data)); ctx.restore();
 }
 
 // Best container X accepts first; WebM is the fallback and is labelled so.
@@ -169,11 +194,11 @@ export async function loadFonts(doc = document) {
 
 // Opens the card in `host`. Desktop with WebGL renders the scene in 3D (three.js, shared with the hero) under the
 // text layer; phones or no WebGL get the flat scene. One 2D output canvas is what you see, save and record.
-export async function mountCard(host, data, { reducedMotion = false, wide = true, loadStage } = {}) {
-  await loadFonts();
+export async function mountCard(host, initial, { reducedMotion = false, wide = true, loadStage } = {}) {
+  await loadFonts(); let data = initial;
   const out = document.createElement('canvas'); out.width = CARD_W; out.height = CARD_H; const ctx = out.getContext('2d');
   let stage = null;
-  if (wide && loadStage && webglAvailable()) { try { stage = (await loadStage())({ width: CARD_W, height: CARD_H, orbs: orbList(data.levels) }); } catch { stage = null; } }
+  if (wide && loadStage && webglAvailable()) { try { stage = (await loadStage())({ width: CARD_W, height: CARD_H, orbs: orbList(data.orbLevels ?? data.levels) }); } catch { stage = null; } }
   out.classList.add('share-canvas'); out.setAttribute('aria-label', 'Holder share card preview'); out.setAttribute('role', 'img');
   host.replaceChildren(out);
   const draw = t => { if (stage) stage.frame(t); drawCard(ctx, data, { t, scene: stage?.canvas ?? null }); };
@@ -183,6 +208,7 @@ export async function mountCard(host, data, { reducedMotion = false, wide = true
   if (!reducedMotion) raf = requestAnimationFrame(loop);
   return {
     mode: stage ? '3d' : '2d',
+    update: next => { data = next; if (reducedMotion) draw(0.8); },
     png: () => new Promise((resolve, reject) => { out.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not make the picture.')), 'image/png'); }),
     video: async seconds => { recording = true; try { return await recordCanvas(out, draw, { seconds }); } finally { recording = false; } },
     stop: () => { alive = false; cancelAnimationFrame(raf); stage?.dispose(); host.replaceChildren(); },

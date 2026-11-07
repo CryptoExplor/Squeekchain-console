@@ -30,7 +30,7 @@ import {
   profileFromHash, profileInput, canonicalHash, parseEther, formatEther, unstakeQuoteError, SQUEEKS_POLICY,
 } from "./bundle.js";
 
-import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatSqk, formatPower } from './components.js';
+import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatSqk, formatPower, formatSqkBase } from './components.js';
 
 // Sepolia is the only chain Wheelhouse talks to; the profile decides the rest.
 const SEPOLIA_CHAIN_ID = 11155111;
@@ -1470,7 +1470,19 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
   $('profile-status').onclick = () => { win.location.hash = `${state.profileKey}/info/trust`; selectTab('info/trust'); $('info-trust').focus(); };
 
-  let activeSheet = null, sheetFocus = null, shareView = null, shareData = null;
+  let activeSheet = null, sheetFocus = null, shareView = null, shareData = null, shareBase = null, shareShow = null;
+  // Share card options: which numbers show, and whether the address does. Remembered in this browser only.
+  const SHARE_SHOW_KEY='wheelhouse.shareShow.v1';
+  const loadShareShow=card=>{try{const saved=JSON.parse(win.localStorage.getItem(SHARE_SHOW_KEY)||'{}');return {...card.DEFAULT_SHOW,...Object.fromEntries(Object.entries(saved).filter(([k,v])=>k in card.DEFAULT_SHOW&&typeof v==='boolean'))};}catch{return {...card.DEFAULT_SHOW};}};
+  const syncShareLink=()=>{const btn=$('share-link');btn.disabled=!shareShow?.address;btn.title=btn.disabled?'The link shows the wallet address, which is hidden on this card.':'';};
+  const renderShareOptions=card=>{const box=$('share-options');box.querySelectorAll('label').forEach(n=>n.remove());
+    for(const [key,text] of card.SHOW_FIELDS){const label=doc.createElement('label'),input=doc.createElement('input');input.type='checkbox';input.dataset.key=key;input.setAttribute('data-testid',`share-show-${key}`);
+      const missing=card.statKeys.includes(key)&&shareBase[key]==='—';input.checked=!missing&&!!shareShow[key];input.disabled=missing;if(missing){label.classList.add('off');label.title='Not loaded for this wallet yet.';}
+      input.onchange=()=>{const next={...shareShow,[key]:input.checked};const on=card.statKeys.filter(k=>next[k]&&shareBase[k]!=='—').length;
+        if(input.checked&&card.statKeys.includes(key)&&on>card.MAX_STATS){input.checked=false;$('share-status').textContent=`Up to ${card.MAX_STATS} numbers fit. Turn one off first.`;return;}
+        shareShow=next;try{win.localStorage.setItem(SHARE_SHOW_KEY,JSON.stringify(shareShow));}catch{}shareData=card.applyShow(shareBase,shareShow);shareView?.update(shareData);syncShareLink();$('share-status').textContent='';};
+      label.append(input,doc.createTextNode(' '+text));box.append(label);}
+    syncShareLink();};
   function closeSheet() {
     if(finishWalletPick){const resolve=finishWalletPick;finishWalletPick=null;resolve(null);}
     if (!activeSheet) return;
@@ -1577,7 +1589,9 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const status=state.status;if(!status)return;
     const card=await import('./share-card.js');
     const powerLabel=el.holder.power.parentElement.querySelector('.label')?.textContent;
-    shareData=card.cardData({owner:status.owner,count:el.holder.count.textContent,powerLabel,power:el.holder.power.textContent,claimable:el.holder.claimable.textContent,levels:(status.squeeks??[]).map(t=>t.level),network:String(state.profileKey||'sepolia').replace(/^./,c=>c.toUpperCase())});
+    const lifetime=v=>/^\d+$/.test(v??'')?formatSqkBase(BigInt(v),formatEther):null;
+    shareBase=card.cardData({owner:status.owner,count:el.holder.count.textContent,powerLabel,power:el.holder.power.textContent,claimable:el.holder.claimable.textContent,claimed:lifetime(status.rewards?.lifetimePaidBaseUnits),compounded:lifetime(status.rewards?.lifetimeCompoundedBaseUnits),levels:(status.squeeks??[]).map(t=>t.level),network:String(state.profileKey||'sepolia').replace(/^./,c=>c.toUpperCase())});
+    shareShow=loadShareShow(card);shareData=card.applyShow(shareBase,shareShow);renderShareOptions(card);
     openSheet('share-sheet');$('share-status').textContent='';
     const wide=win.matchMedia('(min-width: 761px)').matches,reducedMotion=win.matchMedia('(prefers-reduced-motion: reduce)').matches;
     shareView=await card.mountCard($('share-preview'),shareData,{reducedMotion,wide,loadStage:()=>import('./hero3d.js').then(m=>m.cardStage)});
