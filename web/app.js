@@ -1600,7 +1600,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const wide=win.matchMedia('(min-width: 761px)').matches,reducedMotion=win.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const shareStyleKey='wheelhouse.shareStyle.v1';let firstStyle='flip';try{firstStyle=win.localStorage.getItem(shareStyleKey)||'flip';}catch{}
     renderShareStyles(card,firstStyle);
-    shareView=await card.mountCard($('share-preview'),shareData,{reducedMotion,wide,style:firstStyle,dark:doc.documentElement.dataset.theme!=='light',loadStage:()=>import('./hero3d.js').then(m=>m.cardStage)});
+    shareView=await card.mountCard($('share-preview'),shareData,{reducedMotion,wide,style:firstStyle,dark:doc.documentElement.dataset.theme!=='light',loadStage:()=>import('./hero3d.js').then(m=>m.cardStage),loadNight:()=>import('./hero3d.js').then(m=>m.nightStage)});
     if(activeSheet?.id!=='share-sheet'){shareView.stop();shareView=null;}
   });
   $('share-png').onclick=()=>withBusy($('share-png'),async()=>{if(!shareView)return;try{const card=await import('./share-card.js');card.download(await shareView.png(),card.fileName(shareData,'png'));$('share-status').textContent='Picture saved.';}catch(error){$('share-status').textContent=error.message||'Could not make the picture.';}});

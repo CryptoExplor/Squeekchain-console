@@ -267,16 +267,21 @@ export async function loadFonts(doc = document) {
 export const STYLES = [['flip', 'Flip card'], ['night', 'Night scene'], ['classic', 'Classic']];
 export const styleSeconds = style => style === 'flip' ? LOOP_SECONDS : 5;
 
-export async function mountCard(host, initial, { reducedMotion = false, wide = true, loadStage, style: firstStyle = 'flip', dark = true } = {}) {
+export async function mountCard(host, initial, { reducedMotion = false, wide = true, loadStage, loadNight, style: firstStyle = 'flip', dark = true } = {}) {
   await loadFonts(); let data = initial, style = STYLES.some(([k]) => k === firstStyle) ? firstStyle : 'flip';
   const styles = await import('./share-styles.js');
   const out = document.createElement('canvas'); out.width = CARD_W; out.height = CARD_H; const ctx = out.getContext('2d');
   let stage = null;
   if (wide && loadStage && webglAvailable()) { try { stage = (await loadStage())({ width: WIN.w * 2, height: WIN.h * 2 }); } catch { stage = null; } }
+  // Night scene in 3D (desktop with WebGL), made the first time that style is shown; flat drawing otherwise.
+  let night = null, nightTried = false;
+  const ensureNight = async () => { if (nightTried || !(wide && loadNight && webglAvailable())) return; nightTried = true;
+    try { night = (await loadNight())({ width: CARD_W, height: CARD_H, orbs: orbList(data.orbLevels ?? data.levels) }); } catch { night = null; } };
+  if (style === 'night') await ensureNight();
   out.classList.add('share-canvas'); out.setAttribute('aria-label', 'Holder share card preview'); out.setAttribute('role', 'img');
   host.replaceChildren(out);
   const render = (t, turn) => {
-    if (style === 'night') return styles.drawNight(ctx, data, { t });
+    if (style === 'night') { if (night) night.frame(t); return styles.drawNight(ctx, data, { t, scene: night?.canvas ?? null }); }
     if (style === 'classic') return turn === undefined ? styles.drawClassicMoving(ctx, data, { t, dark }) : styles.drawClassic(ctx, data, { t, dark });
     if (stage) stage.frame(t);
     return drawCard(ctx, data, { t, scene: stage?.canvas ?? null, ...(turn === undefined ? {} : { turn }) });
@@ -290,11 +295,11 @@ export async function mountCard(host, initial, { reducedMotion = false, wide = t
     mode: stage ? '3d' : '2d',
     get style() { return style; },
     update: next => { data = next; if (reducedMotion) draw(0.8); },
-    setStyle: next => { if (recording || !STYLES.some(([k]) => k === next)) return false; style = next; draw(0.8); return true; },
+    setStyle: next => { if (recording || !STYLES.some(([k]) => k === next)) return false; style = next; draw(0.8); if (next === 'night' && !nightTried) ensureNight().then(() => { if (alive) draw(0.8); }); return true; },
     // The picture is held still; the flip card always shows its front.
     png: () => new Promise((resolve, reject) => { render(0.6, 0); out.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not make the picture.')), 'image/png'); }),
     video: async seconds => { if (recording) throw new Error('Already recording.'); recording = true; try { return await recordCanvas(out, draw, { seconds: seconds ?? styleSeconds(style), signal: abort.signal }); } finally { recording = false; } },
-    stop: () => { alive = false; abort.abort(); cancelAnimationFrame(raf); stage?.dispose(); host.replaceChildren(); },
+    stop: () => { alive = false; abort.abort(); cancelAnimationFrame(raf); stage?.dispose(); night?.dispose(); host.replaceChildren(); },
   };
 }
 

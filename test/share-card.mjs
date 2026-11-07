@@ -54,3 +54,5 @@ const buildSrc = fs.readFileSync(new URL('../build.mjs', import.meta.url), 'utf8
 console.log('share-card: ok');
 
 const stylesMod = await import('../web/share-styles.js'); for (const fn of ['drawNight', 'drawClassic', 'drawClassicMoving']) assert.equal(typeof stylesMod[fn], 'function', fn);
+
+const heroSrc = fs.readFileSync(new URL('../web/hero3d-src.js', import.meta.url), 'utf8'); assert.match(heroSrc, /export function nightStage\(/); assert.match(heroSrc, /export function cardStage\(/);
