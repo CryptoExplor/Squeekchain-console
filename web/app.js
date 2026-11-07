@@ -1605,7 +1605,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     shareBase=card.cardData({owner:status.owner,count:el.holder.count.textContent,powerLabel,power:el.holder.power.textContent,claimable:el.holder.claimable.textContent,claimed:lifetime(status.rewards?.lifetimePaidBaseUnits),compounded:lifetime(status.rewards?.lifetimeCompoundedBaseUnits),levels:(status.squeeks??[]).map(t=>t.level),network:String(state.profileKey||'sepolia').replace(/^./,c=>c.toUpperCase())});
     shareUrl=new URL(watchHash(state.profileKey,status.owner),win.location.href).href;
     shareShow=loadShareShow(card);shareData=card.applyShow(shareBase,shareShow);renderShareOptions(card);
-    openSheet('share-sheet');const generation=++shareGeneration;shareAbort=new AbortController();
+    openSheet('share-sheet');sheetFocus=$('btn-share-card');const generation=++shareGeneration;shareAbort=new AbortController();
     $('share-status').textContent='Preparing card…';
     const wide=win.matchMedia('(min-width: 761px)').matches,reducedMotion=win.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const shareStyleKey='wheelhouse.shareStyle.v1';let firstStyle='flip';try{firstStyle=win.localStorage.getItem(shareStyleKey)||'flip';}catch{}
@@ -1620,7 +1620,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       $('share-status').textContent=mounted.videoSupported?'PNG is 1200 × 675. Video format depends on your browser.':'Video is not supported in this browser. PNG is available.';
     }catch(error){if(generation===shareGeneration)$('share-status').textContent=error.message||'Could not prepare the card.';}
     finally{unlock();if(generation===shareGeneration){$('share-side').disabled=(shareView?.style??firstStyle)!=='flip';$('share-video').disabled=!shareView?.videoSupported;$('share-png').disabled=!shareView;}}
-  });
+  }).finally(()=>{if(!activeSheet&&sheetFocus===$('btn-share-card')&&doc.activeElement===doc.body)sheetFocus.focus();});
   $('share-png').onclick=async()=>{
     if(!shareView)return;const view=shareView,data=shareData,style=view.style,side=$('share-side').value,unlock=lockShareControls();
     try{const card=await import('./share-card.js');const blob=await view.png(side);if(shareView!==view)return;card.download(blob,card.fileName(data,'png').replace('.png',`-${style==='flip'?side:style}.png`));$('share-status').textContent='Picture saved.';}

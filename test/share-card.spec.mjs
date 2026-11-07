@@ -2,7 +2,10 @@ import {test,expect} from '@playwright/test';
 import {installHolderFixture} from './holder-workspace-fixture.mjs';
 
 // Export/layout checks do not need a continuous GPU animation in software-rendered CI.
-test.beforeEach(async ({page}) => { await page.emulateMedia({reducedMotion:'reduce'}); });
+test.beforeEach(async ({page}) => {
+ await page.addInitScript(()=>{window.__squeekMounted=true;});
+ await page.emulateMedia({reducedMotion:'reduce'});
+});
 
 test('share card: opens from the holder view, saves a PNG, never signs',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(String(e)));

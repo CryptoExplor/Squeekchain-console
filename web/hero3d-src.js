@@ -335,7 +335,7 @@ export function nightStage({ width = 1200, height = 675, orbs = [] } = {}) {
   const { wheel, stand, floorY } = buildWheel(); const rig = new Group(); rig.add(wheel, stand); scene.add(rig);
   const hamster = buildHamster(); hamster.position.set(0.05, -R + 0.03, 0.02); hamster.scale.setScalar(1.12); wheel.parent.add(hamster);
   rig.position.set(3.2, 0, 0); rig.rotation.y = -0.3;
-  const floor = new Mesh(new PlaneGeometry(40, 40), new MeshPhysicalMaterial({ color: 0x0b0c12, roughness: 0.32, metalness: 0.2, clearcoat: 0.6 }));
+  const floor = new Mesh(new PlaneGeometry(40, 40), new MeshStandardMaterial({ color: 0x08090d, roughness: 0.95, metalness: 0 }));
   floor.rotation.x = -Math.PI / 2; floor.position.y = floorY; floor.receiveShadow = true; scene.add(floor);
 
   // rail: a dark glossy track on the floor from far back-left up to the wheel (matches the flat card's layout)

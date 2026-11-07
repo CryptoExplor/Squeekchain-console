@@ -17,7 +17,7 @@ Connected pending reads show Loading; failed reads show Unavailable with Retry w
 
 ## Safety and limits
 
-- Both Sepolia profiles require pinned identity checks, fresh canonical ownership/custody and same-snapshot simulation before wallet submission. Missing data remains Unknown. API output is display-only.
+- Sepolia requires pinned identity checks, fresh canonical ownership/custody and same-snapshot simulation before wallet submission. Missing data remains Unknown. API output is display-only.
 - Merge paths only preselect steps; each burn needs separate exact `BURN-<id>` review. No automatic multi-step signing.
 - Wallet payloads contain only from/to/data/value. Wallets choose gas and network fees; the SQK unstake fee cap/deadline remain enforced. Changed/lower claims or recipients stop where required; fresh v9 claim increases may be shown and accepted.
 - Cancelling in the app cannot close a wallet prompt or cancel a broadcast. A provider-scoped outstanding-request lock and late-hash Activity tracking remain active. Pending network prompts also block signing.
