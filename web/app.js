@@ -1531,7 +1531,18 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const p=provider();wallet.disconnect();void p?.request({method:'wallet_revokePermissions',params:[{eth_accounts:{}}]}).catch(()=>{});
     $('account-activity').replaceChildren();closeWalletMenu();selectTab('squeeks');el.connect.focus();
   };
-  el.refresh.onclick = () => {void refreshTelemetry({reset:false});return viewTask(()=>refreshAll({force:true}));};
+  // A refresh click always shows motion: the icon spins until the read settles, then a short tick.
+  async function spinWhile(button,fn){
+    if(button.getAttribute('aria-busy')==='true')return;
+    button.setAttribute('aria-busy','true');button.classList.remove('is-refreshed');button.classList.add('is-refreshing');
+    const started=Date.now();let result;
+    try{result=await fn();}
+    finally{const wait=Math.max(0,600-(Date.now()-started));await new Promise(r=>setTimeout(r,wait));
+      button.classList.remove('is-refreshing');button.removeAttribute('aria-busy');
+      if(result!==null&&result?.ok!==false){button.classList.add('is-refreshed');setTimeout(()=>button.classList.remove('is-refreshed'),1500);}}
+    return result;
+  }
+  el.refresh.onclick = () => {void refreshTelemetry({reset:false});return spinWhile(el.refresh,()=>viewTask(()=>refreshAll({force:true})));};
   el.cp.button.onclick = () => viewTask(requestCheckpoint);
   el.holder.claim.onclick = () => viewTask(() => {
     const raw = $("claim-ids").value.trim();
@@ -1547,7 +1558,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!position) throw new Error("The survivor must be in the inspected wallet.");
     return requestMerge({ survivor: String(BigInt(survivor)), donor: String(BigInt(donor)), nextLevel: Number(position.level) + 1 });
   }));
-  el.holder.refresh.onclick = () => viewTask(()=>refreshWallet({force:true}));
+  el.holder.refresh.onclick = () => spinWhile(el.holder.refresh,()=>viewTask(()=>refreshWallet({force:true})));
   $('holder-retry').onclick = () => viewTask(()=>refreshWallet({force:true}));
   $('btn-switch-chain').onclick = () => {closeWalletMenu();return viewTask(requestProfileChain);};
   el.holder.owner.onclick=async()=>{const address=el.holder.owner.title;if(!address)return;try{await win.navigator.clipboard.writeText(address);toast('Address copied','ok');}catch{toast('Clipboard unavailable','warn');}};
