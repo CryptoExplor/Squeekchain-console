@@ -2,6 +2,7 @@
 const ZERO='0x'+'0'.repeat(40),uint=v=>/^(0|[1-9]\d*)$/.test(String(v??'')),hash=v=>/^0x[0-9a-f]{64}$/i.test(v??''),addr=v=>/^0x[0-9a-f]{40}$/i.test(v??'');
 const same=(a,b)=>String(a).toLowerCase()===String(b).toLowerCase();
 const MERGE_EVENTS=new Set(['Merged','DepositedMerge','PositionsMerged']);
+import {decodeSnapshot,SNAPSHOT_MAX_AGE_SECONDS} from './explore-snapshot.js';
 export const indexKey=profile=>'explore:v3:'+profile.key+':'+JSON.stringify([profile.addresses,profile.identities,String(profile.startBlock)]);
 export function applyExploreEvent(tokens,event,profile){
  const a=event.args,get=id=>{if(!/^[1-9]\d{0,3}$/.test(String(id))||BigInt(id)>9999n)throw new Error('Invalid indexed token');return tokens[String(id)]??={tokenId:String(id),owner:null,depositor:null,deposited:false,level:null,nextMergeHeight:null,burned:false};};
@@ -27,12 +28,29 @@ function validCache(value,profile){return value?.version===3&&value.key===indexK
 export const RATE_LIMIT_WAIT_MS=10000;
 const rateLimited=error=>Boolean(error)&&(error.name==='RpcAvailabilityError'||error.kind==='cooldown'||[429,503].includes(Number(error.httpStatus??error.status))||/rate limit|too many requests|retry-after|cooldown/i.test(String(error.message??'')));
 const retryWait=error=>Math.min(Number(error?.retryAfterMs)>0?Number(error.retryAfterMs):1000,RATE_LIMIT_WAIT_MS);
-export function createExploreIndex({profile,store,reader,signal,progress=()=>{},now=()=>performance.now(),finalTimeoutMs=20000,historyWindowSeconds=172800,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
- let flight;
+export function createExploreIndex({profile,store,reader,signal,seed=null,progress=()=>{},now=()=>performance.now(),finalTimeoutMs=20000,historyWindowSeconds=172800,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
+ let flight,seedDisabled=false,usedSeed=false;
  // One bounded backoff per call site; a second 429 fails over to the caller's next peer.
  const withBackoff=async work=>{try{return await work();}catch(error){if(!rateLimited(error))throw error;await sleep(retryWait(error));check();return work();}};
  const check=()=>{if(signal?.aborted)throw signal.reason??new DOMException('Aborted','AbortError');};
  async function bounded(work,ms=30000){check();let timer;try{return await Promise.race([Promise.resolve().then(work),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error('Explore step timed out'),{name:'TimeoutError'})),ms);})]);}finally{clearTimeout(timer);}}
+ // Phase 10: a prescanned snapshot is a display-only seed. It is used only when there is no
+ // usable local cache, its release/revision/addresses match the pins, it is at most 7 days
+ // older than the scan block, and two RPC peers agree block N has its blockHash. Any
+ // failure returns null and the caller full-scans from the deployment block.
+ async function loadSeed(target){
+  if(!seed||seedDisabled)return {state:null,reason:'off'};
+  try{
+   const raw=await bounded(()=>seed(),15000);if(raw==null)return {state:null,reason:'missing'};
+   const snap=decodeSnapshot(raw,profile),N=BigInt(snap.blockNumber);
+   if(N>BigInt(target.blockNumber))return {state:null,reason:'ahead'};
+   if(Number(target.timestamp)-Number(snap.timestamp)>SNAPSHOT_MAX_AGE_SECONDS)return {state:null,reason:'stale'};
+   const onChain=await bounded(()=>withBackoff(()=>reader.hash(N)));
+   if(!hash(onChain)||!same(onChain,snap.blockHash))return {state:null,reason:'hash mismatch'};
+   const header={blockNumber:snap.blockNumber,blockHash:snap.blockHash,timestamp:snap.timestamp};
+   return {state:{version:3,key:indexKey(profile),lastBlock:snap.blockNumber,lastHash:snap.blockHash,tokens:snap.tokens,events:snap.events,complete:false,network:snap.network,totalSupply:snap.network.totalSupply,snapshot:header,seedBlock:snap.blockNumber},reason:null};
+  }catch(error){check();if(error?.name==='AbortError')throw error;return {state:null,reason:String(error?.message??error)};}
+ }
  async function perform({restart=false}={}){
   const started=now();check();let cached=restart?null:await bounded(()=>store.get(indexKey(profile)));
   if(!validCache(cached,profile)||cached?.validationFailed||cached?.totalSupply!=null&&!cached.complete&&!cached.scanSnapshot)cached=null;
@@ -43,13 +61,16 @@ export function createExploreIndex({profile,store,reader,signal,progress=()=>{},
   if(target<start)throw new Error('Index incomplete');
   const serialSnapshot={blockNumber:String(target),blockHash:snapshot.blockHash,timestamp:String(snapshot.timestamp)};
   let state=cached?structuredClone(cached):{version:3,key:indexKey(profile),lastBlock:String(start-1n),lastHash:null,tokens:{},events:[],complete:false};
-  let cursor=cached?BigInt(cached.lastBlock)+1n:start,reorg=false;
+  let cursor=cached?BigInt(cached.lastBlock)+1n:start,reorg=false,seeded=false,seedReason=cached?'cache':restart?'restart':null;
+  if(!cached&&!restart){const result=await loadSeed(serialSnapshot);seedReason=result.reason;if(result.state){state=result.state;seeded=usedSeed=true;cursor=BigInt(state.lastBlock)+1n;
+   const live=Object.values(state.tokens).filter(t=>t.minted&&!t.burned).length;progress({phase:'seed',done:String(cursor-start),total:String(target-start+1n),resumed:false,tokens:live,tokenTotal:live,state});}}
   const save=()=>bounded(()=>{check();return store.set(indexKey(profile),structuredClone(state));});
   const notify=(phase,extra={})=>{check();progress({phase,done:String(cursor-start),total:String(target-start+1n),resumed:resuming,...extra});};
   if(cached){const anchor=BigInt(cached.lastBlock);if(anchor>target||!same(await bounded(()=>reader.hash(anchor)),cached.lastHash)){
    reorg=true;let rewind=anchor-63n;if(rewind<start)rewind=start;
    const base=rewind-1n,baseValid=base<start||cached.baseBlock===String(base)&&hash(cached.baseHash)&&same(await bounded(()=>reader.hash(base)),cached.baseHash);
-   if(!baseValid)rewind=start;state.tokens={};state.events=state.events.filter(e=>BigInt(e.blockNumber)<rewind);for(const e of state.events)applyExploreEvent(state.tokens,e,profile);cursor=rewind;state.complete=false;
+   // A seeded cache has no reliable event history at or before its snapshot block: rewinding there means a full scan.
+   if(!baseValid||cached.seedBlock!=null&&rewind<=BigInt(cached.seedBlock)){rewind=start;delete state.seedBlock;}state.tokens={};state.events=state.events.filter(e=>BigInt(e.blockNumber)<rewind);for(const e of state.events)applyExploreEvent(state.tokens,e,profile);cursor=rewind;state.complete=false;
   }}
   if(!resuming)delete state.hydrationPending;state.complete=false;state.scanSnapshot=serialSnapshot;state.snapshot=serialSnapshot;
   // Busy deployments return >10k logs per ~7k blocks, and public peers answer an oversized
@@ -134,9 +155,12 @@ export function createExploreIndex({profile,store,reader,signal,progress=()=>{},
   }
   state.complete=complete;state.validationFailed=!complete;
   await save();
-  return {...state,status:state.complete?'complete':'incomplete',metrics:{milliseconds:now()-started,reorg,cached:false,resumed:resuming}};
+  return {...state,status:state.complete?'complete':'incomplete',metrics:{milliseconds:now()-started,reorg,cached:false,resumed:resuming,seeded,seedReason}};
  }
- return {sync(options){if(flight)return flight;flight=perform(options).finally(()=>flight=null);return flight;},
+ // A seeded scan that throws (e.g. a snapshot token whose history no longer chains) is
+ // retried once as a full scan with the seed switched off for this index's lifetime.
+ async function run(options){usedSeed=false;try{return await perform(options);}catch(error){check();if(!usedSeed||seedDisabled||error?.name==='AbortError')throw error;seedDisabled=true;return perform({...options,restart:true});}}
+ return {sync(options){if(flight)return flight;flight=run(options).finally(()=>flight=null);return flight;},
   // Per-Squeek history is resolved when its page opens, not during the scan.
   async history(state,id){
     const events=state?.events?.filter(e=>['tokenId','survivor','donor'].some(k=>String(e.args[k])===String(id)))??[];

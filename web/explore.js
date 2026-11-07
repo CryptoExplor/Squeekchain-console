@@ -34,8 +34,10 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
   root.dataset.phase=p.phase;root.dataset.resumed=String(p.resumed??false);
   if(p.tokenTotal!=null){root.dataset.hydrated=String(p.tokens);root.dataset.hydrationTotal=String(p.tokenTotal);}
   if(p.state){state=p.state;if(p.tokens>0){root.dataset.indexStatus='partial';render(false);}}
-  status.textContent=p.phase==='final'?'Almost there · checking the latest totals…':p.phase==='hydrate'?`Partial · Loading Squeeks: ${p.tokens} of ${p.tokenTotal}`:p.phase==='history'?`Loading merge times: ${p.headers} of ${p.headerTotal}`:`Reading the chain: ${p.done} of ${p.total}`;
+  status.textContent=p.phase==='seed'?`Loaded the saved snapshot · catching up with the latest blocks…`:p.phase==='final'?'Almost there · checking the latest totals…':p.phase==='hydrate'?`Partial · Loading Squeeks: ${p.tokens} of ${p.tokenTotal}`:p.phase==='history'?`Loading merge times: ${p.headers} of ${p.headerTotal}`:`Reading the chain: ${p.done} of ${p.total}`;
  }
+ // Phase 10: the prescanned snapshot ships with the site (snapshot/<profile>.json). Display only; a missing file means a full scan.
+ const snapshotLoader=(profile,signal)=>profile?.addresses&&typeof win.fetch==='function'?async()=>{const res=await win.fetch(new URL(`snapshot/${profile.key}.json`,doc.baseURI),{cache:'no-cache',signal});return res.ok?res.json():null;}:null;
  let autoRetries=0;
  async function sync({restart=false}={}){
   if(!visible()&&!background)return;const load=capture(),key=`${load.generation}:${load.profileKey}`;
@@ -43,7 +45,7 @@ export function createExploreView({doc,win,root,capture,current,readerOptions,lo
   if(scope!==key){
    scanController?.abort();scanController=new AbortController();sequence++;scope=key;state=null;failed=false;leaderOrder=[];
    const profile=getProfile(load.profileKey),signal=AbortSignal.any([load.signal,scanController.signal]);
-   service=createExploreIndex({profile,store,reader:createExploreReader({...readerOptions(load),signal}),signal,progress:p=>progress(load,key,p)});
+   service=createExploreIndex({profile,store,reader:createExploreReader({...readerOptions(load),signal}),signal,seed:snapshotLoader(profile,signal),progress:p=>progress(load,key,p)});
    clear();stats.hidden=false;root.dataset.indexStatus='loading';status.textContent='Reading the chain…';
   }
   const seq=++sequence;busy=true;scan.hidden=true;
