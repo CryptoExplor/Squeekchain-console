@@ -185,11 +185,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
     if(!trust){
       const shown=/wallet/i.test(scope)?Boolean(state.status):/network/i.test(scope)?Boolean(state.net):Boolean(state.net||state.status);
-      if(verifiedForGeneration){showBanner(shown?BANNER_REFRESH_FAILURE:BANNER_READ_FAILURE,'warn');readBanner=true;return;}
       el.verified.textContent='Unavailable';
       trustDisplay({kind:'unavailable',chipText:'Unavailable'});
-      if(shown){showBanner(BANNER_REFRESH_FAILURE,'warn');}
       renderTrust(null);$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;
+      if(shown)showBanner(BANNER_REFRESH_FAILURE,'warn');
       readBanner=true;return;
     }
     el.verified.textContent='Stopped';
@@ -986,6 +985,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (!isCurrent(load)) return null;
       // Keep the last network view on a slow/failed refresh; clear it only on a trust failure.
       if(err.name==='RpcTrustError'||err.kind==='mismatch'||!state.net){state.net = null;renderNetworkPlaceholder();}
+      // Kept view is stale: never present a time-based stall verdict from it as current.
+      else for(const node of [el.net.settlement,$('holder-rewards-notice')]){node.textContent='';node.classList.add('hidden');}
       showReadFailure(err,'Network read');
       return null;
     } finally {

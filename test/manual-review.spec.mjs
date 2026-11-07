@@ -3,13 +3,14 @@ import fs from 'node:fs';
 import {installReviewFixture} from './review-fixture.mjs';
 import {installV9Fixture} from './v9-fixture.mjs';
 const availability="Can't verify right now";
+const refreshFailure="Can't refresh right now. Showing the last data; it updates when the connection is back.";
 const trustFailure="Can't verify right now";
 async function capture(page,info,name){await page.evaluate(()=>document.fonts.ready);const image=await page.screenshot({animations:'disabled'});await info.attach(name,{body:image,contentType:'image/png'});fs.mkdirSync('artifacts/screenshots',{recursive:true});fs.writeFileSync('artifacts/screenshots/'+name,image);}
 for(const theme of ['light','dark'])for(const width of [1280,390])test(`connected v9 diagnostics below header / ${theme} / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);if(theme==='dark')await page.getByTestId('btn-theme').click();await page.evaluate(()=>squeek.connect());
  const before=await page.evaluate(()=>v9.networkCalls);
  await page.evaluate(async()=>{v9.walletError={name:'TypeError',message:'Failed to fetch'};await squeek.refresh();});
- await expect(page.getByTestId('banner')).toHaveText(availability);await expect(page.getByTestId('profile-status')).toHaveText('Unavailable');await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('btn-checkpoint')).toBeDisabled();
+ await expect(page.getByTestId('banner')).toHaveText(refreshFailure);await expect(page.getByTestId('profile-status')).toHaveText('Unavailable');await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('btn-checkpoint')).toBeDisabled();
  expect(await page.evaluate(()=>v9.networkCalls)).toBe(before,'wallet failure must not immediately trigger another network snapshot');
  expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.availability)).toBe(true);
  await page.evaluate(async()=>{v9.walletError={name:'RpcTrustError',message:'Snapshot block hash mismatch'};await squeek.refresh();});
@@ -45,7 +46,7 @@ test('refreshes coalesce per generation, not across profile changes',async({page
 for(const width of [1280,390])test(`actual wallet log-range failure is availability, not a trust mismatch / ${width}`,async({page},info)=>{
  await page.setViewportSize({width,height:width===390?844:960});await installV9Fixture(page);await page.evaluate(()=>squeek.connect());
  await page.evaluate(async()=>{v9.walletError={name:'RpcRequestContextError',message:'JSON-RPC request failed',endpoint:'wallet',method:'eth_getLogs',cause:{message:'getLogs request exceeded max allowed range'}};await squeek.refresh();});
- await expect(page.getByTestId('banner')).toHaveText(availability);await expect(page.getByTestId('profile-status')).toHaveText('Unavailable');await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('trust-block')).toHaveText('Not available');await expect(page.getByTestId('trust-time')).toHaveText('—');
+ await expect(page.getByTestId('banner')).toHaveText(refreshFailure);await expect(page.getByTestId('profile-status')).toHaveText('Unavailable');await expect(page.getByTestId('btn-claim')).toBeDisabled();await expect(page.getByTestId('trust-block')).toHaveText('Not available');await expect(page.getByTestId('trust-time')).toHaveText('—');
  expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.reason)).toBe('Log range limit');expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.method)).toBe('eth_getLogs');expect(await page.evaluate(()=>squeek.state.lastReadFailure.diagnostics.endpoint)).toBe('wallet');
  await capture(page,info,`staking-log-range-unavailable-light-${width}.png`);expect(await page.evaluate(()=>v9.sends)).toBe(0);await page.evaluate(()=>squeek.destroy());
 });
