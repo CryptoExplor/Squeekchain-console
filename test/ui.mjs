@@ -96,7 +96,8 @@ rejectNetwork = true;
 await api.switchProfile('sepolia');
 assert.equal($('verified-chip').textContent, 'Unavailable');
 assert.equal($('btn-checkpoint').disabled,true);
-assert.equal($('banner').textContent,"Can't verify right now");
+// Display data is already on screen, so the kept-view note wins over the bare check note.
+assert.equal($('banner').textContent,"Can't refresh right now. Showing the last data; it updates when the connection is back.");
 api.destroy(); win.close();
 console.log('PASS UI: theme, navigation, reads, wallet, gallery, capability gates, mainnet reset, stale-request isolation, RPC failure');
 

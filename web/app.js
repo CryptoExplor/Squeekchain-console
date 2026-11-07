@@ -172,9 +172,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     chip.title=el.verified.title=title;
     $('trust-checklist').dataset.state=kind==='verified'?'verified':kind==='unavailable'?'unknown':'stopped';
     if(kind==='verified')clearReadBanner();
-    else showBanner(BANNER_READ_FAILURE,bannerKind??(kind==='unavailable'?'warn':'bad'));
+    else showBanner(kind==='unavailable'?BANNER_READ_FAILURE:BANNER_TRUST_FAILED,bannerKind??(kind==='unavailable'?'warn':'bad'));
   }
-  const BANNER_READ_FAILURE="Can't verify right now";
+  const BANNER_READ_FAILURE="Couldn't check the contracts just now. Actions stay off until the check passes.";
+  const BANNER_TRUST_FAILED="Contract check failed. Actions are stopped.";
   const BANNER_REFRESH_FAILURE="Can't refresh right now. Showing the last data; it updates when the connection is back.";
   function showReadFailure(error,scope) {
     const failure=rpcToolError(error,state.adapter?.rpcDiagnostics?.()??[]);
@@ -184,7 +185,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const trust=failure.diagnostics.trust||error?.name==='RpcTrustError'||error?.kind==='mismatch';
     $('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
     if(!trust){
-      const shown=/wallet/i.test(scope)?Boolean(state.status):/network/i.test(scope)?Boolean(state.net):Boolean(state.net||state.status);
+      // Anything already on screen (wallet or network) keeps the "showing last data" note.
+      const shown=Boolean(state.net||state.status);
       el.verified.textContent='Unavailable';
       trustDisplay({kind:'unavailable',chipText:'Unavailable'});
       renderTrust(null);$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;
@@ -194,7 +196,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     }
     el.verified.textContent='Stopped';
     trustDisplay({kind:'mismatch',chipText:'Mismatch: stop'});
-    renderTrust({ok:false,trusted:false});$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;
+    renderTrust({ok:false,trusted:false});$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_TRUST_FAILED;
     readBanner=true;
   }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
@@ -206,6 +208,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const actionNames={merge:'Merge Squeeks',mergeDeposited:'Merge deposited',deposit:'Deposit',withdraw:'Withdraw',claim:'Claim',claimAndStake:'Claim and stake',stake:'Stake',unstake:'Unstake',approveNft:'Approve one Squeek',approveAll:'Approve all Squeeks',approveSqk:'Approve SQK'};
   const hiddenDeployments=()=>Object.values(PROFILES).flatMap(profile=>[profile.identities?.release,profile.identities?.key].filter(Boolean));
   const technical=value=>JSON.stringify(value,(_key,v)=>typeof v==='string'&&hiddenDeployments().some(secret=>v.includes(secret))?'[internal deployment]':v,2);
+  // Instant feedback: a clicked preview never looks dead while the chain answers.
+  let workingTimer=null;
+  function working(text){clearInterval(workingTimer);const out=$('v9-result');out.replaceChildren();const p=doc.createElement('p');p.className='working';p.setAttribute('role','status');const spin=doc.createElement('span');spin.className='spinner';spin.setAttribute('aria-hidden','true');const label=doc.createElement('span');label.textContent=text;const time=doc.createElement('span');time.className='working-time';p.append(spin,label,time);out.append(p);out.classList.remove('hidden');const started=Date.now();workingTimer=setInterval(()=>{if(!p.isConnected){clearInterval(workingTimer);return;}const sec=Math.floor((Date.now()-started)/1000);time.textContent=sec>=2?` · ${sec}s`:'';},1000);}
+  function stopWorking(){clearInterval(workingTimer);workingTimer=null;const out=$('v9-result');if(out.querySelector(':scope > .working'))out.replaceChildren(),out.classList.add('hidden');}
+  async function withBusy(button,fn){if(!button||button.getAttribute('aria-busy')==='true')return;button.setAttribute('aria-busy','true');button.classList.add('is-busy');button.disabled=true;const started=Date.now(),tick=setInterval(()=>{const sec=Math.floor((Date.now()-started)/1000);if(sec>=2)button.dataset.elapsed=`${sec}s`;},1000);
+    try{return await fn();}finally{clearInterval(tick);delete button.dataset.elapsed;button.removeAttribute('aria-busy');button.classList.remove('is-busy');button.disabled=false;stopWorking();updatePreviewGate();holdActionsWhileStale();}}
   const showOut = (node,value) => {
     if(node.id==='tool-result'){node.textContent=technical(value);node.classList.remove('hidden');return;}
     node.replaceChildren();const title=doc.createElement('p');title.textContent=value.ok?'Simulation passed':value.reason?errorMessage({message:value.reason}):'Preview unavailable';node.append(title);
@@ -579,7 +587,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     lastVerificationTime=v?Date.now():null;
     {const block=formatNumber(v?.blockNumber ?? state.net?.snapshot?.blockNumber);$('trust-block').textContent=block===UNKNOWN?'Not available':`block ${block} on Sepolia`;}
     if(v?.ok||!v&&!state.lastReadFailure)$('rpc-diagnostics').textContent='';
-    $('trust-result').textContent=v?.ok&&v?.trusted?'Verified':v?"Can't verify right now":UNKNOWN;
+    $('trust-result').textContent=v?.ok&&v?.trusted?'Verified':v?(v.ok?BANNER_TRUST_FAILED:BANNER_READ_FAILURE):UNKNOWN;
     for(const id of ['trust-block','trust-time'])$(id).parentElement.hidden=!(v?.ok&&v?.trusted);
     $('trust-checklist').hidden=!(v?.ok&&v?.trusted);
     updateTrustAge();
@@ -1193,13 +1201,14 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!capabilities().deposit) throw new Error(capabilities().reasons.unavailable);
     const load = captureLoad(), owner = state.account;
     if (!owner || owner.toLowerCase() !== state.inspected?.toLowerCase()) throw new Error('Connect the inspected owner wallet');
+    working(action==='mergeDeposited'?'Checking your Squeeks on chain…':'Simulating on chain…');
     if(action==='mergeDeposited'&&!adapterFactory){const find=await freshHoldings(load,owner,[input.survivor,input.donor]);const canonical=id=>find(id).tokenId;input={...input,survivor:canonical(input.survivor),donor:canonical(input.donor)};}
     if (action === 'mergeDeposited') {
       const burn = `BURN-${BigInt(input.donor)}`;
       if (!await confirmModal({ title: `Keep #${input.survivor} · burn #${input.donor}`, body: `Keep #${input.survivor} · burn #${input.donor}. #${input.survivor} survives and goes up one level. You will review the simulation before your wallet opens.`, warning: `#${input.donor} is BURNED permanently and cannot be restored. Type ${burn} below before we build or simulate this call.`, requireText: burn, confirmLabel: 'Acknowledge burn & simulate' })) return {ok:false,reason:'cancelled'};
       input = {...input,confirm:burn};
     }
-    {const out=$('v9-result');out.replaceChildren();const p=doc.createElement('p');p.textContent='Simulating on chain…';p.setAttribute('role','status');out.append(p);out.classList.remove('hidden');}
+    working('Simulating on chain…');
     const preview = await readFor(load,'actionPreview',owner,action,input);
     showOut($('v9-result'),preview);
     if (!preview.ok&&action==='stake'&&preview.approvalRequired&&!opts.autoApproved) {
@@ -1250,12 +1259,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
   $('v9-action').onchange=renderActionFields;renderActionFields();
   for(const id of ['v9-ids','v9-token','v9-amount'])$(id).addEventListener('input',updatePreviewGate);
-  $('v9-review').onclick = () => viewTask(() => {
+  $('v9-review').onclick = () => withBusy($('v9-review'),()=>viewTask(() => {
     const input = {tokenIds:$('v9-ids').value.split(/[\s,]+/).filter(Boolean),tokenId:$('v9-token').value,survivor:$('v9-survivor').value,donor:$('v9-donor').value};
     const raw=$('v9-amount').value.trim(); if(raw) { if(!/^\d+(?:\.\d{1,18})?$/.test(raw))throw new Error('Use up to 18 decimal places'); input.amount=String(parseEther(raw)); }
     if(['merge','mergeDeposited'].includes($('v9-action').value)){[input.survivor,input.donor]=input.tokenIds;if($('v9-action').value==='merge')return requestMerge(input);}
     return requestAction($('v9-action').value,input);
-  });
+  }));
   // ── art ───────────────────────────────────────────────────────────────────
   async function loadArt(tokenIds) {
     const load = captureLoad();
@@ -1531,13 +1540,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (ids?.some(id => BigInt(id) === 0n)) throw new Error("Token IDs must be positive.");
     return requestClaim(ids);
   });
-  $("btn-custom-merge").onclick = () => viewTask(() => {
+  $("btn-custom-merge").onclick = () => withBusy($("btn-custom-merge"),()=>viewTask(() => {
     const survivor = $("merge-survivor").value.trim(), donor = $("merge-donor").value.trim();
     if (![survivor, donor].every(id => /^\d+$/.test(id) && BigInt(id) > 0n) || BigInt(survivor) === BigInt(donor)) throw new Error("Choose two different positive token IDs.");
     const position = state.status?.squeeks.find(s => BigInt(s.tokenId) === BigInt(survivor));
     if (!position) throw new Error("The survivor must be in the inspected wallet.");
     return requestMerge({ survivor: String(BigInt(survivor)), donor: String(BigInt(donor)), nextLevel: Number(position.level) + 1 });
-  });
+  }));
   el.holder.refresh.onclick = () => viewTask(()=>refreshWallet({force:true}));
   $('holder-retry').onclick = () => viewTask(()=>refreshWallet({force:true}));
   $('btn-switch-chain').onclick = () => {closeWalletMenu();return viewTask(requestProfileChain);};
