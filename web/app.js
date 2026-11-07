@@ -175,13 +175,26 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     else showBanner(BANNER_READ_FAILURE,bannerKind??(kind==='unavailable'?'warn':'bad'));
   }
   const BANNER_READ_FAILURE="Can't verify right now";
+  const BANNER_REFRESH_FAILURE="Can't refresh right now. Showing the last data; it updates when the connection is back.";
   function showReadFailure(error,scope) {
     const failure=rpcToolError(error,state.adapter?.rpcDiagnostics?.()??[]);
     state.lastReadFailure={scope,profile:state.profileKey,...failure};
-    const availability=failure.diagnostics.availability;
-    el.verified.textContent=availability?'Unavailable':'Stopped';
-    trustDisplay({kind:availability?'unavailable':'mismatch',chipText:availability?'Unavailable':failure.diagnostics.trust?'Mismatch: stop':'Unverified'});
-    renderTrust(availability?null:{ok:false,trusted:false});$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;$('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
+    // Only a trust/identity failure is a stop. A slow or silent API or RPC is "can't refresh":
+    // the chip keeps its last on-chain verdict and whatever is on screen stays, with its age.
+    const trust=failure.diagnostics.trust||error?.name==='RpcTrustError'||error?.kind==='mismatch';
+    $('rpc-diagnostics').textContent=JSON.stringify(failure,null,2);
+    if(!trust){
+      const shown=/wallet/i.test(scope)?Boolean(state.status):/network/i.test(scope)?Boolean(state.net):Boolean(state.net||state.status);
+      el.verified.textContent='Unavailable';
+      trustDisplay({kind:'unavailable',chipText:'Unavailable'});
+      renderTrust(null);$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;
+      if(shown)showBanner(BANNER_REFRESH_FAILURE,'warn');
+      state.stale=true;holdActionsWhileStale();
+      readBanner=true;return;
+    }
+    el.verified.textContent='Stopped';
+    trustDisplay({kind:'mismatch',chipText:'Mismatch: stop'});
+    renderTrust({ok:false,trusted:false});$('trust-block').textContent='Not available';$('trust-result').textContent=BANNER_READ_FAILURE;
     readBanner=true;
   }
   const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : UNKNOWN);
@@ -259,19 +272,35 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       }
     }
   });
+  // Previews and actions get their own adapter (its own run queue). The shared adapter serialises
+  // every read (network refreshes, inventory scans, art fallbacks), and a preview used to wait
+  // behind all of them while the RPC tab filled with successful calls and the panel stayed empty.
+  let actionAdapter=null;
+  function actionsFor(load){
+    if(adapterFactory||!load.adapter)return load.adapter;
+    if(actionAdapter?.generation!==load.generation)actionAdapter={generation:load.generation,adapter:buildAdapter(load.profileKey)};
+    return actionAdapter.adapter;
+  }
+  // Fresh on-chain custody check for only the named IDs (not a full inventory rescan).
+  async function freshHoldings(load,owner,ids){
+    const adapter=actionsFor(load);
+    const live=adapter.holdings?await adapter.holdings(owner,ids):await adapter.walletStatus(owner);assertCurrent(load);
+    return id=>{const found=live.squeeks.find(item=>String(item.tokenId)===String(BigInt(id)));if(!found)throw new Error('Token not in fresh on-chain inventory');return found;};
+  }
+  const PREVIEW_METHODS=['mergePreview','claimPreview','actionPreview','checkpointPreview'];
   const readOnce = async (load, method, args) => {
     if(['mergePreview','claimPreview','actionPreview','checkpointPreview'].includes(method)&&state.account&&state.chainId!==11155111)throw new Error('Wrong chain: Sepolia required');
     // API rows are display hints, NEVER a transaction ID/eligibility source.
     if(!adapterFactory&&['mergePreview','claimPreview','actionPreview'].includes(method)){
       const action=method==='mergePreview'?'merge':method==='claimPreview'?'claim':args[1];
       const needsIds=['merge','mergeDeposited','deposit','withdraw','approveNft'].includes(action);
-      if(needsIds){const live=await load.adapter.walletStatus(args[0]);assertCurrent(load);const owned=id=>{const found=live.squeeks.find(item=>String(item.tokenId)===String(id));if(!found)throw new Error('Token not in fresh on-chain inventory');return found.tokenId;};
+      if(needsIds){const input0=method==='mergePreview'?[args[1],args[2]]:method==='claimPreview'?args[1]:['survivor','donor','tokenId'].map(f=>args[2]?.[f]).filter(Boolean).concat(args[2]?.tokenIds??[]);const find=await freshHoldings(load,args[0],input0);const owned=id=>find(id).tokenId;
         if(method==='mergePreview')args=[args[0],owned(args[1]),owned(args[2]),args[3]];
         else if(method==='claimPreview')args=[args[0],args[1].map(owned)];
         else {const input={...args[2]};for(const field of ['survivor','donor','tokenId'])if(input[field])input[field]=owned(input[field]);if(input.tokenIds)input.tokenIds=input.tokenIds.map(owned);args=[args[0],action,input];}
       }
     }
-    const value=await load.adapter[method](...args);assertCurrent(load);
+    const value=await (PREVIEW_METHODS.includes(method)?actionsFor(load):load.adapter)[method](...args);assertCurrent(load);
     const verification=method==='verify'?value:value?.verification;if(verification)renderVerification(verification);
     return value;
   };
@@ -285,7 +314,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const networkView=createNetworkView({doc,source:recordSource,current:isCurrent,visible:()=>!$('panel-squeeks').classList.contains('hidden'),readContext:()=>{const load=captureLoad();return {load,api:displayApi(load)};}});
   function refreshNetworkExtras(){const load=captureLoad();return networkView.refresh(load,displayApi(load),state.account);}
 
-  function displayApi(load){if(adapterFactory||!getProfile(load.profileKey).apiBase)return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
+  let apiDisabled=-1;
+  function displayApi(load){if(adapterFactory||apiDisabled===load.generation||!getProfile(load.profileKey).apiBase)return null;if(apiScope?.generation!==load.generation)apiScope={generation:load.generation,client:createDisplayApi({profile:getProfile(load.profileKey),fetcher:fetcher??win.fetch?.bind(win)??globalThis.fetch,cache:displayCache,signal:load.signal})};return apiScope.client;}
   function displayStamp(value){const source=value?.source;if(!source)return;const age=Math.max(0,Math.floor((Date.now()-source.at)/60000));$('display-age').textContent=age?`as of ${age} min`:'';}
 
   function displayVerification(value){
@@ -310,15 +340,31 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       }else value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));
       assertCurrent(load);if(!value.source)value={...value,source:{kind:'rpc',at:Date.now()}};const entry={value,at:value.source.at};lastGood.set(key,entry);if(kind==='wallet')void Promise.resolve().then(()=>displayCache.set(key,entry)).catch(()=>{});return value;
     }catch(error){assertCurrent(load);if(error.name==='TypeError'&&!error.kind)throw error;if(error.name==='RpcTrustError'||error.kind==='mismatch'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
-      if(error.kind==='unavailable'||error.kind==='schema'){lastGood.delete(key);await displayCache.delete(key);saved=null;}
+      // API rescanning/unavailable or a bad response is not a reason to forget the last good view.
       if(saved&&Date.now()-saved.at<ttl&&(error.kind==='transport'||error.name==='TypeError'))return {...saved.value,source:{...saved.value.source,kind:saved.value.source?.kind==='api'?'api':'cached-rpc',at:saved.at,stale:true}};
       // Unavailable API is not zero. Only the fresh guarded SDK may supply fallback.
-      if(displayApi(load)){for(const panel of kind==='network'?['Network']:['Squeeks'])recordSource(panel,'rpc',error.message);const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);return {...value,source:{kind:'rpc',at:Date.now(),reason:error.message}};}
+      if(displayApi(load)){for(const panel of kind==='network'?['Network']:['Squeeks'])recordSource(panel,'rpc',error.message);
+        try{const value=await readFor(load,kind==='network'?'networkStatus':'walletStatus',...(owner?[owner]:[]));assertCurrent(load);const fresh={...value,source:{kind:'rpc',at:Date.now(),reason:error.message}};lastGood.set(key,{value:fresh,at:fresh.source.at});return fresh;}
+        catch(chainError){assertCurrent(load);if(saved&&chainError.name!=='RpcTrustError'&&error.kind!=='mismatch')return {...saved.value,source:{...saved.value.source,kind:'cached',at:saved.at,stale:true}};throw chainError;}}
       throw error;
     }
   }
   function clearWheelFeed(){for(const id of ['account-activity','provisional-blocks'])$(id).replaceChildren();$('provisional-blocks').classList.add('hidden');}
-  function clearDisplayMismatch(error){lastGood.clear();state.net=null;state.holderReadState='unavailable';renderNetworkPlaceholder();renderHolder(null);networkStrip.invalidate();for(const id of ['wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;clearWheelFeed();recordSource('Display validation','api',error.message);showReadFailure(Object.assign(new Error('Display source does not match this network.'),{name:'RpcTrustError',kind:'mismatch'}),'Display validation');}
+  function clearDisplayMismatch(error){
+    // The display API disagrees with the pinned deployment (e.g. it is rescanning for a new contract).
+    // API-sourced values are dropped (never trusted), the API is skipped for this load, and the view
+    // is re-read from chain. Chain-verified values already on screen stay; the trust chip is untouched
+    // because the on-chain verification did not fail.
+    apiDisabled=generation;
+    for(const [key,entry] of lastGood)if(entry.value?.source?.kind==='api'){lastGood.delete(key);void displayCache.delete(key);}
+    recordSource('Display validation','api',error.message);
+    let dropped=false;
+    if(state.net?.source?.kind==='api'){state.net=null;renderNetworkPlaceholder();dropped=true;}
+    if(state.status?.source?.kind==='api'){state.holderReadState='loading';renderHolder(null);dropped=true;}
+    networkStrip.invalidate();for(const id of ['wheel-speed','wheel-distance'])$(id).textContent=UNKNOWN;clearWheelFeed();
+    showBanner('Display service is out of sync with this deployment. Reading straight from the chain.','warn');readBanner=true;
+    if(dropped)void Promise.resolve().then(()=>refreshAll({force:true}));
+  }
 
   let destroyed = false;
   const telemetry = createTelemetry({ fetcher });
@@ -398,7 +444,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
     // Navigation ALWAYS wins, including while a simulation or wallet prompt is pending.
     workspace?.clear();state.claimQuote=null;loadController.abort();
-    generation++;verifiedForGeneration=null;
+    generation++;verifiedForGeneration=null;state.net=null;
     loadController = new AbortController();
     dialog.close();
     closeSheet();
@@ -408,7 +454,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     state.adapter = null;
     if(!watching())state.inspected=state.account;
     state.net = state.status = state.plan = null;
-    state.lastReadFailure=null;state.holderReadState='idle';
+    state.lastReadFailure=null;state.stale=false;state.holderReadState='idle';
 
     state.receipts = [];
     wheelOffline=false;clearWheelFeed();
@@ -747,9 +793,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── rendering ─────────────────────────────────────────────────────────────
   const observedRounds = new Map();
+  // The kept view stays readable while the chain is unreachable, but writes wait for a fresh read.
+  const STALE_REASON="Can't reach the chain right now. Actions come back when it reconnects.";
+  function holdActionsWhileStale(){if(!state.stale)return;for(const button of [el.holder.claim,$("btn-custom-merge"),$("v9-review"),el.cp.button]){if(!button)continue;button.disabled=true;button.title=STALE_REASON;}}
   function renderCheckpointGate() {
     const unknownHoldings=Boolean(state.inspected) && (state.status?.owner?.toLowerCase()!==state.inspected.toLowerCase() || num(state.status?.totals?.count)===UNKNOWN);
-    el.cp.button.disabled=state.watchOnly || state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
+    el.cp.button.disabled=Boolean(state.stale) || state.watchOnly || state.busy || state.walletPromptPending || (!adapterFactory&&state.chainId!=null&&state.chainId!==11155111) || (adapterFactory&&unknownHoldings) || !(capabilities().checkpoint && state.net?.checkpoint?.canCheckpoint===true);
   }
   let liveSupply=null,explorePrefetched=false,explorePrefetchTimer=null,artSampled=false,lastTabHash=null;
   const closeSqueek=()=>{if(!$('squeek-modal')||$('squeek-modal').classList.contains('hidden'))return;const tab=[...el.tabs].find(t=>t.getAttribute('aria-selected')==='true')?.dataset.tab??'squeeks';win.location.hash=lastTabHash??(state.watchOnly&&state.inspected?`#/${state.profileKey}/address/${state.inspected}/${tabSlug(tab)}`:`#${state.profileKey}/${tabSlug(tab)}`);};
@@ -886,7 +935,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     holdings.render(status);if(state.claimQuote)workspace?.claim(state.claimQuote,status.owner);
     if(!isV9&&$('v9-action').value!=='merge'){$('v9-action').value='merge';renderActionFields();}
     else if(isV9&&$('v9-action').value==='merge'){$('v9-action').value='deposit';renderActionFields();}
-    updatePreviewGate();
+    updatePreviewGate();holdActionsWhileStale();
 
     // merge plan
     el.holder.mergeList.replaceChildren();
@@ -915,7 +964,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
 
   // ── refresh ───────────────────────────────────────────────────────────────
   function renderVerification(v) {
-      verifiedForGeneration=v;state.lastReadFailure=null;
+      verifiedForGeneration=v;state.lastReadFailure=null;state.stale=false;
       renderTrust(v);
       el.verified.textContent = v.ok && v.trusted ? "Verified" : "Stopped";
       el.verified.className = "sr-only";
@@ -938,8 +987,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       return net;
     } catch (err) {
       if (!isCurrent(load)) return null;
-      state.net = null;
-      renderNetworkPlaceholder();
+      // Keep the last network view on a slow/failed refresh; clear it only on a trust failure.
+      if(err.name==='RpcTrustError'||err.kind==='mismatch'||!state.net){state.net = null;renderNetworkPlaceholder();}
+      // Kept view is stale: never present a time-based stall verdict from it as current.
+      else for(const node of [el.net.settlement,$('holder-rewards-notice')]){node.textContent='';node.classList.add('hidden');}
       showReadFailure(err,'Network read');
       return null;
     } finally {
@@ -977,8 +1028,8 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
         plan = await readFor(load, "mergePlan", owner, { status });
       }
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
-      state.holderReadState='ready';
-      renderHolder(status, plan);
+      state.holderReadState='ready';state.stale=false;
+      renderHolder(status, plan);renderCheckpointGate();
       if(status.net&&(status.verification||status.source)){renderNetwork({...status.net,snapshot:status.snapshot??status.net.snapshot});if(status.source){displayVerification(status);displayStamp(status);}else renderVerification(status.verification);}
       clearReadBanner();
       return status;
@@ -986,7 +1037,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if (!isCurrent(load) || owner.toLowerCase() !== (state.inspected ?? state.account)?.toLowerCase()) return null;
       state.holderReadState='unavailable';
       // Keep a saved view on a transport failure; a trust/identity failure always clears it.
-      if(err.name==='RpcTrustError'||err.kind==='mismatch'||state.status?.source?.kind!=='cached')renderHolder(null);
+      if(err.name==='RpcTrustError'||err.kind==='mismatch'||!state.status)renderHolder(null);
       renderWalletChip();if(err.name==='RpcTrustError'){state.net=null;renderNetworkPlaceholder();}
       showReadFailure(err,'Wallet read');
       return null;
@@ -1091,7 +1142,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!capabilities().merge) throw new Error(capabilities().reasons.unavailable);
     const owner = state.account ?? state.inspected;
     const load = captureLoad();
-    if(!adapterFactory){const fresh=await load.adapter.walletStatus(owner);assertCurrent(load);const find=id=>{const token=fresh.squeeks.find(t=>String(t.tokenId)===String(BigInt(id)));if(!token)throw new Error('Token not in fresh on-chain inventory');return token;};const a=find(pair.survivor),b=find(pair.donor);pair={survivor:a.tokenId,donor:b.tokenId,nextLevel:a.level+1,deposited:a.deposited};}
+    if(!adapterFactory){const find=await freshHoldings(load,owner,[pair.survivor,pair.donor]);const a=find(pair.survivor),b=find(pair.donor);pair={survivor:a.tokenId,donor:b.tokenId,nextLevel:a.level+1,deposited:a.deposited};}
     const confirm = `BURN-${BigInt(pair.donor)}`;
     const confirmed = await confirmModal({
       title: `Keep #${pair.survivor} · burn #${pair.donor}`,
@@ -1142,12 +1193,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     if (!capabilities().deposit) throw new Error(capabilities().reasons.unavailable);
     const load = captureLoad(), owner = state.account;
     if (!owner || owner.toLowerCase() !== state.inspected?.toLowerCase()) throw new Error('Connect the inspected owner wallet');
-    if(action==='mergeDeposited'&&!adapterFactory){const fresh=await load.adapter.walletStatus(owner);assertCurrent(load);const canonical=id=>{const token=fresh.squeeks.find(t=>String(t.tokenId)===String(BigInt(id)));if(!token)throw new Error('Token not in fresh on-chain inventory');return token.tokenId;};input={...input,survivor:canonical(input.survivor),donor:canonical(input.donor)};}
+    if(action==='mergeDeposited'&&!adapterFactory){const find=await freshHoldings(load,owner,[input.survivor,input.donor]);const canonical=id=>find(id).tokenId;input={...input,survivor:canonical(input.survivor),donor:canonical(input.donor)};}
     if (action === 'mergeDeposited') {
       const burn = `BURN-${BigInt(input.donor)}`;
       if (!await confirmModal({ title: `Keep #${input.survivor} · burn #${input.donor}`, body: `Keep #${input.survivor} · burn #${input.donor}. #${input.survivor} survives and goes up one level. You will review the simulation before your wallet opens.`, warning: `#${input.donor} is BURNED permanently and cannot be restored. Type ${burn} below before we build or simulate this call.`, requireText: burn, confirmLabel: 'Acknowledge burn & simulate' })) return {ok:false,reason:'cancelled'};
       input = {...input,confirm:burn};
     }
+    {const out=$('v9-result');out.replaceChildren();const p=doc.createElement('p');p.textContent='Simulating on chain…';p.setAttribute('role','status');out.append(p);out.classList.remove('hidden');}
     const preview = await readFor(load,'actionPreview',owner,action,input);
     showOut($('v9-result'),preview);
     if (!preview.ok&&action==='stake'&&preview.approvalRequired&&!opts.autoApproved) {

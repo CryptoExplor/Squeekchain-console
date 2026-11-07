@@ -83,7 +83,8 @@ try {
     for (const id of ['net-round', 'net-blocks', 'net-squeeks', 'holder-count', 'holder-power']) assert.equal($(id).textContent, '0', `known zero ${id}`);
     assert.equal($('holder-claimable').textContent, '0 SQK'); assert.equal($('net-paused').textContent, 'No');
     failed = true; await app.refresh();
-    assert.equal($('holder-count').textContent, UNKNOWN); assert.equal(app.state.status, null);
+    // A failed refresh keeps the last view on screen (never blank the UI on a slow/failed read).
+    assert.equal($('holder-count').textContent, '0', 'last holder view kept after a failed refresh'); assert.notEqual(app.state.status, null);
     assert.equal($('btn-custom-merge').disabled, true);
     await app.switchProfile('sepolia'); assert.equal($('verified-chip').textContent, 'Unavailable','connected wallet failure remains unavailable across profile switch');
     failed=false;wallet={owner,totals:{count:null},squeeks:[]};await app.connect();

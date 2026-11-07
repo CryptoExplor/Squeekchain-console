@@ -120,7 +120,7 @@ export function createRpcContext({ rpcUrl, provider, signal, chainCache = new Ma
   const urls = uniqueUrls([...(rpcUrl ? [rpcUrl] : []), ...PUBLIC_RPCS]);
   const checked = new Map(urls.map(url => {
     const raw = createPublicClient({ chain: sepolia, transport: http(url, {
-      timeout: 12_000, retryCount: 0, fetchOptions: { signal },
+      timeout: 8_000, retryCount: 0, fetchOptions: { signal },
       onFetchResponse: response => {
         if (response.status === 429 || response.status === 503) {
           const timestamp = now();

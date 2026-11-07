@@ -85,7 +85,7 @@ export function createDisplayApi({profile,fetcher=globalThis.fetch,cache=createD
   if(pending.has(key))return pending.get(key);
   const operation=(async()=>{let saved=noStore?null:memory.get(key)??await cache.get(key);check();
    if(saved&&now()-saved.at>DISPLAY_TTL)saved=null;
-   const deadline=anySignal([signal],10000);
+   const deadline=anySignal([signal],6000);
    let received=false;try{const b=budget(path);counts.api++;const response=await fetcher(BASE+path,{method:'GET',credentials:'omit',cache:noStore?'no-store':'no-cache',headers:{accept:'application/json',...(!noStore&&saved?.etag?{'If-None-Match':saved.etag}:{})},signal:deadline.signal});check();
     if([429,503].includes(response.status))b.retryAt=now()+retryAfterMs(response.headers.get('Retry-After'),now());
     if(response.status===409){const body=await response.json();if((body.code??(typeof body.error==='string'?body.error:body.error?.code))==='cursor_invalidated')throw new DisplayError('cursor','History changed');}

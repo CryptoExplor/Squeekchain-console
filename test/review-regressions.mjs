@@ -77,7 +77,7 @@ try {
   fetchHook=async()=>{throw Object.assign(new Error('Identity mismatch'),{name:'RpcTrustError',kind:'mismatch'});};
   await api.pollDisplay();
   assert.equal($('wheel-rpm').textContent,'20.0','retain only historical device reading after API mismatch');assert.match($('wheel-asof').textContent,/as of/);
-  await tick();assert.equal($('net-round').textContent,'1000','independently guarded RPC fallback after API mismatch');assert.equal(api.state.net.source.kind,'rpc');
+  await tick();assert.equal($('net-round').textContent,'1000','independently guarded RPC fallback after API mismatch');assert.notEqual(api.state.net.source?.kind,'api','chain-read network view is kept after an API mismatch; API values never survive it');
   fetchHook=async()=>response(measurement(20000));await api.pollDisplay();await api.refresh();
   const realNow=Date.now;Date.now=()=>realNow()+900001;
   try{fetchHook=async()=>{throw new Error('Offline');};await api.pollDisplay();assert.equal($('wheel-rpm').textContent,'20.0','historical device reading stays explicitly aged, never a fresh measurement');assert.match($('wheel-asof').textContent,/as of 15 min/);}finally{Date.now=realNow;}
