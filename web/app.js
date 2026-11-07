@@ -1580,7 +1580,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     shareData=card.cardData({owner:status.owner,count:el.holder.count.textContent,powerLabel,power:el.holder.power.textContent,claimable:el.holder.claimable.textContent,levels:(status.squeeks??[]).map(t=>t.level),network:String(state.profileKey||'sepolia').replace(/^./,c=>c.toUpperCase())});
     openSheet('share-sheet');$('share-status').textContent='';
     const wide=win.matchMedia('(min-width: 761px)').matches,reducedMotion=win.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    shareView=await card.mountCard($('share-preview'),shareData,{dark:doc.documentElement.dataset.theme==='dark',reducedMotion,wide,loadStage:()=>import('./hero3d.js').then(m=>m.cardStage)});
+    shareView=await card.mountCard($('share-preview'),shareData,{reducedMotion,wide,loadStage:()=>import('./hero3d.js').then(m=>m.cardStage)});
     if(activeSheet?.id!=='share-sheet'){shareView.stop();shareView=null;}
   });
   $('share-png').onclick=()=>withBusy($('share-png'),async()=>{if(!shareView)return;try{const card=await import('./share-card.js');card.download(await shareView.png(),card.fileName(shareData,'png'));$('share-status').textContent='Picture saved.';}catch(error){$('share-status').textContent=error.message||'Could not make the picture.';}});

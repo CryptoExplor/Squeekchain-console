@@ -6,7 +6,7 @@ import {
   CapsuleGeometry, PlaneGeometry, BoxGeometry, MeshPhysicalMaterial, MeshStandardMaterial, ShadowMaterial,
   HemisphereLight, DirectionalLight, PMREMGenerator, Color, SRGBColorSpace, ACESFilmicToneMapping,
   PCFSoftShadowMap, Vector3, BufferGeometry, LineBasicMaterial, LineSegments, Float32BufferAttribute,
-  CanvasTexture, MeshBasicMaterial, NoToneMapping,
+  CatmullRomCurve3, TubeGeometry,
 } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
@@ -219,20 +219,51 @@ export function mount(host, { reducedMotion = false } = {}) {
 }
 
 
-// Share card stage: the flat card (a 2D canvas) on a thin slab that tilts gently. Shares three.js with the hero
-// so no second copy is downloaded. preserveDrawingBuffer lets the page save the canvas as a PNG.
-export function cardStage(source, { width = 1200, height = 675, dark = false } = {}) {
+// Share card stage: a night scene for the holder card. The real hero wheel and hamster on a dark glossy floor,
+// with the holder's Squeeks as glossy orbs rolling along a curved rail toward the wheel (colour and size by level).
+// No text here: share-card.js draws the text layer over each frame. Shares three.js with the hero bundle.
+const LEVEL_HEX = [0xfcbe46, 0x597af7, 0xff5fa2, 0x3ddc97, 0x9b6bff, 0xff8a3d, 0x4fd1e8, 0xf2f2f2];
+export function cardStage({ width = 1200, height = 675, orbs = [] } = {}) {
   const renderer = new WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'low-power' });
-  renderer.setPixelRatio(1); renderer.setSize(width, height, false); renderer.outputColorSpace = SRGBColorSpace; renderer.toneMapping = NoToneMapping;
-  renderer.setClearColor(new Color(dark ? 0x050507 : 0xf3ead6), 1);
-  const scene = new Scene(), aspect = width / height;
-  const camera = new PerspectiveCamera(30, aspect, 0.1, 50); camera.position.set(0, 0, 4.1);
-  const texture = new CanvasTexture(source); texture.colorSpace = SRGBColorSpace; texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const cardH = 1.78, cardW = cardH * (source.width / source.height);
-  const edge = new MeshBasicMaterial({ color: BRAND.yellow }), face = new MeshBasicMaterial({ map: texture });
-  const card = new Mesh(new BoxGeometry(cardW, cardH, 0.05), [edge, edge, edge, edge, face, edge]);
-  scene.add(card);
-  const frame = t => { texture.needsUpdate = true; card.rotation.y = Math.sin(t * 0.9) * 0.16; card.rotation.x = Math.sin(t * 0.6) * 0.06; card.position.y = Math.sin(t * 1.3) * 0.02; renderer.render(scene, camera); };
-  const canvas = renderer.domElement; canvas.width = width; canvas.height = height;
-  return { canvas, frame, dispose: () => { texture.dispose(); face.dispose(); edge.dispose(); card.geometry.dispose(); renderer.dispose(); renderer.forceContextLoss?.(); } };
+  renderer.setPixelRatio(1); renderer.setSize(width, height, false);
+  renderer.outputColorSpace = SRGBColorSpace; renderer.toneMapping = ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = PCFSoftShadowMap;
+  const scene = new Scene(); scene.background = new Color(0x08090f);
+  const pmrem = new PMREMGenerator(renderer); scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture; pmrem.dispose();
+  scene.environmentIntensity = 0.35;
+  scene.add(new HemisphereLight(0x8fa4ff, 0x0a0a0c, 0.35));
+  const key = new DirectionalLight(0xfff1d6, 2.4); key.position.set(-3, 6, 5); key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024); Object.assign(key.shadow.camera, { left: -7, right: 7, top: 5, bottom: -5, near: 1, far: 20 }); key.shadow.radius = 5;
+  scene.add(key);
+  const rim = new DirectionalLight(BRAND.blue, 2.2); rim.position.set(4, 3, -4); scene.add(rim);
+
+  const { wheel, stand, floorY } = buildWheel(); const rig = new Group(); rig.add(wheel, stand); scene.add(rig);
+  const hamster = buildHamster(); hamster.position.set(0.05, -R + 0.03, 0.02); hamster.scale.setScalar(1.12); wheel.parent.add(hamster);
+  rig.position.set(3.2, 0, 0); rig.rotation.y = -0.3;
+  const floor = new Mesh(new PlaneGeometry(40, 40), new MeshPhysicalMaterial({ color: 0x0b0c12, roughness: 0.32, metalness: 0.2, clearcoat: 0.6 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = floorY; floor.receiveShadow = true; scene.add(floor);
+
+  // rail: a dark glossy track on the floor from far back-left up to the wheel (matches the flat card's layout)
+  const path = new CatmullRomCurve3([[-8, -10], [-4, -5.5], [-1, -2.6], [1.9, -0.9]].map(([x, z]) => new Vector3(x, floorY + 0.09, z)));
+  const rail = new Mesh(new TubeGeometry(path, 120, 0.09, 12, false), new MeshPhysicalMaterial({ color: 0x1a1d2e, roughness: 0.25, metalness: 0.6, clearcoat: 1 }));
+  rail.receiveShadow = true; scene.add(rail);
+  const railAt = u => path.getPointAt(u);
+
+  const balls = orbs.slice(0, 14).map((level, i) => {
+    const r = 0.17 + Math.min(level, 8) * 0.035;
+    const mat = new MeshPhysicalMaterial({ color: LEVEL_HEX[(Math.max(1, level) - 1) % LEVEL_HEX.length], roughness: 0.18, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08, sheen: 0.3 });
+    const m = new Mesh(new SphereGeometry(r, 40, 24), mat); m.castShadow = true; m.userData = { r, base: (i + 0.5) / Math.max(orbs.length, 4) }; scene.add(m); return m;
+  });
+
+  const camera = new PerspectiveCamera(30, width / height, 0.1, 60);
+  const { torso, head, legs, tail } = hamster.userData;
+  const frame = t => {
+    camera.position.set(-0.6 + Math.sin(t * 0.25) * 0.25, 3.2, 10.5); camera.lookAt(1.0, -0.4, 0);
+    wheel.rotation.z = -t * 2.6; const p = t * 10;
+    torso.position.y = Math.abs(Math.sin(p)) * 0.04; head.rotation.z = Math.sin(p + 0.6) * 0.04; tail.rotation.z = Math.sin(p * 2) * 0.3;
+    for (const { pivot, phase, front } of legs) pivot.rotation.z = Math.sin(p + phase) * (front ? 0.75 : 0.6);
+    for (const b of balls) { const u = 0.04 + ((b.userData.base + t * 0.02) % 1) * 0.86; const at = railAt(u); b.position.set(at.x, floorY + 0.12 + b.userData.r, at.z); b.rotation.z = -t * 2; }
+    renderer.render(scene, camera);
+  };
+  return { canvas: renderer.domElement, frame, dispose: () => { scene.traverse(o => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach(x => x.dispose?.()); }); renderer.dispose(); renderer.forceContextLoss?.(); } };
 }
