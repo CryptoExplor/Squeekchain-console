@@ -932,7 +932,7 @@ a { color: var(--sqk-blue); }
 #nft-v9-buttons { gap: 6px; }
 .permission-group { gap: 6px; padding-left: 12px; border-left: 1px solid var(--sqk-line-soft); }
 .permission-group .label { color: var(--sqk-gray); letter-spacing: .08em; margin-right: 2px; }
-.squeek-action-grid { gap: 16px; margin-bottom: 32px; align-items: stretch; }
+.squeek-action-grid { gap: 16px; margin-bottom: 32px; align-items: start; }
 .squeek-action-grid > section { background: var(--sqk-panel); border: 1px solid var(--sqk-line); border-radius: var(--sqk-r-panel); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
 .squeek-action-grid h3 { margin: 0; font-size: 12px; letter-spacing: .1em; color: var(--sqk-gray-lit); }
 .squeek-action-grid > section > p { margin: 0; }
@@ -940,7 +940,7 @@ a { color: var(--sqk-blue); }
 .merge-panel .small { line-height: 1.5; }
 .squeek-action-grid input { min-height: 44px; }
 #panel-squeeks .squeek-action-grid .btn { min-height: 44px; }
-.squeek-action-grid .pair-inputs { margin-top: auto; }
+.squeek-action-grid .pair-inputs { margin-top: 4px; }
 .pair-inputs label { flex: 1 1 110px; }
 #panel-squeeks .squeek-action-grid .action-row label { flex: 1 1 210px; }
 #v9-result:not(.hidden) { margin-top: 4px; }
