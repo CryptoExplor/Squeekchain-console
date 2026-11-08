@@ -16,6 +16,7 @@ export interface ShareCardProps {
   network: string;
   date: string;
 }
+/** Render only frozen holder values, with full-width wrapping and explicit identity/testnet disclosure. */
 export const ShareCard = memo(forwardRef<HTMLDivElement, ShareCardProps>((data,ref) => (
  <div ref={ref} className="premium-card v2-relative v2-overflow-hidden v2-bg-squeek-bg v2-text-white v2-rounded-2xl v2-border v2-border-solid v2-border-squeek-border" data-testid="premium-card">
   <div className="premium-glow premium-glow-purple"/><div className="premium-glow premium-glow-cyan"/><div className="premium-grid"/>
