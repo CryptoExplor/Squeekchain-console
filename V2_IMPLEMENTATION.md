@@ -50,3 +50,14 @@ No unused Tailwind config or unmounted TSX samples: build.mjs bundles the actual
 - New premium export is PNG only; legacy styles retain video exports. Physical-device/Safari/Firefox export qualification is still outstanding.
 - Existing high-severity Zod advisory remains. Production audit did not identify an advisory in the new React/export packages. The proposed npm audit fix includes a breaking Hardhat major change, so no forced dependency downgrade was applied.
 - `npm run lint` is a focused source/syntax/read-only/strict-TypeScript gate, not a claim that the entire legacy JavaScript codebase has been ESLint-migrated.
+
+## Follow-up: PR22 rendering/export execution-plan audit
+
+- Retained the existing real holder snapshot contract, lazy island, focus trap, cancellation guards and separate full-address link consent. The supplied example PnL/rank/score/tier/verified defaults are not backed by this console and were not introduced.
+- Fixed card layout now also enforces `min-width:600px`, `min-height:340px` and `flex-shrink:0`. Clone-only export styles reset the root transform/margin and fix both dimensions independently of the responsive preview.
+- Hero metrics use opaque cyan `#00f5d4`, never gradient-clipped transparent text. Stat surfaces remain deterministic colors, not backdrop filters. Missing, null, NaN and infinite metric strings display an unknown marker, not invented zero.
+- Added explicit local-font readiness and a real 600×340 warm-up before the final 1200×680 encoding. Both passes use embedded local fonts; failures are surfaced rather than silently ignored. There are no timer-based canvas delays.
+- Clipboard already passed a pending Blob promise to ClipboardItem synchronously; this activation-safe design was retained. Tests now check the trusted-click activation while font embedding is deliberately stalled, and also round-trip an actual PNG through native Chromium clipboard write/read (not just a mock).
+- No remote image/avatar pipeline exists: icons are bundled inline SVG and the avatar is procedural. Cold-export tests reject unexpected remote requests and confirm no card `<img>` dependency. Merely setting `crossOrigin` would not fix a server without CORS permission; no CORS bypass was added.
+- Fresh desktop and 375px mobile PNG tests assert both encoding passes, 1200×680 output, visible cyan hero pixels, visible right-column stats, opaque right edge, and loaded fonts. The exported fixture PNG was also visually inspected: complete frame, legible metrics/icons, no clipping.
+- Build/lint/typecheck and offline tests pass; dedicated premium tests cover the above and existing privacy/loading/error cases. Full code CI is required before merging this follow-up. Native Chromium evidence does not certify Safari/Firefox/physical devices or override browser/OS permission denials. X remains a text/link draft with manual image attachment, not an automatic upload.
