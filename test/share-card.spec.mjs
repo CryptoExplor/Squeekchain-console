@@ -16,7 +16,7 @@ test('share card: opens from the holder view, saves a PNG, never signs',async({p
  await expect(page.getByTestId('share-sheet')).toBeVisible();
  await expect(page.locator('#share-preview canvas')).toHaveCount(1);
  const download=page.waitForEvent('download');await page.getByTestId('share-png').click();
- const file=await download;expect(file.suggestedFilename()).toMatch(/^wheelhouse-0x.*\.png$/);
+ const file=await download;expect(file.suggestedFilename()).toMatch(/^wheelhouse-holder-.*\.png$/);
  const path=await file.path();const fs=await import('node:fs');expect(fs.statSync(path).size).toBeGreaterThan(5000);
  await page.getByTestId('share-close').click();await expect(page.getByTestId('share-sheet')).toBeHidden();
  expect(errors).toEqual([]);
@@ -38,6 +38,8 @@ test('share studio: front and back PNGs, style switching and anonymous export', 
  const front=await save('front'), back=await save('back');
  expect(front.name).toContain('-front.png'); expect(back.name).toContain('-back.png');
  expect(front.bytes.equals(back.bytes)).toBe(false);
+ await page.getByRole('checkbox',{name:'Wallet address',exact:true}).check();
+ expect((await save('front')).name).toMatch(/^wheelhouse-0x/);
  await page.getByRole('checkbox',{name:'Wallet address',exact:true}).uncheck();
  expect((await save('front')).name).toContain('wheelhouse-holder-');
  for(const name of ['Night scene','Classic','Flip card']) {

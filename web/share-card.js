@@ -33,7 +33,7 @@ export function cardData({ owner, count, powerLabel = 'Power', power, claimable,
 // What the holder chose to show. The front side carries Squeeks, deposited/power and levels; the back side
 // carries the SQK numbers. Address off = "A Squeek holder".
 export const MAX_STATS = 5;
-export const DEFAULT_SHOW = { address: true, count: true, power: true, claimable: true, claimed: false, compounded: false, levels: true, meta: true };
+export const DEFAULT_SHOW = { address: false, count: true, power: true, claimable: true, claimed: false, compounded: false, levels: true, meta: true };
 export const SHOW_FIELDS = [['address', 'Wallet address'], ['count', 'Squeeks'], ['power', 'Deposited / power'], ['claimable', 'Claimable SQK'], ['claimed', 'SQK claimed (lifetime)'], ['compounded', 'SQK compounded (lifetime)'], ['levels', 'Levels'], ['meta', 'Network and date']];
 const FRONT_KEYS = ['count', 'power'], BACK_KEYS = ['claimable', 'claimed', 'compounded'];
 export const statKeys = [...FRONT_KEYS, ...BACK_KEYS];

@@ -1022,3 +1022,7 @@ a { color: var(--sqk-blue); }
 .share-actions label { color: var(--sqk-muted); }
 #share-side { min-height: 44px; }
 #share-status { min-height: 1.5em; }
+
+/* Share sheet options: undo global label/input sizing so Save buttons stay in view. */
+.sheet .share-options label { display:inline-flex; flex-direction:row; margin:0; }
+.share-options input[type=checkbox] { padding:0; margin:0; min-height:0; box-sizing:border-box; }
