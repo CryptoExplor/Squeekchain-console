@@ -38,9 +38,9 @@ test('share studio: front and back PNGs, style switching and anonymous export', 
  const front=await save('front'), back=await save('back');
  expect(front.name).toContain('-front.png'); expect(back.name).toContain('-back.png');
  expect(front.bytes.equals(back.bytes)).toBe(false);
- await page.getByRole('checkbox',{name:'Wallet address',exact:true}).check();
+ await page.getByRole('button',{name:'Wallet address',exact:true}).click();
  expect((await save('front')).name).toMatch(/^wheelhouse-0x/);
- await page.getByRole('checkbox',{name:'Wallet address',exact:true}).uncheck();
+ await page.getByRole('button',{name:'Wallet address',exact:true}).click();
  expect((await save('front')).name).toContain('wheelhouse-holder-');
  for(const name of ['Night scene','Classic','Flip card']) {
   await page.getByRole('button',{name,exact:true}).click();
@@ -213,4 +213,25 @@ test('Flip foil wheels stay fully framed and use filled, coordinated marks', asy
  });
  for(const b of result.bounds){expect(b.left).toBeGreaterThan(400);expect(b.right).toBeLessThanOrEqual(result.width-24);expect(b.top).toBeGreaterThan(100);expect(b.bottom).toBeLessThanOrEqual(result.height-40);}
  expect(result.gradientFills).toBeGreaterThanOrEqual(4);
+});
+
+test('share options are pastel toggle buttons with keyboard and persisted state',async({page})=>{
+ await installHolderFixture(page,{profile:'sepolia'});
+ await page.getByTestId('btn-share-card').click();
+ const options=page.getByTestId('share-options'),address=page.getByTestId('share-show-address');
+ await expect(options.locator('input')).toHaveCount(0);
+ await expect(options.getByRole('button')).toHaveCount(8);
+ await expect(address).toHaveAttribute('aria-pressed','false');
+ await expect(page.getByTestId('share-show-count')).toHaveAttribute('aria-pressed','true');
+ const fill=await page.getByTestId('share-show-count').evaluate(el=>getComputedStyle(el).backgroundImage);
+ expect(fill).toContain('linear-gradient');
+ expect(await page.getByTestId('share-style-flip').evaluate(el=>getComputedStyle(el).backgroundImage)).toBe(fill);
+ await address.focus();await page.keyboard.press('Space');
+ await expect(address).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByTestId('share-link')).toBeEnabled();
+ await page.getByTestId('share-close').click();await page.getByTestId('btn-share-card').click();
+ await expect(address).toHaveAttribute('aria-pressed','true');
+ await address.focus();await page.keyboard.press('Enter');
+ await expect(address).toHaveAttribute('aria-pressed','false');
+ await expect(page.getByTestId('share-link')).toBeDisabled();
 });

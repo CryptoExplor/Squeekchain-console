@@ -1480,13 +1480,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     for(const [key,text] of card.STYLES){const btn=doc.createElement('button');btn.type='button';btn.className='btn';btn.textContent=text;if(card.STYLE_HINTS?.[key])btn.title=card.STYLE_HINTS[key];btn.setAttribute('data-testid',`share-style-${key}`);btn.setAttribute('aria-pressed',String(key===current));
       btn.onclick=()=>{if(!shareView?.setStyle(key)){$('share-status').textContent='Wait for the recording to finish.';return;}try{win.localStorage.setItem('wheelhouse.shareStyle.v1',key);}catch{}box.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));$('share-side').disabled=key!=='flip';$('share-status').textContent='';};
       box.append(btn);}};
-  const renderShareOptions=card=>{const box=$('share-options');box.querySelectorAll('label').forEach(n=>n.remove());
-    for(const [key,text] of card.SHOW_FIELDS){const label=doc.createElement('label'),input=doc.createElement('input');input.type='checkbox';input.dataset.key=key;input.setAttribute('data-testid',`share-show-${key}`);
-      const missing=card.statKeys.includes(key)&&shareBase[key]==='—';input.checked=!missing&&!!shareShow[key];input.disabled=missing;if(missing){label.classList.add('off');label.title='Not loaded for this wallet yet.';}
-      input.onchange=()=>{const next={...shareShow,[key]:input.checked};const on=card.statKeys.filter(k=>next[k]&&shareBase[k]!=='—').length;
-        if(input.checked&&card.statKeys.includes(key)&&on>card.MAX_STATS){input.checked=false;$('share-status').textContent=`Up to ${card.MAX_STATS} numbers fit. Turn one off first.`;return;}
-        shareShow=next;try{win.localStorage.setItem(SHARE_SHOW_KEY,JSON.stringify(shareShow));}catch{}shareData=card.applyShow(shareBase,shareShow);shareView?.update(shareData);syncShareLink();$('share-status').textContent='';};
-      label.append(input,doc.createTextNode(' '+text));box.append(label);}
+  const renderShareOptions=card=>{const box=$('share-options');box.querySelectorAll('button').forEach(n=>n.remove());
+    for(const [key,text] of card.SHOW_FIELDS){const btn=doc.createElement('button');btn.type='button';btn.className='btn';btn.dataset.key=key;btn.textContent=text;btn.setAttribute('data-testid',`share-show-${key}`);
+      const missing=card.statKeys.includes(key)&&shareBase[key]==='—';btn.setAttribute('aria-pressed',String(!missing&&!!shareShow[key]));btn.disabled=missing;if(missing)btn.title='Not loaded for this wallet yet.';
+      btn.onclick=()=>{const enabled=btn.getAttribute('aria-pressed')!=='true',next={...shareShow,[key]:enabled};const on=card.statKeys.filter(k=>next[k]&&shareBase[k]!=='—').length;
+        if(enabled&&card.statKeys.includes(key)&&on>card.MAX_STATS){$('share-status').textContent=`Up to ${card.MAX_STATS} numbers fit. Turn one off first.`;return;}
+        btn.setAttribute('aria-pressed',String(enabled));shareShow=next;try{win.localStorage.setItem(SHARE_SHOW_KEY,JSON.stringify(shareShow));}catch{}shareData=card.applyShow(shareBase,shareShow);shareView?.update(shareData);syncShareLink();$('share-status').textContent='';};
+      box.append(btn);}
     syncShareLink();};
   function closeSheet() {
     if(finishWalletPick){const resolve=finishWalletPick;finishWalletPick=null;resolve(null);}
@@ -1590,7 +1590,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   };
   // Share card: drawn from what the holder view already shows. Read-only; nothing here reaches a transaction.
   const lockShareControls=()=>{
-    const controls=[...$('share-options').querySelectorAll('input'),...$('share-style').querySelectorAll('button'),$('share-png'),$('share-video'),$('share-side')];
+    const controls=[...$('share-options').querySelectorAll('button'),...$('share-style').querySelectorAll('button'),$('share-png'),$('share-video'),$('share-side')];
     const disabled=controls.map(control=>control.disabled);controls.forEach(control=>control.disabled=true);
     let restored=false;
     const restore=()=>{if(restored)return;restored=true;controls.forEach((control,i)=>{control.disabled=disabled[i];});if(shareUnlock===restore)shareUnlock=null;};
