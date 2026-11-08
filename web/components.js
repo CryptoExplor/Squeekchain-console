@@ -39,7 +39,7 @@ export function formatPower(value) {
   if (/^\d+$/.test(text)) { const big = BigInt(text); return (big >= 10n ** 18n ? big / 10n ** 18n : big).toLocaleString('en-US'); }
   return formatNumber(text, 0);
 }
-// SDK account power has known 18-decimal units; do not infer units from magnitude.
+/** Format known 18-decimal SDK power exactly, including sub-unit and unavailable values. */
 export function formatStakingPower(value) {
   if(!/^\d+$/.test(String(value??'')))return UNKNOWN;
   const raw=BigInt(value),unit=10n**18n,whole=raw/unit,fraction=(raw%unit)/(10n**16n);

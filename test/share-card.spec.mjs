@@ -226,12 +226,12 @@ test('share options are pastel toggle buttons with keyboard and persisted state'
  const fill=await page.getByTestId('share-show-count').evaluate(el=>getComputedStyle(el).backgroundImage);
  expect(fill).toContain('linear-gradient');
  expect(await page.getByTestId('share-style-flip').evaluate(el=>getComputedStyle(el).backgroundImage)).toBe(fill);
- await address.focus();await page.keyboard.press('Space');
+ await expect(address).toBeEnabled();await address.focus();await page.keyboard.press('Space');
  await expect(address).toHaveAttribute('aria-pressed','true');
  await expect(page.getByTestId('share-link')).toBeEnabled();
  await page.getByTestId('share-close').click();await page.getByTestId('btn-share-card').click();
  await expect(address).toHaveAttribute('aria-pressed','true');
- await address.focus();await page.keyboard.press('Enter');
+ await expect(address).toBeEnabled();await address.focus();await page.keyboard.press('Enter');
  await expect(address).toHaveAttribute('aria-pressed','false');
  await expect(page.getByTestId('share-link')).toBeDisabled();
 });
