@@ -19,6 +19,7 @@ test('V2 premium exports a 2x PNG with real snapshot data and private identity',
  expect(file.suggestedFilename()).not.toContain('0x');
  await modal.getByRole('button',{name:'Close premium card'}).click();await expect(modal).toHaveCount(0);
  await expect(page.getByTestId('btn-premium-share')).toBeFocused();expect(errors).toEqual([]);
+ await fs.mkdir('artifacts',{recursive:true});
  await fs.writeFile('artifacts/premium-share-reviewed.png',bytes);
 });
 
@@ -32,7 +33,14 @@ test('V2 scales on mobile, traps focus, and never leaks a hidden wallet to X',as
  expect(decodeURIComponent(calls[0][0])).not.toContain('598958');
  const address=modal.getByRole('button',{name:'Wallet address: hidden'});await address.click();
  await expect(page.getByTestId('premium-card')).toContainText('0x5989');await modal.getByRole('button',{name:'Share on X'}).click();
- calls=await page.evaluate(()=>shared);expect(decodeURIComponent(calls[1][0])).toContain('598958');
+ calls=await page.evaluate(()=>shared);expect(decodeURIComponent(calls[1][0])).not.toContain('598958');
+ await modal.getByRole('button',{name:'Full-address link: excluded'}).click();
+ await expect(modal.getByText('The X link will reveal your full wallet address.')).toBeVisible();
+ await modal.getByRole('button',{name:'Share on X'}).click();
+ calls=await page.evaluate(()=>shared);expect(decodeURIComponent(calls[2][0])).toContain('598958');
+ await modal.getByRole('button',{name:'Wallet address: shown'}).click();
+ await expect(modal.getByRole('button',{name:/Full-address link/})).toHaveCount(0);
+ await address.click();await expect(modal.getByRole('button',{name:'Full-address link: excluded'})).toHaveAttribute('aria-pressed','false');
  const close=modal.getByRole('button',{name:'Close premium card'});await close.focus();await page.keyboard.press('Shift+Tab');
  await expect(modal.getByRole('button',{name:'Share on X'})).toBeFocused();await page.keyboard.press('Escape');await expect(modal).toHaveCount(0);
  expect(await page.evaluate(()=>holderFixture.sends)).toBe(0);
@@ -67,4 +75,30 @@ test('V2 failed lazy module load leaves the dashboard usable',async({page})=>{
  await expect(page.getByTestId('btn-premium-share')).toBeEnabled();
  await expect(page.getByTestId('btn-share-card')).toBeEnabled();
  expect(await page.evaluate(()=>holderFixture.sends)).toBe(0);
+});
+
+test('V2 import completion preserves the new wallet loading gate',async({page})=>{
+ await installHolderFixture(page,{profile:'sepolia'});
+ let release;
+ await page.route('**/premium-share.js',async route=>{await new Promise(resolve=>{release=resolve;});await route.continue();});
+ const button=page.getByTestId('btn-premium-share');await button.click();
+ await expect.poll(()=>Boolean(release)).toBe(true);
+ await page.evaluate(()=>{
+  holderFixture.lateWallet=new Promise(()=>{});
+  location.hash='#/sepolia/address/0x1111111111111111111111111111111111111111';
+ });
+ await expect(page.getByTestId('holder-owner')).toHaveAttribute('title','0x1111111111111111111111111111111111111111');
+ await expect(button).toBeDisabled();release();
+ await expect(button).not.toHaveAttribute('aria-busy','true');
+ await expect(button).toBeDisabled();await expect(page.getByTestId('premium-modal')).toHaveCount(0);
+});
+
+test('V2 root cleanup is idempotent',async({page})=>{
+ await installHolderFixture(page,{profile:'sepolia'});
+ const count=await page.evaluate(async()=>{
+  const {openPremiumShare}=await import('/premium-share.js');let closed=0;
+  const close=openPremiumShare({snapshot:{walletAddress:null,count:'0',power:'0',powerLabel:'Power',claimable:'—',claimed:'—',compounded:'—',network:'Sepolia',date:'2026-11-07'},holderUrl:location.href,onClosed:()=>closed++});
+  close();close();return closed;
+ });
+ expect(count).toBe(1);await expect(page.getByTestId('premium-modal')).toHaveCount(0);
 });

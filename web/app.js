@@ -909,7 +909,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const inspected=status?.owner??state.inspected??state.account;
     el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);
     el.holder.refresh.disabled=!state.adapter||!inspected;
-    $('holder-copy-link').classList.toggle('hidden',!inspected);{const share=$('btn-share-card');share.classList.toggle('hidden',!inspected);share.disabled=!status||status.owner?.toLowerCase()!==inspected?.toLowerCase();share.title=share.disabled?'Load this wallet\'s Squeeks first':'Make a picture or short clip of these holdings';const premium=$('btn-premium-share');premium.classList.toggle('hidden',!inspected);premium.disabled=share.disabled;}$('btn-planner').disabled=!(status?.squeeks?.length);$('btn-planner').hidden=!status?.squeeks?.some(token=>Number.isInteger(token.level)&&token.level>0&&token.level<state.net?.policy?.maximumLevel);
+    $('holder-copy-link').classList.toggle('hidden',!inspected);{const share=$('btn-share-card');share.classList.toggle('hidden',!inspected);share.disabled=!status||status.owner?.toLowerCase()!==inspected?.toLowerCase();share.title=share.disabled?'Load this wallet\'s Squeeks first':'Make a picture or short clip of these holdings';syncPremiumGate();}$('btn-planner').disabled=!(status?.squeeks?.length);$('btn-planner').hidden=!status?.squeeks?.some(token=>Number.isInteger(token.level)&&token.level>0&&token.level<state.net?.policy?.maximumLevel);
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
     if (!status) {
@@ -1589,6 +1589,12 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     try{const address=watchAddress(value);win.location.hash=watchHash(state.profileKey,address);await onHashChange();}catch(error){toast(error.message,'err');}
   };
   let closePremium = null, premiumGeneration = 0;
+  /** Reapply current-wallet eligibility without clearing an in-flight import's busy lock. */
+  function syncPremiumGate(){
+    const button=$('btn-premium-share'),owner=state.inspected??state.account;
+    button.classList.toggle('hidden',!owner);
+    button.disabled=destroyed||button.getAttribute('aria-busy')==='true'||!state.status||!owner||state.status.owner?.toLowerCase()!==owner.toLowerCase();
+  }
   $('btn-premium-share').onclick=()=>withBusy($('btn-premium-share'),async()=>{
     const status=state.status,profile=state.profileKey,owner=state.inspected??state.account;
     if(!status||status.owner?.toLowerCase()!==owner?.toLowerCase())return;
@@ -1600,7 +1606,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(destroyed||state.status!==status||generation!==premiumGeneration)return;
       closePremium?.();closePremium=openPremiumShare({snapshot,holderUrl:new URL(watchHash(profile,status.owner),win.location.href).href,onClosed:()=>{if(!destroyed)$('btn-premium-share').focus();}});
     }catch(error){showBanner(`Premium card unavailable: ${error.message}`,'warn');}
-  });
+  }).finally(syncPremiumGate);
   // Share card: drawn from what the holder view already shows. Read-only; nothing here reaches a transaction.
   const lockShareControls=()=>{
     const controls=[...$('share-options').querySelectorAll('button'),...$('share-style').querySelectorAll('button'),$('share-png'),$('share-video'),$('share-side')];
