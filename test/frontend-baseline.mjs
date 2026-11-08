@@ -7,11 +7,15 @@ import {parse,walk,generate} from 'css-tree';
 const evidence=JSON.parse(fs.readFileSync('test/fixtures/frontend-b705683.json'));
 const sha=value=>createHash('sha256').update(value).digest('hex');
 const html=fs.readFileSync('web/index.html','utf8'),doc=new JSDOM(html).window.document;
-// The only baseline DOM normalization: seven audited style attributes moved
+// Baseline DOM normalization (plus the approved header wheel artwork below): seven audited style attributes moved
 // verbatim to external classes for style-src 'self'. All other DOM/copy is exact.
 const cspClasses={'margin: 12px 0':'my-12','margin-top: 12px':'mt-12','margin-top: 16px':'mt-16','margin-top: 20px':'mt-20','max-width: 140px':'max-w-140'};
 function normalize(node) {
   node=node.cloneNode(true);
+  // Approved visual rebrand: normalize only the header wheel artwork; retain its
+  // wrapper, accessible treatment, brand wording and all surrounding baseline DOM.
+  const mark=node.querySelector('.mark svg');
+  if(mark)mark.replaceWith(mark.ownerDocument.createElementNS('http://www.w3.org/2000/svg','svg'));
   for(const el of [node,...node.querySelectorAll('*')]) {
     const style=el.getAttribute('style');
     if(style&&cspClasses[style]){el.removeAttribute('style');el.className=cspClasses[style]+(el.className?' '+el.className:'');}
@@ -24,6 +28,7 @@ function normalize(node) {
 }
 // DATA DIET explicitly replaces the old fixed-loop label; all other baseline DOM remains exact.
 for(const [selector,expected] of Object.entries(evidence.nodes).filter(([selector])=>!['#holder-empty','#btn-plan','#panel-network .section-heading','#activity-panel > p'].includes(selector)))assert.equal(normalize(doc.querySelector(selector)),normalize(new JSDOM(expected.replace('ONCHAIN READS · AUTO-REFRESH 45s','DISPLAY READS · FOLLOWS THE WHEEL').replace('rendered by the DotGrid renderer · shown as an isolated image','Your Squeek collection').replace('Clear IndexedDB log cache','Clear saved data')).window.document.body.firstElementChild),`${selector}: preserve deployed b705683 layout/copy`);
+assert.equal(doc.querySelector('.brand .mark svg circle').getAttribute('fill'),'url(#brand-wheel-foil)','approved filled foil wheel mark');
 assert.equal(doc.querySelector('#activity-panel > p'),null,'approved removal of drawer-wide help');
 assert.ok(doc.querySelector('#panel-network #profile-panel')&&doc.querySelector('#panel-network #checkpoint-panel'),'Network tab holds chain pulse and checkpoint');assert.equal(doc.querySelector('#info-developers #checkpoint-panel'),null,'checkpoint is not buried in Developers');assert.ok(doc.querySelector('#panel-explore'));assert.ok(doc.querySelector('.network-strip'));assert.ok(doc.querySelector('#info-about').textContent.includes('Also see'));
 assert.equal(doc.querySelector('#btn-plan'),null,'text plan refresh removed');assert.equal(doc.querySelector('#btn-holder-refresh').getAttribute('aria-label'),'Refresh Squeeks');

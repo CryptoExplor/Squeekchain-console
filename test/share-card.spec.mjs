@@ -204,7 +204,7 @@ test('Flip foil wheels stay fully framed and use filled, coordinated marks', asy
   const bounds=[];
   for(const t of [0,2,5,8]){
    arcs.length=0;drawBack(ctx,data,{t});
-   const ring=arcs.find(a=>a.r===BACK_WHEEL.radius),edge=ring.r+BACK_WHEEL.lineWidth/2;
+   const ring=arcs.find(a=>a.r===BACK_WHEEL.radius+BACK_WHEEL.lineWidth/2),edge=ring.r;
    bounds.push({left:ring.x-edge,right:ring.x+edge,top:ring.y-edge,bottom:ring.y+edge});
   }
   let gradientFills=0;const fill=ctx.fill.bind(ctx);ctx.fill=(...args)=>{if(ctx.fillStyle instanceof CanvasGradient)gradientFills++;fill(...args);};
