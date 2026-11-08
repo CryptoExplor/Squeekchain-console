@@ -95,3 +95,14 @@ try {
   } finally { app.destroy(); }
   console.log('PASS components: Panel/Stat/Table/TokenCard/ConfirmDialog/Toast/Skeleton, Unknown vs genuine zero, typed BURN guard, failed-wallet clearing, profile badges and independent footer');
 } finally { win.close(); }
+
+// Raw SDK account power is explicitly fixed-point even below one power unit.
+{
+ const {formatStakingPower}=await import('../web/components.js');
+ assert.equal(formatStakingPower('0'),'0');
+ assert.equal(formatStakingPower('500000000000000000'),'0.5');
+ assert.equal(formatStakingPower('1000000000000000000'),'1');
+ assert.equal(formatStakingPower('2000000000000000000000'),'2,000');
+ assert.equal(formatStakingPower('1'),'< 0.01');
+ assert.equal(formatStakingPower(null),'—');
+}

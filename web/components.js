@@ -39,6 +39,13 @@ export function formatPower(value) {
   if (/^\d+$/.test(text)) { const big = BigInt(text); return (big >= 10n ** 18n ? big / 10n ** 18n : big).toLocaleString('en-US'); }
   return formatNumber(text, 0);
 }
+/** Format known 18-decimal SDK power exactly, including sub-unit and unavailable values. */
+export function formatStakingPower(value) {
+  if(!/^\d+$/.test(String(value??'')))return UNKNOWN;
+  const raw=BigInt(value),unit=10n**18n,whole=raw/unit,fraction=(raw%unit)/(10n**16n);
+  if(raw>0n&&whole===0n&&fraction===0n)return '< 0.01';
+  return whole.toLocaleString('en-US')+(fraction?'.'+String(fraction).padStart(2,'0').replace(/0+$/,''):'');
+}
 // End plain-language formats.
 export function Skeleton(node, busy) {
   node.dataset.component = 'Skeleton';

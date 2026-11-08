@@ -21,7 +21,9 @@ jobs:
         run: npx playwright install --with-deps chromium
       - run: npm run build
       - name: Reject drift in committed generated browser assets
-        run: git diff --exit-code -- web/bundle.js web/tools.json
+        run: git diff --exit-code -- web/bundle.js web/tools.json web/hero3d.js web/premium-share.js web/premium-share.css
+      - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
       - run: npm run test:browser
       - uses: actions/upload-artifact@v4

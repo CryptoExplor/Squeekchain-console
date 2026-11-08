@@ -22,22 +22,35 @@
     "test": "node test/run-guarded.mjs \"node test/dist-imports.mjs && node test/ui.mjs && node test/audit-baseline.mjs && node test/review-regressions.mjs && node test/phase1-safety.mjs && node test/discovery.mjs && node test/activity.mjs && node test/rpc-failover.mjs && node test/account-discovery.mjs && node test/live-ci.mjs && node test/rpc-diagnostics.mjs && node test/components.mjs && node test/profile-registry.mjs && node test/v9-safety.mjs && node test/reward-status.mjs && node test/review-fixes.mjs && node test/frontend-baseline.mjs && node test/pr3-fix-pack.mjs && node test/display-data.mjs && node test/wallet-store.mjs && node test/security-review.mjs && node test/holder-workspace.mjs && node test/docs-cleanup.mjs && node test/network-genesis.mjs && node test/browsing.mjs && node test/explore-index.mjs && node test/explore-wire.mjs && node test/explore-snapshot.mjs && node test/network-strip.mjs && node test/identity-batch.mjs && node test/rpc-429.mjs && node test/art-onchain.mjs && node test/published-pins.mjs && node test/share-card.mjs\"",
     "test:live": "node test/run-guarded.mjs \"npm run build && playwright test --config playwright.live.config.mjs test/live.spec.mjs\"",
     "test:audit": "node test/run-guarded.mjs \"node test/audit-baseline.mjs\"",
-    "test:browser": "node test/run-guarded.mjs \"npm run build && playwright test --config playwright.config.mjs test/browser.spec.mjs test/screenshots.spec.mjs test/v9-browser.spec.mjs test/restorations.spec.mjs test/pr3-fix-pack.spec.mjs test/manual-review.spec.mjs test/display-browser.spec.mjs test/squeeks-audit.spec.mjs test/wallet-wait.spec.mjs test/wallet-session.spec.mjs test/wallet-wheel-audit.spec.mjs test/wheel-feed.spec.mjs test/layout-notifications.spec.mjs test/security-review.spec.mjs test/security-review-captures.spec.mjs test/holder-workspace.spec.mjs test/browsing.spec.mjs test/explore-finish.spec.mjs test/network-strip.spec.mjs test/visual-qa.spec.mjs test/share-card.spec.mjs\"",
+    "test:browser": "node test/run-guarded.mjs \"npm run build && playwright test --config playwright.config.mjs test/browser.spec.mjs test/screenshots.spec.mjs test/v9-browser.spec.mjs test/restorations.spec.mjs test/pr3-fix-pack.spec.mjs test/manual-review.spec.mjs test/display-browser.spec.mjs test/squeeks-audit.spec.mjs test/wallet-wait.spec.mjs test/wallet-session.spec.mjs test/wallet-wheel-audit.spec.mjs test/wheel-feed.spec.mjs test/layout-notifications.spec.mjs test/security-review.spec.mjs test/security-review-captures.spec.mjs test/holder-workspace.spec.mjs test/browsing.spec.mjs test/explore-finish.spec.mjs test/network-strip.spec.mjs test/visual-qa.spec.mjs test/share-card.spec.mjs test/premium-share.spec.mjs\"",
     "rpc:probe": "node src/rpc-probe.mjs",
     "fork:start": "node dev/fork/start.mjs",
     "fork:web": "node dev/fork/server.mjs",
-    "test:fork": "node test/run-guarded.mjs \"npm run build && playwright test --config dev/fork/playwright.config.mjs\""
+    "test:fork": "node test/run-guarded.mjs \"npm run build && playwright test --config dev/fork/playwright.config.mjs\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "node test/share-source-check.mjs"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "html-to-image": "^1.11.13",
+    "lucide-react": "^1.70.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwind-merge": "^3.7.0",
     "three": "^0.187.0",
     "viem": "^2.57.14"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "esbuild": "^0.28.2",
     "fake-indexeddb": "^6.2.7",
     "hardhat": "^3.21.2",
-    "jsdom": "^29.1.1"
+    "jsdom": "^29.1.1",
+    "postcss": "^8.5.32",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^7.0.2"
   },
   "bin": {
     "wheelhouse-mcp": "mcp/server.js"
