@@ -47,6 +47,7 @@ const outstandingPrompts=new WeakMap();
 const EXPLORER = "https://eth-sepolia.blockscout.com";
 const THEME_KEY = "squeekchain:theme";
 
+/** Mount the console with isolated read generations; teardown fences late work and releases UI resources. */
 export function mount({ doc = document, win = window, adapterFactory, fetcher = globalThis.fetch, activityReader, profileBalanceReader } = {}) {
   const $ = (id) => doc.getElementById(id);
   let workspace,workspaceReady;
@@ -896,6 +897,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     $('holder-retry').classList.toggle('hidden',disconnected||wrongChain||!failed);
     $('holder-retry').disabled=disconnected||wrongChain||!failed;
   }
+  /** Project the current holder snapshot into UI and reapply action/share eligibility on every read. */
   function renderHolder(status, plan = null) {
     renderWatchMode();
     if(state.status!==status)state.claimQuote=null;

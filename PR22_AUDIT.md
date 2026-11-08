@@ -44,3 +44,14 @@ Prior abort/export/fallback/focus/GPU fixes remain covered by the original shari
 ## Qualification
 
 This is an engineering audit, not an exhaustive security certification. Browser checks use deterministic fixtures, not live wallet transactions. Physical mobile/Safari/Firefox export qualification remains outstanding. Tests and final GitHub code-CI evidence are recorded on PR22 before merge. Review fixes are delivered from the active session branch through an intermediate PR into PR22's head branch, without pushing directly to another session's branch.
+
+## Follow-up review on b3ac86b
+
+After PR24's rendering hardening passed 316 browser tests and merged into PR22, a new review identified further valid cases. Main merge was held:
+
+- A 15-second deadline now bounds the complete export, including non-abortable FontFaceSet waits. Per-attempt abort signals cancel embedded-font fetches and fence every later render step. Only successfully loaded font CSS is cached; old pending promises cannot poison retries. Watchdog timers reject stalled work; they are not timing-based render delays.
+- Card and X draft share one unknown-metric formatter. Missing/NaN/infinite values remain unknown everywhere.
+- Zero-minimum grid tracks constrain both columns. Full metric strings adapt font size and wrap rather than ellipsize; uint256-length values cannot push stats off-card.
+- Added exact full-string SVG checks, last-character raster checks for all five metrics, and footer/layout containment at 375px. The worst-case exported PNG was visually inspected. Two independent timeout/retry tests cover abortable embedded-font fetches and late non-abortable FontFaceSet completion; neither old attempt may download or begin an extra encoding pass after a retry.
+
+These fixes are isolated from legacy card styles and wallet/transaction paths and require another full code-CI pass before merge.
