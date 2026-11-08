@@ -116,12 +116,30 @@ function cardBase(ctx) {
   ctx.save(); roundRect(ctx, 0, 0, w, h, 30); ctx.clip(); ctx.fillStyle = 'rgba(255,255,255,.022)'; for (let x = 0; x < w; x += 4) ctx.fillRect(x, 0, 1, h); ctx.restore();
   roundRect(ctx, 0.75, 0.75, w - 1.5, h - 1.5, 30); ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1.5; ctx.stroke();
 }
+// Shared foil palette keeps the marks, window trim and turning edge coordinated.
+export const FOIL_COLORS = ['#9CFFD0', '#9BE7FF', '#B9A6FF', '#FFF3D6'];
+export const BACK_WHEEL = Object.freeze({ x: 580, y: 270, radius: 130, lineWidth: 20 });
+function foil(ctx, x, y, w, h) {
+  const gradient = ctx.createLinearGradient(x, y, x + w, y + h);
+  FOIL_COLORS.forEach((color, i) => gradient.addColorStop(i / (FOIL_COLORS.length - 1), color));
+  return gradient;
+}
+function wheelMark(ctx, x, y, radius, t = 0) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = foil(ctx, -radius, -radius, radius * 2, radius * 2);
+  ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#242631'; ctx.lineWidth = Math.max(1.3, radius * 0.1);
+  ctx.beginPath(); ctx.arc(0, 0, radius * 0.78, 0, Math.PI * 2); ctx.stroke();
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3 + t * 0.5;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * radius * 0.78, Math.sin(a) * radius * 0.78); ctx.stroke();
+  }
+  ctx.fillStyle = '#242631'; ctx.beginPath(); ctx.arc(0, 0, radius * 0.15, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+}
 function logo(ctx, data) {
-  ctx.save(); ctx.translate(58, 62); ctx.strokeStyle = BRAND.yellow; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.stroke();
-  ctx.lineWidth = 2.2; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 15, Math.sin(a) * 15); ctx.stroke(); }
-  ctx.restore();
+  wheelMark(ctx, 58, 62, 17);
   ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#FFFFFF'; ctx.font = `700 30px ${SANS}`; ctx.fillText('wheelhouse', 84, 72); const ww = ctx.measureText('wheelhouse').width;
-  if (data.meta !== false) { ctx.font = `600 13px ${MONO}`; ctx.fillStyle = BRAND.yellow; const n = data.network.toUpperCase(); ctx.fillText(n, 84 + ww - ctx.measureText(n).width, 92); }
+  if (data.meta !== false) { ctx.font = `600 13px ${MONO}`; ctx.fillStyle = '#C9C0EB'; const n = data.network.toUpperCase(); ctx.fillText(n, 84 + ww - ctx.measureText(n).width, 92); }
 }
 function label(ctx, text, x, y, max = 340) { ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = `500 13px ${MONO}`; ctx.fillText(text.toUpperCase().split('').join('\u200A'), x, y, max); }
 function holder(ctx, data, x, y) {
@@ -147,7 +165,7 @@ function drawWindowScene(ctx, w, h, t) {
   ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
   const cx = w / 2, cy = h * 0.43, r = w * 0.38, spin = -t * 2.6;
   ctx.strokeStyle = '#2B2F44'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(cx - r * 0.55, h * 0.83); ctx.lineTo(cx, cy); ctx.lineTo(cx + r * 0.55, h * 0.83); ctx.stroke();
-  ctx.strokeStyle = BRAND.yellow; ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = foil(ctx, cx - r, cy - r, r * 2, r * 2); ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
   for (let i = 0; i < 28; i++) { const a = spin + i * Math.PI / 14; ctx.strokeStyle = 'rgba(217,220,228,.55)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * (r - 14), cy + Math.sin(a) * (r - 14)); ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke(); }
   ctx.strokeStyle = BRAND.blue; ctx.lineWidth = 4; for (let i = 0; i < 6; i++) { const a = spin + i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * (r - 14), cy + Math.sin(a) * (r - 14)); ctx.stroke(); }
   ctx.fillStyle = BRAND.blue; ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.fill();
@@ -175,10 +193,10 @@ function drawWindow(ctx, data, t, scene) {
   ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip(); ctx.fillStyle = '#08090D'; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
   if (scene) ctx.drawImage(scene, x0, y0, x1 - x0, y1 - y0); else { ctx.translate(x0, y0); drawWindowScene(ctx, x1 - x0, y1 - y0, t); }
   ctx.restore(); ctx.restore();
-  roundRect(ctx, x, y, w, h, 16); ctx.strokeStyle = 'rgba(252,190,70,.55)'; ctx.lineWidth = 2; ctx.stroke();
+  roundRect(ctx, x, y, w, h, 16); ctx.strokeStyle = foil(ctx, x, y, w, h); ctx.lineWidth = 2; ctx.stroke();
   ctx.font = `600 12px ${MONO}`; const cap = data.meta !== false ? `CHECKPOINT · ${data.date}` : 'CHECKPOINT'; const cw = ctx.measureText(cap).width;
   const cx = x + w / 2, cy = y + h - 16; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillText(cap, cx - cw / 2, cy);
-  ctx.fillStyle = BRAND.yellow; ctx.fillText('[', cx - cw / 2 - 18, cy); ctx.fillText(']', cx + cw / 2 + 10, cy);
+  ctx.fillStyle = '#B9A6FF'; ctx.fillText('[', cx - cw / 2 - 18, cy); ctx.fillText(']', cx + cw / 2 + 10, cy);
 }
 export function drawFront(ctx, data, { t = 0, scene = null } = {}) {
   ctx.clearRect(0, 0, FACE_W, FACE_H); cardBase(ctx); logo(ctx, data); ctx.textBaseline = 'alphabetic';
@@ -190,17 +208,24 @@ export function drawFront(ctx, data, { t = 0, scene = null } = {}) {
   drawWindow(ctx, data, t, scene);
 }
 function holo(ctx, x, y, s, t) {
-  const g = ctx.createLinearGradient(x + Math.sin(t) * s, y, x + s - Math.sin(t) * s, y + s);
-  ['#FF9AD5', '#9BE7FF', '#FFF3A6', '#B9A6FF', '#9CFFD0'].forEach((c, i, a) => g.addColorStop(i / (a.length - 1), c));
-  roundRect(ctx, x, y, s, s, 8); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.save(); ctx.translate(x + s / 2, y + s / 2); ctx.strokeStyle = 'rgba(10,10,12,.55)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, s * 0.28, 0, Math.PI * 2); ctx.stroke();
-  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + t * 0.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * s * 0.28, Math.sin(a) * s * 0.28); ctx.stroke(); } ctx.restore();
+  const g = foil(ctx, x, y, s, s);
+  roundRect(ctx, x, y, s, s, 9); ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.save(); roundRect(ctx, x + 5, y + 5, s - 10, s - 10, 6);
+  ctx.fillStyle = '#242631'; ctx.fill(); ctx.restore();
+  wheelMark(ctx, x + s / 2, y + s / 2, s * 0.29, t);
 }
 export function drawBack(ctx, data, { t = 0 } = {}) {
   ctx.clearRect(0, 0, FACE_W, FACE_H); cardBase(ctx);
   ctx.save(); roundRect(ctx, 0, 0, FACE_W, FACE_H, 30); ctx.clip();
-  ctx.translate(600, 300); ctx.rotate(-t * 0.15); ctx.strokeStyle = 'rgba(255,255,255,.055)'; ctx.lineWidth = 56; ctx.beginPath(); ctx.arc(0, 0, 190, 0, Math.PI * 2); ctx.stroke();
-  ctx.lineWidth = 22; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 165, Math.sin(a) * 165); ctx.stroke(); }
+  // The entire rim stays inside the face, with clearance from the badge and footer.
+  const { x, y, radius, lineWidth } = BACK_WHEEL;
+  ctx.translate(x, y); ctx.rotate(-t * 0.15);
+  ctx.globalAlpha = 0.12; ctx.strokeStyle = foil(ctx, -radius, -radius, radius * 2, radius * 2);
+  ctx.lineWidth = lineWidth; ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 0.065; ctx.lineWidth = 10;
+  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * (radius - 10), Math.sin(a) * (radius - 10)); ctx.stroke(); }
+  ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fillStyle = '#B9A6FF'; ctx.fill();
   ctx.restore();
   logo(ctx, data); holo(ctx, FACE_W - 92, 36, 50, t);
   if (!data.back.length && data.meta === false) { label(ctx, 'HOLDER CHECKPOINT', 44, 182); ctx.fillStyle='#FFFFFF'; ctx.font=`600 28px ${SANS}`; ctx.fillText('No reward metrics selected',44,238); }
@@ -225,10 +250,10 @@ export function drawCard(ctx, input, { t = 0, scene = null, makeCanvas = default
   const sh = ctx.createRadialGradient(cx, 600, 10, cx, 600, 420); sh.addColorStop(0, 'rgba(0,0,0,.45)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.save(); ctx.scale(1, 0.18); ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(cx, 600 / 0.18, 420 * Math.max(0.25, Math.abs(c)), 0, Math.PI * 2); ctx.fill(); ctx.restore();
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(roll); ctx.translate(-cx, -cy);
-  // card edge (gold), visible when nearly side-on
+  // card edge (pastel foil), visible when nearly side-on
   const N = 160, sw = FACE_W / N;
   const proj = u => { const xl = (u - 0.5) * FACE_W * (showBack ? -1 : 1), k = D / (D + xl * sn); return { x: cx + xl * c * k, k, dy: (u - 0.5) * FACE_W * pitch }; };
-  if (Math.abs(c) < 0.35) { const k = 1; ctx.fillStyle = BRAND.yellow; const e = Math.max(3, 14 * Math.abs(sn) * (1 - Math.abs(c))); roundRect(ctx, cx - e / 2, cy - FACE_H * k / 2, e, FACE_H * k, e / 2); ctx.fill(); }
+  if (Math.abs(c) < 0.35) { const k = 1; ctx.fillStyle = foil(ctx, cx - 8, cy - FACE_H / 2, 16, FACE_H); const e = Math.max(3, 14 * Math.abs(sn) * (1 - Math.abs(c))); roundRect(ctx, cx - e / 2, cy - FACE_H * k / 2, e, FACE_H * k, e / 2); ctx.fill(); }
   for (let i = 0; i < N; i++) {
     const a = proj(i / N), b = proj((i + 1) / N), left = Math.min(a.x, b.x), width = Math.abs(b.x - a.x) + 0.6, k = (a.k + b.k) / 2, hgt = FACE_H * k;
     if (width < 0.2) continue; ctx.drawImage(face, i * sw, 0, sw, FACE_H, left, cy - hgt / 2 + (a.dy + b.dy) / 2, width, hgt);

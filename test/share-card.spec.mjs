@@ -192,3 +192,25 @@ test('lost WebGL context switches to fallback and remains exportable',async({pag
  test.skip(!result.supported,'WebGL2 unavailable');
  expect(result).toMatchObject({before:'3d',after:'2d',disposed:1});expect(result.size).toBeGreaterThan(1000);
 });
+
+test('Flip foil wheels stay fully framed and use filled, coordinated marks', async ({page}) => {
+ await installHolderFixture(page,{profile:'sepolia'});
+ const result=await page.evaluate(async()=>{
+  const {drawFront,drawBack,cardData,applyShow,FACE_W,FACE_H,BACK_WHEEL}=await import('/share-card.js');
+  const canvas=document.createElement('canvas');canvas.width=FACE_W;canvas.height=FACE_H;
+  const ctx=canvas.getContext('2d'),arcs=[];const arc=ctx.arc.bind(ctx);
+  ctx.arc=(x,y,r,...rest)=>{const m=ctx.getTransform();arcs.push({x:m.a*x+m.c*y+m.e,y:m.b*x+m.d*y+m.f,r});arc(x,y,r,...rest);};
+  const data=applyShow(cardData({count:'10',power:'16,349',claimable:'8,695.43 SQK',levels:[1,2]}));
+  const bounds=[];
+  for(const t of [0,2,5,8]){
+   arcs.length=0;drawBack(ctx,data,{t});
+   const ring=arcs.find(a=>a.r===BACK_WHEEL.radius),edge=ring.r+BACK_WHEEL.lineWidth/2;
+   bounds.push({left:ring.x-edge,right:ring.x+edge,top:ring.y-edge,bottom:ring.y+edge});
+  }
+  let gradientFills=0;const fill=ctx.fill.bind(ctx);ctx.fill=(...args)=>{if(ctx.fillStyle instanceof CanvasGradient)gradientFills++;fill(...args);};
+  drawFront(ctx,data);drawBack(ctx,data);
+  return {bounds,gradientFills,width:FACE_W,height:FACE_H};
+ });
+ for(const b of result.bounds){expect(b.left).toBeGreaterThan(400);expect(b.right).toBeLessThanOrEqual(result.width-24);expect(b.top).toBeGreaterThan(100);expect(b.bottom).toBeLessThanOrEqual(result.height-40);}
+ expect(result.gradientFills).toBeGreaterThanOrEqual(4);
+});

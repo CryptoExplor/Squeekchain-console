@@ -79,17 +79,17 @@ function buildHamster() {
   return h;
 }
 
-function buildWheel() {
-  const rimMat = new MeshPhysicalMaterial({ color: BRAND.yellow, roughness: 0.28, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.15 });
+function buildWheel({ pastel = false } = {}) {
+  const rimMat = new MeshPhysicalMaterial({ color: pastel ? 0x9cffd0 : BRAND.yellow, roughness: 0.28, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.15 });
   const rungMat = new MeshStandardMaterial({ color: 0xd9dce4, roughness: 0.3, metalness: 0.85 });
-  const frameMat = new MeshPhysicalMaterial({ color: BRAND.blue, roughness: 0.35, metalness: 0.2, clearcoat: 0.8 });
+  const frameMat = new MeshPhysicalMaterial({ color: pastel ? 0xb9a6ff : BRAND.blue, roughness: 0.35, metalness: 0.2, clearcoat: 0.8 });
   const wheel = new Group();
   for (const z of [-DEPTH / 2, DEPTH / 2]) {
     const rim = new Mesh(new TorusGeometry(R + 0.05, 0.06, 18, 160), rimMat); rim.position.z = z; rim.castShadow = true; wheel.add(rim);
   }
   const rungGeo = new CylinderGeometry(0.022, 0.022, DEPTH, 10);
   const N = 40;
-  const markMat = new MeshPhysicalMaterial({ color: BRAND.blue, roughness: 0.3, metalness: 0.3, clearcoat: 1 });
+  const markMat = new MeshPhysicalMaterial({ color: pastel ? 0xb9a6ff : BRAND.blue, roughness: 0.3, metalness: 0.3, clearcoat: 1 });
   for (let i = 0; i < N; i++) {
     const a = (i / N) * Math.PI * 2;
     const rung = new Mesh(rungGeo, i % 5 === 0 ? markMat : rungMat); rung.rotation.x = Math.PI / 2; // blue marker rungs make the turn readable
@@ -250,7 +250,7 @@ export function cardStage({ width = 628, height = 800 } = {}) {
   key.shadow.mapSize.set(1024, 1024); Object.assign(key.shadow.camera, { left: -4, right: 8, top: 5, bottom: -5, near: 1, far: 20 }); key.shadow.radius = 5;
   scene.add(key);
   const rim = new DirectionalLight(BRAND.blue, 2.4); rim.position.set(6, 3, -4); scene.add(rim);
-  const { wheel, stand, floorY } = buildWheel(); const rig = new Group(); rig.add(wheel, stand); scene.add(rig);
+  const { wheel, stand, floorY } = buildWheel({ pastel: true }); const rig = new Group(); rig.add(wheel, stand); scene.add(rig);
   const hamster = buildHamster(); hamster.position.set(0.05, -R + 0.03, 0.02); hamster.scale.setScalar(1.12); rig.add(hamster);
   rig.position.set(3.2, 0, 0); rig.rotation.y = -0.3;
   const floor = new Mesh(new PlaneGeometry(40, 40), new MeshStandardMaterial({ color: 0x08090d, roughness: 0.95, metalness: 0 }));
@@ -284,7 +284,16 @@ function createFlipStage(front, back) {
   shape.lineTo(-w/2,-h/2+r); shape.quadraticCurveTo(-w/2,-h/2,-w/2+r,-h/2);
   const edgeGeo = new ExtrudeGeometry(shape, { depth: 0.045, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.012, bevelThickness: 0.012, curveSegments: 12 });
   edgeGeo.translate(0,0,-0.0225);
-  const edgeMat = new MeshStandardMaterial({ color: BRAND.yellow, metalness: 0.7, roughness: 0.3 });
+  // Vertex colors create the same mint → ice → lavender → cream foil as the canvas faces.
+  const edgeColors = [], edgePosition = edgeGeo.attributes.position;
+  const stops = [0x9cffd0, 0x9be7ff, 0xb9a6ff, 0xfff3d6].map(color => new Color(color));
+  for (let i = 0; i < edgePosition.count; i++) {
+    const u = Math.max(0, Math.min(1, ((edgePosition.getX(i) / w + 0.5) + (edgePosition.getY(i) / h + 0.5)) / 2)) * (stops.length - 1);
+    const j = Math.min(stops.length - 2, Math.floor(u));
+    const color = stops[j].clone().lerp(stops[j + 1], u - j); edgeColors.push(color.r, color.g, color.b);
+  }
+  edgeGeo.setAttribute('color', new Float32BufferAttribute(edgeColors, 3));
+  const edgeMat = new MeshStandardMaterial({ vertexColors: true, metalness: 0.45, roughness: 0.3 });
   const rig = new Group(); rig.add(new Mesh(edgeGeo, edgeMat)); scene.add(rig);
   const resources = [];
   for (const [source, reverse] of [[front, false], [back, true]]) {
