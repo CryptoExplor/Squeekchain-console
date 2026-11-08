@@ -1470,27 +1470,28 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   }
   $('profile-status').onclick = () => { win.location.hash = `${state.profileKey}/info/trust`; selectTab('info/trust'); $('info-trust').focus(); };
 
+  let shareGeneration = 0, shareAbort = null, shareUnlock = null, shareUrl = null;
   let activeSheet = null, sheetFocus = null, shareView = null, shareData = null, shareBase = null, shareShow = null;
   // Share card options: which numbers show, and whether the address does. Remembered in this browser only.
   const SHARE_SHOW_KEY='wheelhouse.shareShow.v1';
   const loadShareShow=card=>{try{const saved=JSON.parse(win.localStorage.getItem(SHARE_SHOW_KEY)||'{}');return {...card.DEFAULT_SHOW,...Object.fromEntries(Object.entries(saved).filter(([k,v])=>k in card.DEFAULT_SHOW&&typeof v==='boolean'))};}catch{return {...card.DEFAULT_SHOW};}};
   const syncShareLink=()=>{const btn=$('share-link');btn.disabled=!shareShow?.address;btn.title=btn.disabled?'The link shows the wallet address, which is hidden on this card.':'';};
   const renderShareStyles=(card,current)=>{const box=$('share-style');box.querySelectorAll('button').forEach(n=>n.remove());
-    for(const [key,text] of card.STYLES){const btn=doc.createElement('button');btn.type='button';btn.className='btn';btn.textContent=text;btn.setAttribute('data-testid',`share-style-${key}`);btn.setAttribute('aria-pressed',String(key===current));
-      btn.onclick=()=>{if(!shareView?.setStyle(key)){$('share-status').textContent='Wait for the recording to finish.';return;}try{win.localStorage.setItem('wheelhouse.shareStyle.v1',key);}catch{}box.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));$('share-status').textContent='';};
+    for(const [key,text] of card.STYLES){const btn=doc.createElement('button');btn.type='button';btn.className='btn';btn.textContent=text;if(card.STYLE_HINTS?.[key])btn.title=card.STYLE_HINTS[key];btn.setAttribute('data-testid',`share-style-${key}`);btn.setAttribute('aria-pressed',String(key===current));
+      btn.onclick=()=>{if(!shareView?.setStyle(key)){$('share-status').textContent='Wait for the recording to finish.';return;}try{win.localStorage.setItem('wheelhouse.shareStyle.v1',key);}catch{}box.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));$('share-side').disabled=key!=='flip';$('share-status').textContent='';};
       box.append(btn);}};
-  const renderShareOptions=card=>{const box=$('share-options');box.querySelectorAll('label').forEach(n=>n.remove());
-    for(const [key,text] of card.SHOW_FIELDS){const label=doc.createElement('label'),input=doc.createElement('input');input.type='checkbox';input.dataset.key=key;input.setAttribute('data-testid',`share-show-${key}`);
-      const missing=card.statKeys.includes(key)&&shareBase[key]==='—';input.checked=!missing&&!!shareShow[key];input.disabled=missing;if(missing){label.classList.add('off');label.title='Not loaded for this wallet yet.';}
-      input.onchange=()=>{const next={...shareShow,[key]:input.checked};const on=card.statKeys.filter(k=>next[k]&&shareBase[k]!=='—').length;
-        if(input.checked&&card.statKeys.includes(key)&&on>card.MAX_STATS){input.checked=false;$('share-status').textContent=`Up to ${card.MAX_STATS} numbers fit. Turn one off first.`;return;}
-        shareShow=next;try{win.localStorage.setItem(SHARE_SHOW_KEY,JSON.stringify(shareShow));}catch{}shareData=card.applyShow(shareBase,shareShow);shareView?.update(shareData);syncShareLink();$('share-status').textContent='';};
-      label.append(input,doc.createTextNode(' '+text));box.append(label);}
+  const renderShareOptions=card=>{const box=$('share-options');box.querySelectorAll('button').forEach(n=>n.remove());
+    for(const [key,text] of card.SHOW_FIELDS){const btn=doc.createElement('button');btn.type='button';btn.className='btn';btn.dataset.key=key;btn.textContent=text;btn.setAttribute('data-testid',`share-show-${key}`);
+      const missing=card.statKeys.includes(key)&&shareBase[key]==='—';btn.setAttribute('aria-pressed',String(!missing&&!!shareShow[key]));btn.disabled=missing;if(missing)btn.title='Not loaded for this wallet yet.';
+      btn.onclick=()=>{const enabled=btn.getAttribute('aria-pressed')!=='true',next={...shareShow,[key]:enabled};const on=card.statKeys.filter(k=>next[k]&&shareBase[k]!=='—').length;
+        if(enabled&&card.statKeys.includes(key)&&on>card.MAX_STATS){$('share-status').textContent=`Up to ${card.MAX_STATS} numbers fit. Turn one off first.`;return;}
+        btn.setAttribute('aria-pressed',String(enabled));shareShow=next;try{win.localStorage.setItem(SHARE_SHOW_KEY,JSON.stringify(shareShow));}catch{}shareData=card.applyShow(shareBase,shareShow);shareView?.update(shareData);syncShareLink();$('share-status').textContent='';};
+      box.append(btn);}
     syncShareLink();};
   function closeSheet() {
     if(finishWalletPick){const resolve=finishWalletPick;finishWalletPick=null;resolve(null);}
     if (!activeSheet) return;
-    if(activeSheet.id==='share-sheet'){shareView?.stop();shareView=null;}
+    if(activeSheet.id==='share-sheet'){shareGeneration++;shareAbort?.abort();shareUnlock?.();shareView?.stop();shareView=null;}
     activeSheet.classList.add('hidden'); activeSheet = null;
     if (sheetFocus?.isConnected) sheetFocus.focus();
   }
@@ -1588,24 +1589,58 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     try{const address=watchAddress(value);win.location.hash=watchHash(state.profileKey,address);await onHashChange();}catch(error){toast(error.message,'err');}
   };
   // Share card: drawn from what the holder view already shows. Read-only; nothing here reaches a transaction.
-  const watchLink=()=>new URL(watchHash(state.profileKey,state.inspected??state.account),win.location.href).href;
+  const lockShareControls=()=>{
+    const controls=[...$('share-options').querySelectorAll('button'),...$('share-style').querySelectorAll('button'),$('share-png'),$('share-video'),$('share-side')];
+    const disabled=controls.map(control=>control.disabled);controls.forEach(control=>control.disabled=true);
+    let restored=false;
+    const restore=()=>{if(restored)return;restored=true;controls.forEach((control,i)=>{control.disabled=disabled[i];});if(shareUnlock===restore)shareUnlock=null;};
+    shareUnlock=restore;return restore;
+  };
   $('btn-share-card').onclick=()=>withBusy($('btn-share-card'),async()=>{
     const status=state.status;if(!status)return;
     const card=await import('./share-card.js');
-    const powerLabel=el.holder.power.parentElement.querySelector('.label')?.textContent;
+    if(state.status!==status||status.owner?.toLowerCase()!==(state.inspected??state.account)?.toLowerCase())return;
+    // The holder row shows Deposited on v9; the card shows real staking power (same formatter as the row).
+    const rawPower=String(status.totals?.power??'');const cardPower=/^\d+$/.test(rawPower)?formatPower(rawPower):el.holder.power.textContent;const powerLabel=/^\d+$/.test(rawPower)?'Power':el.holder.power.parentElement.querySelector('.label')?.textContent;
     const lifetime=v=>/^\d+$/.test(v??'')?formatSqkBase(BigInt(v),formatEther):null;
-    shareBase=card.cardData({owner:status.owner,count:el.holder.count.textContent,powerLabel,power:el.holder.power.textContent,claimable:el.holder.claimable.textContent,claimed:lifetime(status.rewards?.lifetimePaidBaseUnits),compounded:lifetime(status.rewards?.lifetimeCompoundedBaseUnits),levels:(status.squeeks??[]).map(t=>t.level),network:String(state.profileKey||'sepolia').replace(/^./,c=>c.toUpperCase())});
+    shareBase=card.cardData({owner:status.owner,count:el.holder.count.textContent,powerLabel,power:cardPower,claimable:el.holder.claimable.textContent,claimed:lifetime(status.rewards?.lifetimePaidBaseUnits),compounded:lifetime(status.rewards?.lifetimeCompoundedBaseUnits),levels:(status.squeeks??[]).map(t=>t.level),network:String(state.profileKey||'sepolia').replace(/^./,c=>c.toUpperCase())});
+    shareUrl=new URL(watchHash(state.profileKey,status.owner),win.location.href).href;
     shareShow=loadShareShow(card);shareData=card.applyShow(shareBase,shareShow);renderShareOptions(card);
-    openSheet('share-sheet');$('share-status').textContent='';
+    openSheet('share-sheet');sheetFocus=$('btn-share-card');const generation=++shareGeneration;shareAbort=new AbortController();
+    $('share-status').textContent='Preparing card…';
     const wide=win.matchMedia('(min-width: 761px)').matches,reducedMotion=win.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const shareStyleKey='wheelhouse.shareStyle.v1';let firstStyle='flip';try{firstStyle=win.localStorage.getItem(shareStyleKey)||'flip';}catch{}
-    renderShareStyles(card,firstStyle);
-    shareView=await card.mountCard($('share-preview'),shareData,{reducedMotion,wide,style:firstStyle,dark:doc.documentElement.dataset.theme!=='light',loadStage:()=>import('./hero3d.js').then(m=>m.cardStage),loadNight:()=>import('./hero3d.js').then(m=>m.nightStage)});
-    if(activeSheet?.id!=='share-sheet'){shareView.stop();shareView=null;}
-  });
-  $('share-png').onclick=()=>withBusy($('share-png'),async()=>{if(!shareView)return;try{const card=await import('./share-card.js');card.download(await shareView.png(),card.fileName(shareData,'png'));$('share-status').textContent='Picture saved.';}catch(error){$('share-status').textContent=error.message||'Could not make the picture.';}});
-  $('share-video').onclick=()=>withBusy($('share-video'),async()=>{if(!shareView)return;const card=await import('./share-card.js');$('share-status').textContent=shareView.style==='flip'?`Recording a ${card.LOOP_SECONDS} second clip (both sides)…`:'Recording a 5 second clip…';try{const {blob,ext}=await shareView.video();card.download(blob,card.fileName(shareData,ext));$('share-status').textContent=ext==='mp4'?'Clip saved (MP4).':'Clip saved as WebM. X may not accept WebM; use the picture there.';}catch(error){$('share-status').textContent=`${error.message||'Recording failed.'} The picture still works.`;}});
-  $('share-link').onclick=async()=>{try{await win.navigator.clipboard.writeText(watchLink());$('share-status').textContent='Link copied.';}catch{$('share-status').textContent='Clipboard unavailable.';}};
+    if(!card.STYLES.some(([key])=>key===firstStyle))firstStyle='flip';
+    renderShareStyles(card,firstStyle);$('share-side').value='front';
+    const unlock=lockShareControls();
+    try{
+      const mounted=await card.mountCard($('share-preview'),shareData,{reducedMotion,wide,style:firstStyle,dark:doc.documentElement.dataset.theme!=='light',signal:shareAbort.signal,loadStage:()=>import('./hero3d.js').then(m=>m.cardStage),loadNight:()=>import('./hero3d.js').then(m=>m.nightStage)});
+      if(activeSheet?.id!=='share-sheet'||generation!==shareGeneration){mounted.stop();return;}
+      shareView=mounted;
+      $('share-side').disabled=firstStyle!=='flip';
+      {const vt=mounted.videoSupported?card.pickVideoType():null;$('share-status').textContent=vt?(vt.ext==='mp4'?'PNG is 1200 × 675. Video records as MP4.':'PNG is 1200 × 675. Video records as WebM here; MP4 isn\'t available in this browser. PNG works everywhere.'):'Video is not supported in this browser. PNG is available.';}
+    }catch(error){if(generation===shareGeneration)$('share-status').textContent=error.message||'Could not prepare the card.';}
+    finally{unlock();if(generation===shareGeneration){$('share-side').disabled=(shareView?.style??firstStyle)!=='flip';$('share-video').disabled=!shareView?.videoSupported;$('share-png').disabled=!shareView;}}
+  }).finally(()=>{if(!activeSheet&&sheetFocus===$('btn-share-card')&&doc.activeElement===doc.body)sheetFocus.focus();});
+  $('share-png').onclick=async()=>{
+    if(!shareView)return;const view=shareView,data=shareData,style=view.style,side=$('share-side').value,unlock=lockShareControls();
+    try{const card=await import('./share-card.js');const blob=await view.png(side);if(shareView!==view)return;card.download(blob,card.fileName(data,'png').replace('.png',`-${style==='flip'?side:style}.png`));$('share-status').textContent='Picture saved.';}
+    catch(error){if(shareView===view)$('share-status').textContent=error.message||'Could not make the picture.';}
+    finally{unlock();}
+  };
+  $('share-video').onclick=async()=>{
+    if(!shareView)return;const view=shareView,data=shareData,unlock=lockShareControls();let percent=-1;
+    $('share-status').textContent='Preparing recording… Keep this tab visible.';
+    try{
+      const card=await import('./share-card.js');
+      const {blob,ext}=await view.video(undefined,p=>{const next=Math.round(p*100);if(shareView===view&&percent!==next){percent=next;$('share-status').textContent=`Recording… ${next}% · Keep this tab visible`;}});
+      if(shareView!==view)return;
+      card.download(blob,card.fileName(data,ext));
+      $('share-status').textContent=ext==='mp4'?'Clip saved (MP4).':'Clip saved as WebM. X may not accept WebM; use the picture there.';
+    }catch(error){if(shareView===view)$('share-status').textContent=`${error.message||'Recording failed.'} The picture still works.`;}
+    finally{unlock();}
+  };
+  $('share-link').onclick=async()=>{if(!shareShow?.address||!shareUrl)return;try{await win.navigator.clipboard.writeText(shareUrl);$('share-status').textContent='Link copied.';}catch{$('share-status').textContent='Clipboard unavailable.';}};
   $('holder-copy-link').onclick=async()=>{try{await win.navigator.clipboard.writeText(new URL(watchHash(state.profileKey,state.inspected??state.account),win.location.href).href);toast('Link copied','ok');}catch{toast('Clipboard unavailable','warn');}};
   el.art.one.onclick = () => {
     const id = el.art.token.value.trim();

@@ -5,7 +5,8 @@ import {
   WebGLRenderer, Scene, PerspectiveCamera, Group, Mesh, SphereGeometry, CylinderGeometry, TorusGeometry,
   CapsuleGeometry, PlaneGeometry, BoxGeometry, MeshPhysicalMaterial, MeshStandardMaterial, ShadowMaterial,
   HemisphereLight, DirectionalLight, PMREMGenerator, Color, SRGBColorSpace, ACESFilmicToneMapping,
-  PCFSoftShadowMap, Vector3, BufferGeometry, LineBasicMaterial, LineSegments, Float32BufferAttribute,
+  CanvasTexture, MeshBasicMaterial, NoToneMapping, Shape, ShapeGeometry, ExtrudeGeometry,
+  PCFShadowMap, Vector3, BufferGeometry, LineBasicMaterial, LineSegments, Float32BufferAttribute,
   CatmullRomCurve3, TubeGeometry,
 } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -78,17 +79,17 @@ function buildHamster() {
   return h;
 }
 
-function buildWheel() {
-  const rimMat = new MeshPhysicalMaterial({ color: BRAND.yellow, roughness: 0.28, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.15 });
+function buildWheel({ pastel = false } = {}) {
+  const rimMat = new MeshPhysicalMaterial({ color: pastel ? 0x9cffd0 : BRAND.yellow, roughness: 0.28, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.15 });
   const rungMat = new MeshStandardMaterial({ color: 0xd9dce4, roughness: 0.3, metalness: 0.85 });
-  const frameMat = new MeshPhysicalMaterial({ color: BRAND.blue, roughness: 0.35, metalness: 0.2, clearcoat: 0.8 });
+  const frameMat = new MeshPhysicalMaterial({ color: pastel ? 0xb9a6ff : BRAND.blue, roughness: 0.35, metalness: 0.2, clearcoat: 0.8 });
   const wheel = new Group();
   for (const z of [-DEPTH / 2, DEPTH / 2]) {
     const rim = new Mesh(new TorusGeometry(R + 0.05, 0.06, 18, 160), rimMat); rim.position.z = z; rim.castShadow = true; wheel.add(rim);
   }
   const rungGeo = new CylinderGeometry(0.022, 0.022, DEPTH, 10);
   const N = 40;
-  const markMat = new MeshPhysicalMaterial({ color: BRAND.blue, roughness: 0.3, metalness: 0.3, clearcoat: 1 });
+  const markMat = new MeshPhysicalMaterial({ color: pastel ? 0xb9a6ff : BRAND.blue, roughness: 0.3, metalness: 0.3, clearcoat: 1 });
   for (let i = 0; i < N; i++) {
     const a = (i / N) * Math.PI * 2;
     const rung = new Mesh(rungGeo, i % 5 === 0 ? markMat : rungMat); rung.rotation.x = Math.PI / 2; // blue marker rungs make the turn readable
@@ -119,12 +120,14 @@ export function mount(host, { reducedMotion = false } = {}) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = PCFSoftShadowMap;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = PCFShadowMap;
   const canvas = renderer.domElement; canvas.className = 'hero-3d'; canvas.setAttribute('aria-hidden', 'true');
 
   const scene = new Scene();
   const pmrem = new PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture; pmrem.dispose();
+  const environmentRoom = new RoomEnvironment();
+  const environmentTarget = pmrem.fromScene(environmentRoom, 0.04); scene.environment = environmentTarget.texture;
+  environmentRoom.dispose(); pmrem.dispose();
   scene.add(new HemisphereLight(0xffffff, 0xf3d9a6, 0.9));
   const key = new DirectionalLight(0xffffff, 2.2); key.position.set(3, 6, 4); key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024); Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 15 }); key.shadow.radius = 6;
@@ -213,11 +216,22 @@ export function mount(host, { reducedMotion = false } = {}) {
       cancelAnimationFrame(raf); running = false; io.disconnect(); ro.disconnect();
       document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pointermove', onMove); document.documentElement.removeEventListener('pointerleave', onLeave);
       host.classList.remove('is-3d'); canvas.remove();
-      scene.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); }); scene.environment?.dispose?.(); renderer.dispose();
+      disposeScene(scene, renderer, environmentTarget);
     },
   };
 }
 
+
+function disposeScene(scene, renderer, environmentTarget) {
+  const geometries = new Set(), materials = new Set();
+  scene.traverse(object => {
+    if (object.geometry) geometries.add(object.geometry);
+    for (const material of Array.isArray(object.material) ? object.material : object.material ? [object.material] : []) materials.add(material);
+    object.shadow?.dispose();
+  });
+  geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose());
+  environmentTarget?.dispose(); renderer.dispose(); renderer.forceContextLoss?.();
+}
 
 // Share card stage: the hamster in its wheel for the card's window (the recessed box on the front side).
 // No text here: share-card.js draws the card and puts this render inside the window. Shares three.js with the hero.
@@ -225,30 +239,86 @@ export function cardStage({ width = 628, height = 800 } = {}) {
   const renderer = new WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'low-power' });
   renderer.setPixelRatio(1); renderer.setSize(width, height, false);
   renderer.outputColorSpace = SRGBColorSpace; renderer.toneMapping = ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = PCFSoftShadowMap;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = PCFShadowMap;
   const scene = new Scene(); scene.background = new Color(0x08090d);
-  const pmrem = new PMREMGenerator(renderer); scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture; pmrem.dispose();
+  const pmrem = new PMREMGenerator(renderer); const environmentRoom = new RoomEnvironment();
+  const environmentTarget = pmrem.fromScene(environmentRoom, 0.04); scene.environment = environmentTarget.texture;
+  environmentRoom.dispose(); pmrem.dispose();
   scene.environmentIntensity = 0.45;
   scene.add(new HemisphereLight(0x8fa4ff, 0x0a0a0c, 0.4));
   const key = new DirectionalLight(0xfff1d6, 2.6); key.position.set(-1, 6, 6); key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024); Object.assign(key.shadow.camera, { left: -4, right: 8, top: 5, bottom: -5, near: 1, far: 20 }); key.shadow.radius = 5;
   scene.add(key);
   const rim = new DirectionalLight(BRAND.blue, 2.4); rim.position.set(6, 3, -4); scene.add(rim);
-  const { wheel, stand, floorY } = buildWheel(); const rig = new Group(); rig.add(wheel, stand); scene.add(rig);
+  const { wheel, stand, floorY } = buildWheel({ pastel: true }); const rig = new Group(); rig.add(wheel, stand); scene.add(rig);
   const hamster = buildHamster(); hamster.position.set(0.05, -R + 0.03, 0.02); hamster.scale.setScalar(1.12); rig.add(hamster);
   rig.position.set(3.2, 0, 0); rig.rotation.y = -0.3;
-  const floor = new Mesh(new PlaneGeometry(40, 40), new MeshPhysicalMaterial({ color: 0x0b0c12, roughness: 0.32, metalness: 0.2, clearcoat: 0.6 }));
+  const floor = new Mesh(new PlaneGeometry(40, 40), new MeshStandardMaterial({ color: 0x08090d, roughness: 0.95, metalness: 0 }));
   floor.rotation.x = -Math.PI / 2; floor.position.y = floorY; floor.receiveShadow = true; scene.add(floor);
   const camera = new PerspectiveCamera(30, width / height, 0.1, 60);
   const { torso, head, legs, tail } = hamster.userData;
   const frame = t => {
-    camera.position.set(2.4 + Math.sin(t * 0.4) * 0.3, 0.6, 9.5); camera.lookAt(3.2, -0.25, 0);
-    wheel.rotation.z = -t * 2.6; const p = t * 10;
+    const phase = t * Math.PI * 2 / 8;
+    camera.position.set(2.4 + Math.sin(phase) * 0.15, 0.6, 9.5); camera.lookAt(3.2, -0.25, 0);
+    wheel.rotation.z = -phase * 3; const p = phase * 13;
     torso.position.y = Math.abs(Math.sin(p)) * 0.04; head.rotation.z = Math.sin(p + 0.6) * 0.04; tail.rotation.z = Math.sin(p * 2) * 0.3;
-    for (const { pivot, phase, front } of legs) pivot.rotation.z = Math.sin(p + phase) * (front ? 0.75 : 0.6);
+    for (const { pivot, phase: offset, front } of legs) pivot.rotation.z = Math.sin(p + offset) * (front ? 0.75 : 0.6);
     renderer.render(scene, camera);
   };
-  return { canvas: renderer.domElement, frame, dispose: () => { scene.traverse(o => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach(x => x.dispose?.()); }); renderer.dispose(); renderer.forceContextLoss?.(); } };
+  return { canvas: renderer.domElement, frame, createFlip: (front, back) => createFlipStage(front, back), dispose: () => disposeScene(scene, renderer, environmentTarget) };
+}
+
+
+// Real rounded 3D card. Text remains in canvas textures; one output canvas is composited for all exports.
+function createFlipStage(front, back) {
+  const renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1); renderer.setSize(1200, 675, false);
+  renderer.outputColorSpace = SRGBColorSpace; renderer.toneMapping = NoToneMapping;
+  const scene = new Scene(), camera = new PerspectiveCamera(32, 1200 / 675, 0.1, 30);
+  camera.position.z = 7.6;
+  const w = 4.8, h = w * 460 / 760, r = 0.19;
+  const shape = new Shape();
+  shape.moveTo(-w/2+r,-h/2); shape.lineTo(w/2-r,-h/2); shape.quadraticCurveTo(w/2,-h/2,w/2,-h/2+r);
+  shape.lineTo(w/2,h/2-r); shape.quadraticCurveTo(w/2,h/2,w/2-r,h/2);
+  shape.lineTo(-w/2+r,h/2); shape.quadraticCurveTo(-w/2,h/2,-w/2,h/2-r);
+  shape.lineTo(-w/2,-h/2+r); shape.quadraticCurveTo(-w/2,-h/2,-w/2+r,-h/2);
+  const edgeGeo = new ExtrudeGeometry(shape, { depth: 0.045, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.012, bevelThickness: 0.012, curveSegments: 12 });
+  edgeGeo.translate(0,0,-0.0225);
+  // Vertex colors create the same mint → ice → lavender → cream foil as the canvas faces.
+  const edgeColors = [], edgePosition = edgeGeo.attributes.position;
+  const stops = [0xff9ad5, 0x9be7ff, 0xfff3a6, 0xb9a6ff, 0x9cffd0].map(color => new Color(color));
+  for (let i = 0; i < edgePosition.count; i++) {
+    const u = Math.max(0, Math.min(1, ((edgePosition.getX(i) / w + 0.5) + (edgePosition.getY(i) / h + 0.5)) / 2)) * (stops.length - 1);
+    const j = Math.min(stops.length - 2, Math.floor(u));
+    const color = stops[j].clone().lerp(stops[j + 1], u - j); edgeColors.push(color.r, color.g, color.b);
+  }
+  edgeGeo.setAttribute('color', new Float32BufferAttribute(edgeColors, 3));
+  const edgeMat = new MeshStandardMaterial({ vertexColors: true, metalness: 0.45, roughness: 0.3 });
+  const rig = new Group(); rig.add(new Mesh(edgeGeo, edgeMat)); scene.add(rig);
+  const resources = [];
+  for (const [source, reverse] of [[front, false], [back, true]]) {
+    const texture = new CanvasTexture(source); texture.colorSpace = SRGBColorSpace;
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const geo = new ShapeGeometry(shape, 12), pos = geo.attributes.position, uv = geo.attributes.uv;
+    for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i)+w/2)/w, (pos.getY(i)+h/2)/h);
+    const material = new MeshBasicMaterial({ map: texture });
+    const face = new Mesh(geo, material); face.position.z = reverse ? -0.038 : 0.038;
+    if (reverse) face.rotation.y = Math.PI;
+    rig.add(face); resources.push(texture, geo, material);
+  }
+  scene.add(new HemisphereLight(0xffffff, 0x597af7, 2));
+  const key = new DirectionalLight(0xffffff, 3); key.position.set(-3,5,6); scene.add(key);
+  return {
+    canvas: renderer.domElement,
+    frame(t, turn) {
+      const phase = t * Math.PI * 2 / 8;
+      rig.rotation.set(Math.sin(phase) * 0.035, turn, Math.sin(phase) * 0.018);
+      rig.position.y = 0.1 + Math.sin(phase) * 0.045;
+      resources.filter(item => item.isTexture).forEach(texture => { texture.needsUpdate = true; });
+      renderer.render(scene, camera);
+    },
+    dispose() { resources.forEach(item => item.dispose()); edgeGeo.dispose(); edgeMat.dispose(); renderer.dispose(); renderer.forceContextLoss(); },
+  };
 }
 
 // Night scene stage (the "Night scene" share style): a night scene for the holder card. The real hero wheel and hamster on a dark glossy floor,
@@ -259,9 +329,11 @@ export function nightStage({ width = 1200, height = 675, orbs = [] } = {}) {
   const renderer = new WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'low-power' });
   renderer.setPixelRatio(1); renderer.setSize(width, height, false);
   renderer.outputColorSpace = SRGBColorSpace; renderer.toneMapping = ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = PCFSoftShadowMap;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = PCFShadowMap;
   const scene = new Scene(); scene.background = new Color(0x08090f);
-  const pmrem = new PMREMGenerator(renderer); scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture; pmrem.dispose();
+  const pmrem = new PMREMGenerator(renderer); const environmentRoom = new RoomEnvironment();
+  const environmentTarget = pmrem.fromScene(environmentRoom, 0.04); scene.environment = environmentTarget.texture;
+  environmentRoom.dispose(); pmrem.dispose();
   scene.environmentIntensity = 0.35;
   scene.add(new HemisphereLight(0x8fa4ff, 0x0a0a0c, 0.35));
   const key = new DirectionalLight(0xfff1d6, 2.4); key.position.set(-3, 6, 5); key.castShadow = true;
@@ -269,10 +341,10 @@ export function nightStage({ width = 1200, height = 675, orbs = [] } = {}) {
   scene.add(key);
   const rim = new DirectionalLight(BRAND.blue, 2.2); rim.position.set(4, 3, -4); scene.add(rim);
 
-  const { wheel, stand, floorY } = buildWheel(); const rig = new Group(); rig.add(wheel, stand); scene.add(rig);
+  const { wheel, stand, floorY } = buildWheel({ pastel: true }); const rig = new Group(); rig.add(wheel, stand); scene.add(rig);
   const hamster = buildHamster(); hamster.position.set(0.05, -R + 0.03, 0.02); hamster.scale.setScalar(1.12); wheel.parent.add(hamster);
   rig.position.set(3.2, 0, 0); rig.rotation.y = -0.3;
-  const floor = new Mesh(new PlaneGeometry(40, 40), new MeshPhysicalMaterial({ color: 0x0b0c12, roughness: 0.32, metalness: 0.2, clearcoat: 0.6 }));
+  const floor = new Mesh(new PlaneGeometry(40, 40), new MeshStandardMaterial({ color: 0x08090d, roughness: 0.95, metalness: 0 }));
   floor.rotation.x = -Math.PI / 2; floor.position.y = floorY; floor.receiveShadow = true; scene.add(floor);
 
   // rail: a dark glossy track on the floor from far back-left up to the wheel (matches the flat card's layout)
@@ -281,11 +353,19 @@ export function nightStage({ width = 1200, height = 675, orbs = [] } = {}) {
   rail.receiveShadow = true; scene.add(rail);
   const railAt = u => path.getPointAt(u);
 
-  const balls = orbs.slice(0, 14).map((level, i) => {
-    const r = 0.17 + Math.min(level, 8) * 0.035;
-    const mat = new MeshPhysicalMaterial({ color: LEVEL_HEX[(Math.max(1, level) - 1) % LEVEL_HEX.length], roughness: 0.18, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08, sheen: 0.3 });
-    const m = new Mesh(new SphereGeometry(r, 40, 24), mat); m.castShadow = true; m.userData = { r, base: (i + 0.5) / Math.max(orbs.length, 4) }; scene.add(m); return m;
-  });
+  let balls = [], orbKey = '';
+  const setOrbs = levels => {
+    const valid = levels.filter(level => Number.isInteger(level) && level > 0).slice(0,14);
+    const key = valid.join(','); if (key === orbKey) return; orbKey = key;
+    for (const ball of balls) { scene.remove(ball); ball.geometry.dispose(); ball.material.dispose(); }
+    balls = valid.map((level, i) => {
+      const r = 0.17 + Math.min(level, 8) * 0.035;
+      const mat = new MeshPhysicalMaterial({ color: LEVEL_HEX[(level - 1) % LEVEL_HEX.length], roughness: 0.18, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08, sheen: 0.3 });
+      const ball = new Mesh(new SphereGeometry(r, 32, 20), mat); ball.castShadow = true;
+      ball.userData = { r, base: (i + 0.5) / Math.max(valid.length,4) }; scene.add(ball); return ball;
+    });
+  };
+  setOrbs(orbs);
 
   const camera = new PerspectiveCamera(30, width / height, 0.1, 60);
   const { torso, head, legs, tail } = hamster.userData;
@@ -297,5 +377,5 @@ export function nightStage({ width = 1200, height = 675, orbs = [] } = {}) {
     for (const b of balls) { const u = 0.04 + ((b.userData.base + t * 0.02) % 1) * 0.86; const at = railAt(u); b.position.set(at.x, floorY + 0.12 + b.userData.r, at.z); b.rotation.z = -t * 2; }
     renderer.render(scene, camera);
   };
-  return { canvas: renderer.domElement, frame, dispose: () => { scene.traverse(o => { o.geometry?.dispose?.(); const m = o.material; (Array.isArray(m) ? m : m ? [m] : []).forEach(x => x.dispose?.()); }); renderer.dispose(); renderer.forceContextLoss?.(); } };
+  return { canvas: renderer.domElement, frame, setOrbs, get orbCount() { return balls.length; }, dispose: () => disposeScene(scene, renderer, environmentTarget) };
 }

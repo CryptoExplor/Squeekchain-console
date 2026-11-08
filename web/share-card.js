@@ -33,7 +33,7 @@ export function cardData({ owner, count, powerLabel = 'Power', power, claimable,
 // What the holder chose to show. The front side carries Squeeks, deposited/power and levels; the back side
 // carries the SQK numbers. Address off = "A Squeek holder".
 export const MAX_STATS = 5;
-export const DEFAULT_SHOW = { address: true, count: true, power: true, claimable: true, claimed: false, compounded: false, levels: true, meta: true };
+export const DEFAULT_SHOW = { address: false, count: true, power: true, claimable: true, claimed: false, compounded: false, levels: true, meta: true };
 export const SHOW_FIELDS = [['address', 'Wallet address'], ['count', 'Squeeks'], ['power', 'Deposited / power'], ['claimable', 'Claimable SQK'], ['claimed', 'SQK claimed (lifetime)'], ['compounded', 'SQK compounded (lifetime)'], ['levels', 'Levels'], ['meta', 'Network and date']];
 const FRONT_KEYS = ['count', 'power'], BACK_KEYS = ['claimable', 'claimed', 'compounded'];
 export const statKeys = [...FRONT_KEYS, ...BACK_KEYS];
@@ -44,7 +44,7 @@ export function applyShow(data, show = DEFAULT_SHOW) {
   const value = { count: data.count, power: data.power, claimable: sqkNum(data.claimable), claimed: sqkNum(data.claimed), compounded: sqkNum(data.compounded) };
   const pick = keys => keys.filter(k => on[k] && data[k] !== '—').map(k => [value[k], label[k]]);
   const front = pick(FRONT_KEYS), back = pick(BACK_KEYS);
-  return { ...data, address: on.address ? data.address : null, front, back, stats: [...front, ...back], levels: on.levels ? data.levels : [], orbLevels: data.levels, meta: on.meta };
+  return { ...data, address: on.address ? data.address : null, front, back, stats: [...front, ...back], levels: on.levels ? data.levels : [], orbLevels: on.levels ? data.levels : [], meta: on.meta };
 }
 
 export function fileName(data, ext) {
@@ -53,7 +53,7 @@ export function fileName(data, ext) {
 }
 
 export const LEVEL_COLORS = ['#FCBE46', '#597AF7', '#FF5FA2', '#3DDC97', '#9B6BFF', '#FF8A3D', '#4FD1E8', '#F2F2F2'];
-export const levelColor = level => LEVEL_COLORS[(Math.max(1, level) - 1) % LEVEL_COLORS.length];
+export const levelColor = level => LEVEL_COLORS[((Number.isInteger(level) && level > 0 ? level : 1) - 1) % LEVEL_COLORS.length];
 const SANS = '"Quicksand", ui-rounded, system-ui, sans-serif', COND = '"Barlow Condensed", "Arial Narrow", sans-serif', MONO = '"IBM Plex Mono", ui-monospace, monospace';
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -67,7 +67,12 @@ function fitFont(ctx, text, max, size, weight, family) {
 }
 // The Squeeks as glossy orbs, one per Squeek (max 14), coloured and sized by level.
 export function orbList(levels, max = 14) {
-  const out = []; for (const { level, count } of levels) for (let i = 0; i < count && out.length < max; i++) out.push(level);
+  const limit = Number.isFinite(max) ? Math.max(0, Math.min(14, Math.floor(max))) : 14;
+  const out = []; for (const { level, count } of levels ?? []) {
+    if (!Number.isInteger(level) || level < 1 || !Number.isFinite(count) || count < 1) continue;
+    for (let i = 0; i < Math.floor(count) && out.length < limit; i++) out.push(level);
+    if (out.length === limit) break;
+  }
   return out;
 }
 
@@ -82,20 +87,27 @@ const ease = x => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
 export function cardTurn(t) {
   const p = ((t % LOOP_SECONDS) + LOOP_SECONDS) % LOOP_SECONDS;
   const base = p < 3 ? 0 : p < 4 ? ease(p - 3) * Math.PI : p < 7 ? Math.PI : Math.PI + ease(p - 7) * Math.PI;
-  return base + Math.sin(t * 1.1) * 0.22;
+  return base + Math.sin(p * Math.PI * 2 / LOOP_SECONDS) * 0.12;
 }
 
 // Grey studio backdrop with grain, like a product shot.
 let grain = null;
 function drawStudio(ctx, make) {
   const W = CARD_W, H = CARD_H;
-  const g = ctx.createLinearGradient(0, 0, W * 0.55, H); g.addColorStop(0, '#E4E4E7'); g.addColorStop(0.4, '#A3A3A9'); g.addColorStop(0.72, '#2A2A2F'); g.addColorStop(1, '#0B0B0D');
+  const g = ctx.createLinearGradient(0, 0, W * 0.55, H); g.addColorStop(0, '#414757'); g.addColorStop(0.4, '#252936'); g.addColorStop(0.72, '#13151D'); g.addColorStop(1, '#08090D');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  const band = ctx.createLinearGradient(W, 0, W * 0.35, H); band.addColorStop(0, 'rgba(255,255,255,.55)'); band.addColorStop(0.35, 'rgba(255,255,255,0)'); band.addColorStop(0.7, 'rgba(0,0,0,.55)');
+  const band = ctx.createLinearGradient(W, 0, W * 0.35, H); band.addColorStop(0, 'rgba(163,183,255,.18)'); band.addColorStop(0.35, 'rgba(255,255,255,0)'); band.addColorStop(0.7, 'rgba(0,0,0,.55)');
   ctx.fillStyle = band; ctx.fillRect(0, 0, W, H);
   if (!grain) { grain = make(W, H); const gc = grain.getContext('2d'); let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let i = 0; i < 42000; i++) { const v = rnd() > 0.5 ? 255 : 0; gc.fillStyle = `rgba(${v},${v},${v},${0.05 + rnd() * 0.08})`; gc.fillRect(rnd() * W, rnd() * H, 1.4, 1.4); } }
+    for (let i = 0; i < 42000; i++) { const v = rnd() > 0.5 ? 255 : 0; gc.fillStyle = `rgba(${v},${v},${v},${0.008 + rnd() * 0.02})`; gc.fillRect(rnd() * W, rnd() * H, 1.4, 1.4); } }
   ctx.drawImage(grain, 0, 0);
+}
+
+export function drawDisclaimer(ctx, data, x, y, centered = false) {
+  ctx.save(); ctx.textAlign = centered ? 'center' : 'start';
+  ctx.font = `500 12px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,.62)';
+  ctx.fillText(data.network.toLowerCase() === 'mainnet' ? 'Holder snapshot · Not financial advice' : 'Testnet snapshot · Not financial advice', x, y);
+  ctx.restore();
 }
 
 function cardBase(ctx) {
@@ -104,14 +116,32 @@ function cardBase(ctx) {
   ctx.save(); roundRect(ctx, 0, 0, w, h, 30); ctx.clip(); ctx.fillStyle = 'rgba(255,255,255,.022)'; for (let x = 0; x < w; x += 4) ctx.fillRect(x, 0, 1, h); ctx.restore();
   roundRect(ctx, 0.75, 0.75, w - 1.5, h - 1.5, 30); ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1.5; ctx.stroke();
 }
-function logo(ctx, data) {
-  ctx.save(); ctx.translate(58, 62); ctx.strokeStyle = BRAND.yellow; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.stroke();
-  ctx.lineWidth = 2.2; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 15, Math.sin(a) * 15); ctx.stroke(); }
-  ctx.restore();
-  ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#FFFFFF'; ctx.font = `700 30px ${SANS}`; ctx.fillText('wheelhouse', 84, 72); const ww = ctx.measureText('wheelhouse').width;
-  if (data.meta !== false) { ctx.font = `600 13px ${MONO}`; ctx.fillStyle = BRAND.yellow; const n = data.network.toUpperCase(); ctx.fillText(n, 84 + ww - ctx.measureText(n).width, 92); }
+// Shared foil palette keeps the marks, window trim and turning edge coordinated.
+export const FOIL_COLORS = ['#FF9AD5', '#9BE7FF', '#FFF3A6', '#B9A6FF', '#9CFFD0'];
+export const BACK_WHEEL = Object.freeze({ x: 580, y: 270, radius: 130, lineWidth: 20 });
+export function foil(ctx, x, y, w, h) {
+  const gradient = ctx.createLinearGradient(x, y, x + w, y + h);
+  FOIL_COLORS.forEach((color, i) => gradient.addColorStop(i / (FOIL_COLORS.length - 1), color));
+  return gradient;
 }
-function label(ctx, text, x, y) { ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = `500 13px ${MONO}`; ctx.fillText(text.toUpperCase().split('').join('\u200A'), x, y); }
+export function wheelMark(ctx, x, y, radius, t = 0) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = foil(ctx, -radius, -radius, radius * 2, radius * 2);
+  ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#242631'; ctx.lineWidth = Math.max(1.3, radius * 0.1);
+  ctx.beginPath(); ctx.arc(0, 0, radius * 0.78, 0, Math.PI * 2); ctx.stroke();
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3 + t * 0.5;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * radius * 0.78, Math.sin(a) * radius * 0.78); ctx.stroke();
+  }
+  ctx.fillStyle = '#242631'; ctx.beginPath(); ctx.arc(0, 0, radius * 0.15, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+}
+function logo(ctx, data) {
+  wheelMark(ctx, 58, 62, 17);
+  ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#FFFFFF'; ctx.font = `700 30px ${SANS}`; ctx.fillText('wheelhouse', 84, 72); const ww = ctx.measureText('wheelhouse').width;
+  if (data.meta !== false) { ctx.font = `600 13px ${MONO}`; ctx.fillStyle = '#C9C0EB'; const n = data.network.toUpperCase(); ctx.fillText(n, 84 + ww - ctx.measureText(n).width, 92); }
+}
+function label(ctx, text, x, y, max = 340) { ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = `500 13px ${MONO}`; ctx.fillText(text.toUpperCase().split('').join('\u200A'), x, y, max); }
 function holder(ctx, data, x, y) {
   const name = data.address || 'A Squeek holder', seed = [...(data.address || 'holder')].reduce((n, c) => (n * 31 + c.charCodeAt(0)) >>> 0, 7);
   const g = ctx.createLinearGradient(x, y - 14, x + 28, y + 14); g.addColorStop(0, LEVEL_COLORS[seed % 8]); g.addColorStop(1, LEVEL_COLORS[(seed >>> 3) % 8]);
@@ -120,10 +150,13 @@ function holder(ctx, data, x, y) {
 }
 function levelChips(ctx, levels, x, y, maxX) {
   ctx.font = `600 20px ${SANS}`;
-  for (const { level, count } of levels) {
-    const text = `L${level} × ${count}`, w = ctx.measureText(text).width + 30; if (x + w > maxX) break;
+  for (let i = 0; i < levels.length; i++) {
+    const {level,count} = levels[i];
+    const text = `L${level} × ${count}`, w = ctx.measureText(text).width + 38;
+    const reserve = i < levels.length - 1 ? 50 : 0;
+    if (x + w + reserve > maxX) { ctx.fillStyle='#FFFFFF'; ctx.fillText(`+${levels.length-i}`,x,y,Math.max(1,maxX-x)); break; }
     ctx.fillStyle = levelColor(level); ctx.beginPath(); ctx.arc(x + 8, y - 7, 8, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#FFFFFF'; ctx.fillText(text, x + 24, y); x += w + 14;
+    ctx.fillStyle = '#FFFFFF'; ctx.fillText(text, x + 24, y); x += w;
   }
 }
 // Flat window scene: the hamster in its wheel (used when there is no WebGL).
@@ -132,7 +165,7 @@ function drawWindowScene(ctx, w, h, t) {
   ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
   const cx = w / 2, cy = h * 0.43, r = w * 0.38, spin = -t * 2.6;
   ctx.strokeStyle = '#2B2F44'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(cx - r * 0.55, h * 0.83); ctx.lineTo(cx, cy); ctx.lineTo(cx + r * 0.55, h * 0.83); ctx.stroke();
-  ctx.strokeStyle = BRAND.yellow; ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = foil(ctx, cx - r, cy - r, r * 2, r * 2); ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
   for (let i = 0; i < 28; i++) { const a = spin + i * Math.PI / 14; ctx.strokeStyle = 'rgba(217,220,228,.55)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * (r - 14), cy + Math.sin(a) * (r - 14)); ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke(); }
   ctx.strokeStyle = BRAND.blue; ctx.lineWidth = 4; for (let i = 0; i < 6; i++) { const a = spin + i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * (r - 14), cy + Math.sin(a) * (r - 14)); ctx.stroke(); }
   ctx.fillStyle = BRAND.blue; ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.fill();
@@ -160,23 +193,25 @@ function drawWindow(ctx, data, t, scene) {
   ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip(); ctx.fillStyle = '#08090D'; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
   if (scene) ctx.drawImage(scene, x0, y0, x1 - x0, y1 - y0); else { ctx.translate(x0, y0); drawWindowScene(ctx, x1 - x0, y1 - y0, t); }
   ctx.restore(); ctx.restore();
-  roundRect(ctx, x, y, w, h, 16); ctx.strokeStyle = 'rgba(252,190,70,.55)'; ctx.lineWidth = 2; ctx.stroke();
+  roundRect(ctx, x, y, w, h, 16); ctx.strokeStyle = foil(ctx, x, y, w, h); ctx.lineWidth = 2; ctx.stroke();
   ctx.font = `600 12px ${MONO}`; const cap = data.meta !== false ? `CHECKPOINT · ${data.date}` : 'CHECKPOINT'; const cw = ctx.measureText(cap).width;
   const cx = x + w / 2, cy = y + h - 16; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillText(cap, cx - cw / 2, cy);
-  ctx.fillStyle = BRAND.yellow; ctx.fillText('[', cx - cw / 2 - 18, cy); ctx.fillText(']', cx + cw / 2 + 10, cy);
+  ctx.fillStyle = '#B9A6FF'; ctx.fillText('[', cx - cw / 2 - 18, cy); ctx.fillText(']', cx + cw / 2 + 10, cy);
 }
 export function drawFront(ctx, data, { t = 0, scene = null } = {}) {
   ctx.clearRect(0, 0, FACE_W, FACE_H); cardBase(ctx); logo(ctx, data); ctx.textBaseline = 'alphabetic';
   let y = 152; data.front.forEach(([value, name], i) => {
-    label(ctx, name, 44, y); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, value, 340, i ? 34 : 50, 700, SANS); ctx.fillText(value, 42, y + (i ? 42 : 56)); y += i ? 78 : 92;
+    label(ctx, name, 44, y); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, value, 340, i ? 34 : 50, 700, SANS); ctx.fillText(value, 42, y + (i ? 42 : 56), 340); y += i ? 78 : 92;
   });
   if (data.levels.length) { label(ctx, 'Levels', 44, y); levelChips(ctx, data.levels, 44, y + 36, 396); }
   holder(ctx, data, 44, FACE_H - 46);
   drawWindow(ctx, data, t, scene);
 }
 function holo(ctx, x, y, s, t) {
-  const g = ctx.createLinearGradient(x + Math.sin(t) * s, y, x + s - Math.sin(t) * s, y + s);
-  ['#FF9AD5', '#9BE7FF', '#FFF3A6', '#B9A6FF', '#9CFFD0'].forEach((c, i, a) => g.addColorStop(i / (a.length - 1), c));
+  // Holo chip: unchanged look, foil colours drift with t.
+  const d = Math.sin(t) * s;
+  const g = ctx.createLinearGradient(x + d, y, x + s - d, y + s);
+  FOIL_COLORS.forEach((c, i, a) => g.addColorStop(i / (a.length - 1), c));
   roundRect(ctx, x, y, s, s, 8); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
   ctx.save(); ctx.translate(x + s / 2, y + s / 2); ctx.strokeStyle = 'rgba(10,10,12,.55)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, s * 0.28, 0, Math.PI * 2); ctx.stroke();
   for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + t * 0.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * s * 0.28, Math.sin(a) * s * 0.28); ctx.stroke(); } ctx.restore();
@@ -184,14 +219,28 @@ function holo(ctx, x, y, s, t) {
 export function drawBack(ctx, data, { t = 0 } = {}) {
   ctx.clearRect(0, 0, FACE_W, FACE_H); cardBase(ctx);
   ctx.save(); roundRect(ctx, 0, 0, FACE_W, FACE_H, 30); ctx.clip();
-  ctx.translate(600, 300); ctx.rotate(-t * 0.15); ctx.strokeStyle = 'rgba(255,255,255,.055)'; ctx.lineWidth = 56; ctx.beginPath(); ctx.arc(0, 0, 190, 0, Math.PI * 2); ctx.stroke();
-  ctx.lineWidth = 22; for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 165, Math.sin(a) * 165); ctx.stroke(); }
+  // The entire rim stays inside the face, with clearance from the badge and footer.
+  const { x, y, radius, lineWidth } = BACK_WHEEL;
+  ctx.translate(x, y); ctx.rotate(-t * 0.15);
+  // Solid wheel: one filled rim, tapered filled spokes, hub. No stroked lines, no overlaps.
+  const outer = radius + lineWidth / 2, inner = radius - lineWidth / 2, hub = 22;
+  ctx.fillStyle = foil(ctx, -outer, -outer, outer * 2, outer * 2); ctx.globalAlpha = 0.16;
+  ctx.beginPath(); ctx.arc(0, 0, outer, 0, Math.PI * 2); ctx.arc(0, 0, inner, 0, Math.PI * 2, true); ctx.fill();
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3, ca = Math.cos(a), sa = Math.sin(a), px = -sa, py = ca;
+    ctx.moveTo(ca * hub + px * 7, sa * hub + py * 7); ctx.lineTo(ca * inner + px * 4, sa * inner + py * 4);
+    ctx.lineTo(ca * inner - px * 4, sa * inner - py * 4); ctx.lineTo(ca * hub - px * 7, sa * hub - py * 7); ctx.closePath();
+  }
+  ctx.fill();
+  ctx.beginPath(); ctx.arc(0, 0, hub, 0, Math.PI * 2); ctx.arc(0, 0, 8, 0, Math.PI * 2, true); ctx.globalAlpha = 0.24; ctx.fill();
   ctx.restore();
   logo(ctx, data); holo(ctx, FACE_W - 92, 36, 50, t);
+  if (!data.back.length && data.meta === false) { label(ctx, 'HOLDER CHECKPOINT', 44, 182); ctx.fillStyle='#FFFFFF'; ctx.font=`600 28px ${SANS}`; ctx.fillText('No reward metrics selected',44,238); }
   ctx.textBaseline = 'alphabetic';
   const back = data.back.length ? data.back : (data.meta !== false ? [[data.date, 'Checked']] : []);
-  if (back[0]) { label(ctx, back[0][1], 44, 182); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, back[0][0], 460, 60, 700, SANS); ctx.fillText(back[0][0], 42, 244); }
-  back.slice(1).forEach(([value, name], i) => { const x = 44 + i * 240; label(ctx, name, x, 298); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, value, 220, 30, 700, SANS); ctx.fillText(value, x - 1, 336); });
+  if (back[0]) { label(ctx, back[0][1], 44, 182); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, back[0][0], 460, 60, 700, SANS); ctx.fillText(back[0][0], 42, 244, 460); }
+  back.slice(1).forEach(([value, name], i) => { const x = 44 + i * 240; label(ctx, name, x, 298, 220); ctx.fillStyle = '#FFFFFF'; fitFont(ctx, value, 220, 30, 700, SANS); ctx.fillText(value, x - 1, 336, 220); });
   holder(ctx, data, 44, FACE_H - 46);
 }
 
@@ -209,10 +258,10 @@ export function drawCard(ctx, input, { t = 0, scene = null, makeCanvas = default
   const sh = ctx.createRadialGradient(cx, 600, 10, cx, 600, 420); sh.addColorStop(0, 'rgba(0,0,0,.45)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.save(); ctx.scale(1, 0.18); ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(cx, 600 / 0.18, 420 * Math.max(0.25, Math.abs(c)), 0, Math.PI * 2); ctx.fill(); ctx.restore();
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(roll); ctx.translate(-cx, -cy);
-  // card edge (gold), visible when nearly side-on
+  // card edge (pastel foil), visible when nearly side-on
   const N = 160, sw = FACE_W / N;
   const proj = u => { const xl = (u - 0.5) * FACE_W * (showBack ? -1 : 1), k = D / (D + xl * sn); return { x: cx + xl * c * k, k, dy: (u - 0.5) * FACE_W * pitch }; };
-  if (Math.abs(c) < 0.35) { const k = 1; ctx.fillStyle = BRAND.yellow; const e = Math.max(3, 14 * Math.abs(sn) * (1 - Math.abs(c))); roundRect(ctx, cx - e / 2, cy - FACE_H * k / 2, e, FACE_H * k, e / 2); ctx.fill(); }
+  if (Math.abs(c) < 0.35) { const k = 1; ctx.fillStyle = foil(ctx, cx - 8, cy - FACE_H / 2, 16, FACE_H); const e = Math.max(3, 14 * Math.abs(sn) * (1 - Math.abs(c))); roundRect(ctx, cx - e / 2, cy - FACE_H * k / 2, e, FACE_H * k, e / 2); ctx.fill(); }
   for (let i = 0; i < N; i++) {
     const a = proj(i / N), b = proj((i + 1) / N), left = Math.min(a.x, b.x), width = Math.abs(b.x - a.x) + 0.6, k = (a.k + b.k) / 2, hgt = FACE_H * k;
     if (width < 0.2) continue; ctx.drawImage(face, i * sw, 0, sw, FACE_H, left, cy - hgt / 2 + (a.dy + b.dy) / 2, width, hgt);
@@ -222,7 +271,8 @@ export function drawCard(ctx, input, { t = 0, scene = null, makeCanvas = default
   gl.addColorStop(0, 'rgba(255,255,255,0)'); gl.addColorStop(0.5, `rgba(255,255,255,${0.06 * Math.abs(c)})`); gl.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = gl; ctx.fillRect(cx - FACE_W / 2 - 40, cy - FACE_H / 2 - 20, FACE_W + 80, FACE_H + 40); ctx.restore();
   ctx.restore();
-  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `500 15px ${MONO}`; const site = 'WHEEL-HOUSE.PAGES.DEV'.split('').join('\u200A'); ctx.fillText(site, cx - ctx.measureText(site).width / 2, 640);
+  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `500 15px ${MONO}`; const site = 'WHEEL-HOUSE.PAGES.DEV'.split('').join('\u200A'); ctx.fillText(site, cx - ctx.measureText(site).width / 2, 635);
+  drawDisclaimer(ctx, data, cx, 659, true);
 }
 
 
@@ -235,71 +285,199 @@ export function pickVideoType(isSupported = type => globalThis.MediaRecorder?.is
 }
 
 // Records `seconds` of the canvas while frame(t) draws each step. Resolves { blob, ext }.
-export function recordCanvas(canvas, frame, { seconds = 5, fps = 30, signal } = {}) {
+export function recordCanvas(canvas, frame, { seconds = 5, fps = 30, signal, onProgress } = {}) {
   const kind = pickVideoType();
   if (!kind || typeof canvas.captureStream !== 'function') return Promise.reject(new Error('Video recording is not supported in this browser.'));
-  const stream = canvas.captureStream(fps), chunks = [];
-  const recorder = new MediaRecorder(stream, { mimeType: kind.type, videoBitsPerSecond: 6_000_000 });
-  recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 30 || !Number.isFinite(fps) || fps <= 0 || fps > 60) return Promise.reject(new Error('Invalid recording duration or frame rate.'));
   return new Promise((resolve, reject) => {
-    recorder.onerror = event => reject(event.error ?? new Error('Recording failed.'));
-    recorder.onstop = () => { stream.getTracks().forEach(track => track.stop()); const blob = new Blob(chunks, { type: kind.type.split(';')[0] }); blob.size ? resolve({ blob, ext: kind.ext }) : reject(new Error('Recording came out empty.')); };
-    const start = performance.now();
-    let cancelled = false;
-    signal?.addEventListener('abort', () => { cancelled = true; if (recorder.state !== 'inactive') recorder.stop(); }, { once: true });
-    recorder.onstop = (orig => () => { if (cancelled) { stream.getTracks().forEach(track => track.stop()); reject(new Error('Recording cancelled.')); } else orig(); })(recorder.onstop);
-    const step = now => { if (cancelled) return; const t = (now - start) / 1000; frame(t); if (t < seconds) requestAnimationFrame(step); else recorder.stop(); };
-    recorder.start(250); requestAnimationFrame(step);
+    let stream, recorder, raf = 0, timer, watchdog, settled = false;
+    const chunks = [];
+    const finish = (error, result) => {
+      if (settled) return;
+      settled = true; cancelAnimationFrame(raf); clearTimeout(timer); clearTimeout(watchdog);
+      signal?.removeEventListener('abort', abort);
+      if (recorder && recorder.state !== 'inactive') { try { recorder.stop(); } catch {} }
+      stream?.getTracks().forEach(track => { try { track.stop(); } catch {} });
+      error ? reject(error) : resolve(result);
+    };
+    const abort = () => finish(new Error('Recording cancelled.'));
+    if (signal?.aborted) return abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      frame(0); if (settled) return;
+      stream = canvas.captureStream(fps);
+      recorder = new MediaRecorder(stream, { mimeType: kind.type, videoBitsPerSecond: 8_000_000 });
+      recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+      recorder.onerror = event => finish(event.error ?? new Error('Recording failed.'));
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: kind.type.split(';')[0] });
+        finish(blob.size ? null : new Error('Recording came out empty.'), { blob, ext: kind.ext });
+      };
+      const start = performance.now();
+      const step = now => {
+        if (settled || recorder.state !== 'recording') return;
+        try { const t = Math.min((now - start) / 1000, seconds); frame(t); onProgress?.(t / seconds); }
+        catch (error) { finish(error); return; }
+        if (!settled) raf = requestAnimationFrame(step);
+      };
+      recorder.start(250); if (settled) return; raf = requestAnimationFrame(step);
+      timer = setTimeout(() => { try { if (!settled && recorder.state === 'recording') { onProgress?.(1); recorder.stop(); } } catch (error) { finish(error); } }, seconds * 1000);
+      watchdog = setTimeout(() => finish(new Error('Video encoder timed out. Try the picture instead.')), seconds * 1000 + 10_000);
+    } catch (error) { finish(error); }
   });
 }
 
 export function webglAvailable(doc = document) {
-  try { const c = doc.createElement('canvas'); return Boolean(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; }
+  // Three.js requires WebGL2. Release the probe immediately instead of leaking one context per style switch.
+  let gl;
+  try { gl = doc.createElement('canvas').getContext('webgl2'); return Boolean(gl); }
+  catch { return false; }
+  finally { try { gl?.getExtension?.('WEBGL_lose_context')?.loseContext(); } catch { /* capability probes must fail closed */ } }
 }
 
 export async function loadFonts(doc = document) {
-  try { await Promise.all([`700 68px ${SANS}`, `600 44px ${COND}`, `500 20px ${COND}`, `600 20px ${MONO}`].map(f => doc.fonts?.load(f))); } catch { /* system fallback */ }
+  let timer;
+  try { await Promise.race([Promise.all([`500 20px ${SANS}`, `600 30px ${SANS}`, `700 68px ${SANS}`, `600 44px ${COND}`, `500 20px ${COND}`, `500 20px ${MONO}`, `600 20px ${MONO}`].map(font => doc.fonts?.load(font))),new Promise(resolve=>{timer=setTimeout(resolve,3000);})]); } catch { /* system fallback */ } finally {clearTimeout(timer);}
 }
 
 // Opens the card in `host`. Desktop with WebGL renders the scene in 3D (three.js, shared with the hero) under the
 // text layer; phones or no WebGL get the flat scene. One 2D output canvas is what you see, save and record.
-// Card styles the share sheet offers. Flip is the default and the only one with the 3D hamster.
+// Card styles the share sheet offers. Flip is the default and the default; Night also has its own optional 3D stage.
 export const STYLES = [['flip', 'Flip card'], ['night', 'Night scene'], ['classic', 'Classic']];
+export const STYLE_HINTS = { flip: 'Animated showcase · two-sided', night: 'Cinematic scene · level-coloured orbs', classic: 'Clean stats · lightweight' };
 export const styleSeconds = style => style === 'flip' ? LOOP_SECONDS : 5;
 
-export async function mountCard(host, initial, { reducedMotion = false, wide = true, loadStage, loadNight, style: firstStyle = 'flip', dark = true } = {}) {
-  await loadFonts(); let data = initial, style = STYLES.some(([k]) => k === firstStyle) ? firstStyle : 'flip';
-  const styles = await import('./share-styles.js');
-  const out = document.createElement('canvas'); out.width = CARD_W; out.height = CARD_H; const ctx = out.getContext('2d');
-  let stage = null;
-  if (wide && loadStage && webglAvailable()) { try { stage = (await loadStage())({ width: WIN.w * 2, height: WIN.h * 2 }); } catch { stage = null; } }
-  // Night scene in 3D (desktop with WebGL), made the first time that style is shown; flat drawing otherwise.
-  let night = null, nightTried = false;
-  const ensureNight = async () => { if (nightTried || !(wide && loadNight && webglAvailable())) return; nightTried = true;
-    try { night = (await loadNight())({ width: CARD_W, height: CARD_H, orbs: orbList(data.orbLevels ?? data.levels) }); } catch { night = null; } };
-  if (style === 'night') await ensureNight();
+export async function mountCard(host, initial, { reducedMotion = false, wide = true, loadStage, loadNight, style: firstStyle = 'flip', dark = true, signal } = {}) {
+  const doc = host.ownerDocument;
+  const assertOpen = () => { if (signal?.aborted) throw new Error('Card closed.'); };
+  assertOpen(); await loadFonts(doc); assertOpen();
+  let data = initial, style = STYLES.some(([key]) => key === firstStyle) ? firstStyle : 'flip';
+  const styles = await import('./share-styles.js'); assertOpen();
+  const out = doc.createElement('canvas'); out.width = CARD_W; out.height = CARD_H;
+  const ctx = out.getContext('2d');
+  if (!ctx) throw new Error('Canvas drawing is not supported in this browser.');
+  let stage = null, flip = null, night = null, stagePromise = null, nightPromise = null;
+  let alive = true, exporting = false, raf = 0, lastPreview = 0;
+  const abort = new AbortController();
+  const scratch = new Map();
+  const makeScratch = (w,h) => { const key=`${w}x${h}`; if(!scratch.has(key))scratch.set(key,defaultCanvas(w,h));return scratch.get(key); };
+  const front = defaultCanvas(FACE_W, FACE_H), back = defaultCanvas(FACE_W, FACE_H);
+  const frontCtx = front.getContext('2d'), backCtx = back.getContext('2d');
+  if (!frontCtx || !backCtx) throw new Error('Canvas drawing is not supported in this browser.');
   out.classList.add('share-canvas'); out.setAttribute('aria-label', 'Holder share card preview'); out.setAttribute('role', 'img');
-  host.replaceChildren(out);
-  const render = (t, turn) => {
-    if (style === 'night') { if (night) night.frame(t); return styles.drawNight(ctx, data, { t, scene: night?.canvas ?? null }); }
-    if (style === 'classic') return turn === undefined ? styles.drawClassicMoving(ctx, data, { t, dark }) : styles.drawClassic(ctx, data, { t, dark });
-    if (stage) stage.frame(t);
-    return drawCard(ctx, data, { t, scene: stage?.canvas ?? null, ...(turn === undefined ? {} : { turn }) });
+  const capable = wide && (loadStage || loadNight) ? webglAvailable(doc) : false;
+  const lossHandlers = new Map();
+  const unwatch = resource => { const listener=lossHandlers.get(resource); if(listener){resource.canvas.removeEventListener('webglcontextlost',listener);lossHandlers.delete(resource);} };
+  const releaseFlip = () => { unwatch(flip); unwatch(stage); flip?.dispose(); stage?.dispose(); flip = stage = null; };
+  const releaseNight = () => { unwatch(night); night?.dispose(); night = null; };
+  const watch = (resource, release) => {
+    if(!resource?.canvas?.addEventListener)return;
+    const listener = () => { release(); if(alive && !exporting) render(0.8); };
+    lossHandlers.set(resource,listener);resource.canvas.addEventListener('webglcontextlost',listener);
   };
-  const draw = t => render(t);
-  draw(0.6);
-  let raf = 0, alive = true, recording = false; const start = performance.now(), abort = new AbortController();
-  const loop = now => { if (!alive) return; if (!recording) draw(0.8 + (now - start) / 1000); raf = requestAnimationFrame(loop); };
+  const stop = () => {
+    if (!alive) return;
+    alive = false; abort.abort(); cancelAnimationFrame(raf);
+    signal?.removeEventListener('abort', stop); releaseFlip(); releaseNight();
+    // A late old mount must never remove a newer card's canvas.
+    if (out.parentNode === host) out.remove();
+  };
+  signal?.addEventListener('abort', stop, { once: true });
+  const ensureStage = () => {
+    if (!alive || !capable || !loadStage) return Promise.resolve();
+    return stagePromise ??= Promise.resolve().then(loadStage).then(factory => {
+      if (!alive) return;
+      stage = factory({ width: WIN.w * 2, height: WIN.h * 2 });
+      flip = stage.createFlip?.(front, back);
+      watch(stage,releaseFlip);watch(flip,releaseFlip);
+    }).catch(releaseFlip);
+  };
+  const ensureNight = () => {
+    if (!alive || !capable || !loadNight) return Promise.resolve();
+    return nightPromise ??= Promise.resolve().then(loadNight).then(factory => {
+      if (alive) { night = factory({ width: CARD_W, height: CARD_H, orbs: orbList(data.orbLevels ?? data.levels) }); watch(night,releaseNight); }
+    }).catch(releaseNight);
+  };
+  const prepare = () => style === 'flip' ? ensureStage() : style === 'night' ? ensureNight() : Promise.resolve();
+  const render = (t, turn) => {
+    if (!alive) return;
+    if (style === 'night') {
+      try { night?.frame(t); } catch { releaseNight(); }
+      return styles.drawNight(ctx, data, { t, scene: night?.canvas ?? null });
+    }
+    if (style === 'classic') return turn === undefined ? styles.drawClassicMoving(ctx, data, { t, dark }) : styles.drawClassic(ctx, data, { t, dark });
+    const phase = ((t % LOOP_SECONDS) + LOOP_SECONDS) % LOOP_SECONDS;
+    try {
+      stage?.frame(phase);
+      if (flip) {
+        drawFront(frontCtx, data, { t: phase, scene: stage.canvas });
+        drawBack(backCtx, data, { t: phase });
+        flip.frame(phase, turn ?? cardTurn(phase));
+      }
+    } catch { releaseFlip(); }
+    if (!flip) return drawCard(ctx, data, { t: phase, scene: stage?.canvas ?? null, makeCanvas:makeScratch, ...(turn === undefined ? {} : { turn }) });
+    drawStudio(ctx, defaultCanvas);
+    const shadow = ctx.createRadialGradient(600, 573, 4, 600, 573, 365);
+    shadow.addColorStop(0, 'rgba(0,0,0,.6)'); shadow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.save(); ctx.translate(600,573); ctx.scale(1,0.12); ctx.fillStyle=shadow; ctx.translate(-600,-573); ctx.fillRect(200,173,800,800); ctx.restore();
+    ctx.drawImage(flip.canvas, 0, 0);
+    ctx.fillStyle = '#ddd'; ctx.font = `500 15px ${MONO}`; ctx.textAlign = 'center';
+    ctx.fillText('WHEEL-HOUSE.PAGES.DEV', CARD_W / 2, 635); ctx.textAlign = 'start';
+    drawDisclaimer(ctx, data, 600, 659, true);
+  };
+  try { await prepare(); assertOpen(); if (!alive) throw new Error('Card closed.'); render(0.6); host.replaceChildren(out); }
+  catch (error) { stop(); throw error; }
+  const start = performance.now();
+  const loop = now => {
+    if (!alive) return;
+    // Preview at 24 FPS; export renders separately at its requested rate.
+    if (!exporting && doc.visibilityState !== 'hidden' && now - lastPreview >= 1000 / 24) { render(0.8 + (now - start) / 1000); lastPreview = now; }
+    raf = requestAnimationFrame(loop);
+  };
   if (!reducedMotion) raf = requestAnimationFrame(loop);
   return {
-    mode: stage ? '3d' : '2d',
+    get mode() { return (style === 'night' ? night : style === 'flip' ? stage : null) ? '3d' : '2d'; },
     get style() { return style; },
-    update: next => { data = next; if (reducedMotion) draw(0.8); },
-    setStyle: next => { if (recording || !STYLES.some(([k]) => k === next)) return false; style = next; draw(0.8); if (next === 'night' && !nightTried) ensureNight().then(() => { if (alive) draw(0.8); }); return true; },
-    // The picture is held still; the flip card always shows its front.
-    png: () => new Promise((resolve, reject) => { render(0.6, 0); out.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not make the picture.')), 'image/png'); }),
-    video: async seconds => { if (recording) throw new Error('Already recording.'); recording = true; try { return await recordCanvas(out, draw, { seconds: seconds ?? styleSeconds(style), signal: abort.signal }); } finally { recording = false; } },
-    stop: () => { alive = false; abort.abort(); cancelAnimationFrame(raf); stage?.dispose(); night?.dispose(); host.replaceChildren(); },
+    get videoSupported() { return Boolean(pickVideoType() && typeof out.captureStream === 'function'); },
+    update: next => {
+      if (exporting || !alive) return false;
+      data = next;
+      // Synchronize both visible labels and GPU orbs immediately when privacy options change.
+      night?.setOrbs(orbList(data.orbLevels ?? data.levels));
+      render(0.8); return true;
+    },
+    setStyle: next => {
+      if (exporting || !alive || !STYLES.some(([key]) => key === next)) return false;
+      style = next; render(0.8);
+      prepare().then(() => { if (alive && !exporting) render(0.8); });
+      return true;
+    },
+    png: async (side = 'front') => {
+      if (!alive || exporting) throw new Error('Wait for the current export to finish.');
+      exporting = true;
+      try {
+        await prepare(); if (!alive) throw new Error('Card closed.');
+        render(side === 'back' ? 4.5 : 0.6, side === 'back' ? Math.PI : 0);
+        const blob = await new Promise((resolve, reject) => out.toBlob(value => value ? resolve(value) : reject(new Error('Could not make the picture.')), 'image/png'));
+        if (!alive) throw new Error('Card closed.');
+        return blob;
+      } finally { exporting = false; }
+    },
+    video: async (seconds, onProgress) => {
+      if (exporting || !alive) throw new Error('Already exporting or closed.');
+      exporting = true;
+      const controller = new AbortController();
+      const cancel = () => controller.abort();
+      const visibility = () => { if (doc.visibilityState === 'hidden') controller.abort(); };
+      abort.signal.addEventListener('abort', cancel, { once: true });
+      doc.addEventListener('visibilitychange', visibility);
+      try {
+        await prepare();
+        if (!alive || doc.visibilityState === 'hidden') controller.abort();
+        return await recordCanvas(out, t => render(t), { seconds: seconds ?? styleSeconds(style), signal: controller.signal, onProgress });
+      } finally { exporting = false; abort.signal.removeEventListener('abort', cancel); doc.removeEventListener('visibilitychange', visibility); }
+    },
+    stop,
   };
 }
 

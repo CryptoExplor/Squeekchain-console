@@ -1,6 +1,6 @@
 // Extra share card styles: "Night scene" and "Classic". Same data and Show on card switches as the flip card.
 // Display only, like share-card.js: they draw values already on screen and never touch a wallet or the chain.
-import { CARD_W, CARD_H, levelColor, orbList } from './share-card.js';
+import { CARD_W, CARD_H, levelColor, orbList, foil, wheelMark } from './share-card.js';
 const BRAND = { yellow: '#FCBE46', blue: '#597AF7', night: '#0A0A0C' };
 const SANS = '"Quicksand", ui-rounded, system-ui, sans-serif', COND = '"Barlow Condensed", "Arial Narrow", sans-serif', MONO = '"IBM Plex Mono", ui-monospace, monospace';
 function roundRect(ctx, x, y, w, h, r) {
@@ -35,9 +35,9 @@ function drawBackdrop(ctx, data, t = 0) {
   ctx.strokeStyle = '#2A2D3A'; ctx.lineWidth = 16; ctx.beginPath(); ctx.moveTo(-70, r + 120); ctx.lineTo(0, 0); ctx.lineTo(70, r + 120); ctx.stroke();
   ctx.shadowColor = 'rgba(89,122,247,.8)'; ctx.shadowBlur = 30; ctx.strokeStyle = '#597AF7'; ctx.lineWidth = 14; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
   ctx.shadowBlur = 0; ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(89,122,247,.45)'; ctx.beginPath(); ctx.arc(0, 0, r - 22, 0, Math.PI * 2); ctx.stroke();
-  for (let i = 0; i < 24; i++) { const a = spin + i * Math.PI / 12; ctx.strokeStyle = i % 6 === 0 ? '#FCBE46' : 'rgba(255,255,255,.22)'; ctx.lineWidth = i % 6 === 0 ? 5 : 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * (r - 22), Math.sin(a) * (r - 22)); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); ctx.stroke(); }
+  for (let i = 0; i < 24; i++) { const a = spin + i * Math.PI / 12; ctx.strokeStyle = i % 6 === 0 ? '#B9A6FF' : 'rgba(255,255,255,.22)'; ctx.lineWidth = i % 6 === 0 ? 5 : 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * (r - 22), Math.sin(a) * (r - 22)); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); ctx.stroke(); }
   for (let i = 0; i < 6; i++) { const a = spin + i * Math.PI / 3; ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * (r - 22), Math.sin(a) * (r - 22)); ctx.stroke(); }
-  ctx.fillStyle = '#FCBE46'; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = foil(ctx, -14, -14, 28, 28); ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
   // orbs roll along the rail (bezier sampled), bigger for higher levels
   const orbs = orbList(data.orbLevels ?? data.levels); const P = (u) => { const a = [-40, 330], b = [260, 400], c = [520, 250], d = [860, 420], m = 1 - u; return [m*m*m*a[0] + 3*m*m*u*b[0] + 3*m*u*u*c[0] + u*u*u*d[0], m*m*m*a[1] + 3*m*m*u*b[1] + 3*m*u*u*c[1] + u*u*u*d[1]]; };
@@ -60,9 +60,7 @@ function drawOverlay(ctx, data) {
   ctx.fillStyle = top; ctx.fillRect(0, 0, W, 140);
   ctx.textBaseline = 'alphabetic';
   // logo mark + wordmark (no trailing dot)
-  ctx.save(); ctx.translate(76, 70); ctx.strokeStyle = '#FCBE46'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.stroke();
-  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 18, Math.sin(a) * 18); ctx.lineWidth = 2.5; ctx.stroke(); }
-  ctx.restore();
+  wheelMark(ctx, 76, 70, 19);
   ctx.fillStyle = '#FFFFFF'; ctx.font = `700 36px ${SANS}`; ctx.fillText('wheelhouse', 108, 82);
   if (data.meta !== false) {
     ctx.font = `600 20px ${MONO}`; const chip = `${data.network.toUpperCase()} · ${data.date}`; const cw = ctx.measureText(chip).width + 32;
@@ -72,28 +70,28 @@ function drawOverlay(ctx, data) {
 
   // title: address, like "Checkpoint example"
   const title = data.address || 'A Squeek holder';
-  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `600 22px ${COND}`; ctx.fillText(data.address ? 'SQUEEK HOLDER CHECKPOINT' : 'WHEELHOUSE CHECKPOINT', 72, 452);
+  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `600 22px ${COND}`; ctx.fillText(data.address ? 'SQUEEK HOLDER CHECKPOINT' : 'SQUEEK HOLDER', 72, 452);
   ctx.fillStyle = '#FFFFFF'; fitFont(ctx, title, 640, 68, 700, SANS); ctx.fillText(title, 70, 520);
 
-  // stats row
-  const stats = data.stats;
-  // Shrink the row until it fits left of the level chips (or the full width when levels are hidden).
-  const room = (data.levels.length ? 700 : W - 128);
-  let big = 44, small = 20, gap = 34;
-  const rowWidth = () => stats.reduce((w, [v, l]) => { ctx.font = `600 ${big}px ${COND}`; const a = ctx.measureText(v).width; ctx.font = `500 ${small}px ${COND}`; return w + a + 10 + ctx.measureText(l).width + gap; }, -gap);
-  while (big > 26 && rowWidth() > room) { big -= 2; small = Math.max(14, small - 1); gap = Math.max(20, gap - 2); }
-  let x = 72; for (const [value, label] of stats) {
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `600 ${big}px ${COND}`; ctx.fillText(value, x, 590); const vw = ctx.measureText(value).width;
-    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `500 ${small}px ${COND}`; ctx.fillText(label, x + vw + 10, 590); x += vw + 10 + ctx.measureText(label).width + gap;
+  // Fixed metric cells prevent long numbers or five selected fields from spilling into each other.
+  const stats = data.stats, gap = 18, left = 72, room = W - 144;
+  const cell = stats.length ? (room - gap * (stats.length - 1)) / stats.length : room;
+  stats.forEach(([value, name], i) => {
+    const x = left + i * (cell + gap);
+    ctx.fillStyle = '#FFFFFF'; fitFont(ctx,value,cell,42,600,COND); ctx.fillText(value,x,565,cell);
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; fitFont(ctx,name,cell,19,500,COND); ctx.fillText(name,x,590,cell);
+  });
+  // Level summary occupies its own row; hidden levels also remove level-derived scene orbs.
+  ctx.font = `600 18px ${COND}`; let x = left;
+  for(let i=0;i<data.levels.length;i++) {
+    const {level,count}=data.levels[i], text=`L${level} × ${count}`, width=ctx.measureText(text).width+32;
+    if(x+width+(i<data.levels.length-1?60:0)>W-72){ctx.fillStyle='#FFFFFF';ctx.fillText(`+${data.levels.length-i} levels`,x,620,W-72-x);break;}
+    ctx.fillStyle=levelColor(level);ctx.beginPath();ctx.arc(x+5,614,5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.75)';ctx.fillText(text,x+17,620);x+=width;
   }
-  // level chips, right side bottom
-  ctx.font = `600 22px ${COND}`; let rx = W - 56; const chips = data.levels.length ? [...data.levels].reverse() : [];
-  for (const { level, count } of chips) {
-    const text = `L${level} × ${count}`, w = ctx.measureText(text).width + 44; rx -= w; if (rx < Math.max(760, x + 10)) break;
-    roundRect(ctx, rx, 558, w, 40, 20); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.fillStyle = levelColor(level); ctx.beginPath(); ctx.arc(rx + 18, 578, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#FFFFFF'; ctx.fillText(text, rx + 32, 586); rx -= 10;
-  }
+  const illustrated = orbList(data.orbLevels ?? data.levels).length;
+  const total = (data.orbLevels ?? data.levels).reduce((sum,item)=>sum+item.count,0);
+  if(illustrated && total>illustrated){ctx.font=`500 14px ${MONO}`;ctx.fillStyle='rgba(255,255,255,.5)';ctx.textAlign='right';ctx.fillText(`Showing ${illustrated} of ${total} Squeeks`,W-72,434);ctx.textAlign='start';}
   ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.font = `500 16px ${MONO}`;
   ctx.fillText(data.network === 'Mainnet' ? 'Not financial advice' : 'Testnet values · not financial advice', 72, 640);
   const site = 'wheel-house.pages.dev'; ctx.fillText(site, W - 56 - ctx.measureText(site).width, 640);
@@ -108,9 +106,9 @@ export function drawNight(ctx, data, { t = 0, scene = null } = {}) {
 // ---- Classic (light or dark, follows the app theme) ----
 export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
   const W = CARD_W, H = CARD_H, ink = dark ? '#F6F3EA' : BRAND.night, muted = dark ? '#A7A39A' : '#5D5A52';
-  const panel = dark ? '#16171C' : '#FFFFFF', line = dark ? '#2A2C33' : '#E8E1D0';
+  const panel = dark ? '#16171C' : '#FFFFFF', line = dark ? '#2A2C33' : '#DDD8E9';
   ctx.save(); ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = dark ? BRAND.night : '#FFF8EA'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = dark ? BRAND.night : '#F7F8FC'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = dark ? 'rgba(255,255,255,.06)' : 'rgba(10,10,12,.07)';
   for (let x = 24; x < W; x += 32) for (let y = 24; y < H; y += 32) { ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill(); }
 
@@ -118,30 +116,33 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
   ctx.fillStyle = ink; ctx.font = '800 34px ' + MONO; ctx.textBaseline = 'alphabetic';
   ctx.fillText('WHEELHOUSE', 64, 92);
   if (data.meta !== false) { ctx.font = '600 22px ' + MONO; const chip = `${data.network} · ${data.date}`; const chipW = ctx.measureText(chip).width + 36;
-  roundRect(ctx, W - 64 - chipW, 58, chipW, 46, 23); ctx.fillStyle = panel; ctx.fill(); ctx.strokeStyle = line; ctx.lineWidth = 2; ctx.stroke();
-  ctx.fillStyle = muted; ctx.fillText(chip, W - 64 - chipW + 18, 89); }
+  roundRect(ctx, W - 64 - chipW, 58, chipW, 46, 23); ctx.fillStyle = foil(ctx, W - 64 - chipW, 58, chipW, 46); ctx.fill(); ctx.strokeStyle = '#A39CB8'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = BRAND.night; ctx.fillText(chip, W - 64 - chipW + 18, 89); }
 
-  // address
-  ctx.fillStyle = muted; ctx.font = '600 22px ' + MONO; ctx.fillText(data.address ? 'SQUEEK HOLDER' : 'WHEELHOUSE CHECKPOINT', 64, 170);
-  ctx.fillStyle = ink; fit(ctx, data.address || 'A Squeek holder', 640, 64, 800); ctx.fillText(data.address || 'A Squeek holder', 64, 236);
+  // address (with Levels hidden the body moves down so no empty band is left above the footer)
+  const dy = data.levels.length ? 0 : 44;
+  if (data.address) { ctx.fillStyle = muted; ctx.font = '600 22px ' + MONO; ctx.fillText('SQUEEK HOLDER', 64, 170 + dy); }
+  ctx.fillStyle = ink; fit(ctx, data.address || 'A Squeek holder', 640, 64, 800); ctx.fillText(data.address || 'A Squeek holder', 64, 236 + dy);
 
   // wheel (top right): spokes turn with t
-  const cx = 1050, cy = 185, r = 70, spin = t * 2.4; // sits above the stat boxes (top 300)
-  ctx.lineWidth = 10; ctx.strokeStyle = BRAND.blue; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-  ctx.lineWidth = 4; ctx.strokeStyle = BRAND.yellow;
+  const cx = 1050, cy = 185 + dy, r = 70, spin = t * 2.4; // sits above the stat boxes (top 300)
+  ctx.beginPath(); ctx.moveTo(cx - 30, cy + r + 24); ctx.lineTo(cx, cy); ctx.lineTo(cx + 30, cy + r + 24); ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.strokeStyle = dark ? '#B9A6FF' : '#786699'; ctx.stroke();
+  // Open running wheel like the first card (rim, 8 spokes, hub), coloured with the foil palette.
+  ctx.lineWidth = 10; ctx.strokeStyle = foil(ctx, cx - r, cy - r, r * 2, r * 2); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 4; ctx.strokeStyle = dark ? '#B9A6FF' : '#8E7FC0';
   for (let i = 0; i < 8; i++) { const a = spin + i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * (r - 6), cy + Math.sin(a) * (r - 6)); ctx.stroke(); }
-  ctx.fillStyle = BRAND.yellow; ctx.beginPath(); ctx.arc(cx, cy, 14, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = ink; ctx.beginPath(); ctx.moveTo(cx - 30, cy + r + 24); ctx.lineTo(cx, cy); ctx.lineTo(cx + 30, cy + r + 24); ctx.lineWidth = 6; ctx.strokeStyle = ink; ctx.stroke();
+  ctx.fillStyle = foil(ctx, cx - 12, cy - 12, 24, 24); ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI * 2); ctx.fill(); ctx.lineCap = 'butt';
+
 
   // stats
   const stats = data.stats.map(([value, label]) => [label.toUpperCase(), value]);
-  const gap = 20, boxH = 150, top = 300, boxW = stats.length ? (W - 128 - gap * (stats.length - 1)) / stats.length : 0;
+  const gap = 20, boxH = 150, top = 300 + dy * 2, boxW = stats.length ? (W - 128 - gap * (stats.length - 1)) / stats.length : 0;
   stats.forEach(([label, value], i) => {
     const x = 64 + i * (boxW + gap); const accent = i === stats.length - 1 && /SQK/.test(label);
-    roundRect(ctx, x, top, boxW, boxH, 20); ctx.fillStyle = accent ? BRAND.yellow : panel; ctx.fill();
+    roundRect(ctx, x, top, boxW, boxH, 20); ctx.fillStyle = accent ? foil(ctx, x, top, boxW, boxH) : panel; ctx.fill();
     if (!accent) { ctx.strokeStyle = line; ctx.lineWidth = 2; ctx.stroke(); }
-    ctx.fillStyle = accent ? BRAND.night : muted; ctx.font = '600 20px ' + MONO; fitFont(ctx, label, boxW - 48, 20, 600, MONO); ctx.fillText(label, x + 24, top + 44);
-    ctx.fillStyle = accent ? BRAND.night : ink; fit(ctx, value, boxW - 48, stats.length > 3 ? 44 : 56, 800); ctx.fillText(value, x + 24, top + 116);
+    ctx.fillStyle = accent ? BRAND.night : muted; ctx.font = '600 20px ' + MONO; fitFont(ctx, label, boxW - 48, 20, 600, MONO); ctx.fillText(label, x + 24, top + 44, boxW-48);
+    ctx.fillStyle = accent ? BRAND.night : ink; fit(ctx, value, boxW - 48, stats.length > 3 ? 44 : 56, 800); ctx.fillText(value, x + 24, top + 116, boxW-48);
   });
 
   // levels
@@ -150,14 +151,17 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
   const chips = data.levels.map(item => `L${item.level} × ${item.count}`);
   for (const text of chips) {
     const w = ctx.measureText(text).width + 32; if (x + w > W - 64) { ctx.fillStyle = muted; ctx.fillText('…', x, 562); break; }
-    roundRect(ctx, x, 528, w, 48, 24); ctx.fillStyle = panel; ctx.fill(); ctx.strokeStyle = BRAND.blue; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = ink; ctx.fillText(text, x + 16, 561); x += w + 12;
+    roundRect(ctx, x, 528, w, 48, 24); ctx.fillStyle = foil(ctx, x, 528, w, 48); ctx.fill(); ctx.strokeStyle = '#A39CB8'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = BRAND.night; ctx.fillText(text, x + 16, 561); x += w + 12;
   } }
 
   // footer
   ctx.fillStyle = muted; ctx.font = '500 20px ' + MONO;
   ctx.fillText(data.network === 'Mainnet' ? 'Not financial advice.' : 'Testnet values. Not financial advice.', 64, 630);
   const site = 'wheel-house.pages.dev'; ctx.fillText(site, W - 64 - ctx.measureText(site).width, 630);
+
+  // Matching foil trim on the flat PNG as well as the moving preview.
+  roundRect(ctx, 3, 3, W - 6, H - 6, 20); ctx.strokeStyle = foil(ctx, 0, 0, W, H); ctx.lineWidth = 4; ctx.stroke();
 
   // sheen
   const pos = ((t * 0.35) % 1.6) - 0.3; const g = ctx.createLinearGradient(W * pos - 200, 0, W * pos + 200, H);
@@ -176,10 +180,10 @@ export function drawClassicMoving(ctx, data, { t = 0, dark = true, makeCanvas = 
   const fctx = classicFace.getContext('2d');
   fctx.save(); fctx.clearRect(0, 0, W, H); drawClassic(fctx, data, { t, dark });
   fctx.globalCompositeOperation = 'destination-in'; roundRect(fctx, 0, 0, W, H, 22); fctx.fill(); fctx.globalCompositeOperation = 'source-over';
-  roundRect(fctx, 2, 2, W - 4, H - 4, 20); fctx.strokeStyle = dark ? 'rgba(255,255,255,.16)' : 'rgba(10,10,12,.12)'; fctx.lineWidth = 4; fctx.stroke(); fctx.restore();
+  roundRect(fctx, 2, 2, W - 4, H - 4, 20); fctx.strokeStyle = foil(fctx, 0, 0, W, H); fctx.lineWidth = 4; fctx.stroke(); fctx.restore();
   ctx.save(); ctx.clearRect(0, 0, W, H);
   const bg = ctx.createRadialGradient(W / 2, H * 0.4, 40, W / 2, H / 2, W * 0.7);
-  bg.addColorStop(0, dark ? '#1C1D23' : '#FFFFFF'); bg.addColorStop(1, dark ? '#050506' : '#E9E2D2');
+  bg.addColorStop(0, dark ? '#1C1D23' : '#FFFFFF'); bg.addColorStop(1, dark ? '#050506' : '#E6E4F0');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   const s = 0.8, fw = W * s, fh = H * s, cx = W / 2, cy = H / 2 - 6 + Math.sin(t * 1.3) * 7;
   // same motion as the first share card's 3D slab: turn ±0.16 rad, nod ±0.06 rad, small bob
@@ -188,8 +192,8 @@ export function drawClassicMoving(ctx, data, { t = 0, dark = true, makeCanvas = 
   ctx.save(); ctx.scale(1, 0.12); ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(cx, (H - 34) / 0.12, fw * 0.55, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   ctx.translate(cx, cy); ctx.rotate(roll); ctx.translate(-cx, -cy);
   const N = 150, sw = W / N, proj = u => { const xl = (u - 0.5) * fw, k = D / (D + xl * sn); return { x: cx + xl * c * k, k, dy: (u - 0.5) * fw * pitch }; };
-  // yellow slab edge on the side turned toward the viewer, like the 3D box's gold sides
-  { const a = proj(0), b = proj(1), e = sn * 16, ka = a.k, kb = b.k; ctx.fillStyle = BRAND.yellow; ctx.beginPath();
+  // foil slab edge on the side turned toward the viewer
+  { const a = proj(0), b = proj(1), e = sn * 16, ka = a.k, kb = b.k; ctx.fillStyle = foil(ctx, a.x, cy - fh / 2, b.x - a.x, fh); ctx.beginPath();
     ctx.moveTo(a.x - Math.max(0, -e), cy - fh * ka / 2 + a.dy); ctx.lineTo(b.x + Math.max(0, e), cy - fh * kb / 2 + b.dy);
     ctx.lineTo(b.x + Math.max(0, e), cy + fh * kb / 2 + b.dy); ctx.lineTo(a.x - Math.max(0, -e), cy + fh * ka / 2 + a.dy); ctx.closePath(); ctx.fill(); }
   for (let i = 0; i < N; i++) {

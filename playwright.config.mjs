@@ -9,7 +9,8 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   retries: 0,
   workers: 1,
-  reporter: 'list',
+  // Surface exact test failures in check annotations as well as the downloadable logs.
+  reporter: process.env.GITHUB_ACTIONS ? [['list'], ['github']] : 'list',
   use: {
     baseURL: 'http://127.0.0.1:4173',
     browserName: 'chromium',

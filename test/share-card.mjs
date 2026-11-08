@@ -20,7 +20,7 @@ assert.equal(levelColor(1), '#FCBE46'); assert.equal(levelColor(2), '#597AF7');
   const def = applyShow(base);
   assert.deepEqual(def.stats.map(s => s[1]), ['Squeeks', 'Deposited', 'Claimable SQK']);
   const anon = applyShow(base, { ...DEFAULT_SHOW, address: false, claimable: false, claimed: true, compounded: true, levels: false });
-  assert.equal(anon.address, null); assert.deepEqual(anon.levels, []); assert.deepEqual(anon.orbLevels.map(l => l.level), [1, 2]);
+  assert.equal(anon.address, null); assert.deepEqual(anon.levels, []); assert.deepEqual(anon.orbLevels, []);
   assert.deepEqual(anon.stats, [['10', 'Squeeks'], ['10', 'Deposited'], ['12.5', 'SQK claimed']]); // compounded unknown, skipped
   assert.equal(fileName(anon, 'png').startsWith('wheelhouse-holder-'), true);
   const all = applyShow({ ...base, compounded: '3 SQK' }, { claimed: true, compounded: true });
@@ -53,6 +53,61 @@ assert.deepEqual(STYLES.map(s => s[0]), ['flip', 'night', 'classic']); assert.eq
 const buildSrc = fs.readFileSync(new URL('../build.mjs', import.meta.url), 'utf8'); assert.equal((buildSrc.match(/share-styles\.js/g) || []).length, 2, 'build must ship share-styles.js');
 console.log('share-card: ok');
 
-const stylesMod = await import('../web/share-styles.js'); for (const fn of ['drawNight', 'drawClassic', 'drawClassicMoving']) assert.equal(typeof stylesMod[fn], 'function', fn);
+// Cancellation before capture and constructor failures must not leak tracks.
+const { recordCanvas } = await import('../web/share-card.js');
+const previousRecorder = globalThis.MediaRecorder;
+const previousCancel = globalThis.cancelAnimationFrame;
+let stopped = 0;
+globalThis.cancelAnimationFrame = () => {};
+globalThis.MediaRecorder = class {
+  static isTypeSupported() { return true; }
+  constructor() { throw new Error('Encoder unavailable'); }
+};
+try {
+  const canvas = { captureStream: () => ({ getTracks: () => [{ stop: () => stopped++ }] }) };
+  await assert.rejects(recordCanvas(canvas, () => {}), /Encoder unavailable/);
+  assert.equal(stopped, 1);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(recordCanvas(canvas, () => {}, { signal: controller.signal }), /cancelled/);
+  assert.equal(stopped, 1);
+  await assert.rejects(recordCanvas(canvas, () => {}, { seconds: 0 }), /Invalid recording/);
+} finally {
+  globalThis.MediaRecorder = previousRecorder;
+  globalThis.cancelAnimationFrame = previousCancel;
+}
+console.log('share-card recording lifecycle: ok');
 
-const heroSrc = fs.readFileSync(new URL('../web/hero3d-src.js', import.meta.url), 'utf8'); assert.match(heroSrc, /export function nightStage\(/); assert.match(heroSrc, /export function cardStage\(/);
+const stylesMod = await import('../web/share-styles.js');
+for (const fn of ['drawNight', 'drawClassic', 'drawClassicMoving']) assert.equal(typeof stylesMod[fn], 'function', fn);
+const heroSrc = fs.readFileSync(new URL('../web/hero3d-src.js', import.meta.url), 'utf8');
+assert.match(heroSrc, /export function nightStage\(/); assert.match(heroSrc, /export function cardStage\(/);
+assert.deepEqual(orbList([{level:1,count:Infinity},{level:-1,count:3},{level:2,count:999}], Infinity), Array(14).fill(2));
+assert.deepEqual(orbList([{level:1,count:2}], -1), []);
+assert.equal(levelColor(NaN), levelColor(1));
+
+// Recorder settlement: error, draw failure, abort, success and stale callbacks all release the stream once.
+{
+ const saved = {recorder:globalThis.MediaRecorder,raf:globalThis.requestAnimationFrame,cancel:globalThis.cancelAnimationFrame};
+ let current, scheduled, stops=0;
+ globalThis.requestAnimationFrame=fn=>{scheduled=fn;return 1;};
+ globalThis.cancelAnimationFrame=()=>{};
+ globalThis.MediaRecorder=class {
+  static isTypeSupported(){return true;}
+  state='inactive';
+  constructor(){current=this;}
+  start(){this.state='recording';}
+  stop(){this.state='inactive';queueMicrotask(()=>{this.ondataavailable?.({data:new Blob(['video'])});this.onstop?.();});}
+ };
+ const canvas={captureStream:()=>({getTracks:()=>[{stop:()=>{stops++;}}]})};
+ try{
+  const error=recordCanvas(canvas,()=>{});current.onerror({error:new Error('encoder error')});
+  await assert.rejects(error,/encoder error/);assert.equal(stops,1);
+  let frames=0;const drawError=recordCanvas(canvas,()=>{if(frames++)throw new Error('draw error');});
+  scheduled(performance.now()+16);await assert.rejects(drawError,/draw error/);assert.equal(stops,2);
+  const controller=new AbortController(), cancel=recordCanvas(canvas,()=>{},{signal:controller.signal});
+  controller.abort();await assert.rejects(cancel,/cancelled/);assert.equal(stops,3);
+  const ok=await recordCanvas(canvas,()=>{},{seconds:0.005});
+  assert.ok(ok.blob.size>0);assert.equal(stops,4);
+ }finally{globalThis.MediaRecorder=saved.recorder;globalThis.requestAnimationFrame=saved.raf;globalThis.cancelAnimationFrame=saved.cancel;}
+}
+console.log('share-card recorder settlement: ok');
