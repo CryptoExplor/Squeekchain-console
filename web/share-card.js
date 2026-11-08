@@ -117,7 +117,7 @@ function cardBase(ctx) {
   roundRect(ctx, 0.75, 0.75, w - 1.5, h - 1.5, 30); ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1.5; ctx.stroke();
 }
 // Shared foil palette keeps the marks, window trim and turning edge coordinated.
-export const FOIL_COLORS = ['#9CFFD0', '#9BE7FF', '#B9A6FF', '#FFF3D6'];
+export const FOIL_COLORS = ['#FF9AD5', '#9BE7FF', '#FFF3A6', '#B9A6FF', '#9CFFD0'];
 export const BACK_WHEEL = Object.freeze({ x: 580, y: 270, radius: 130, lineWidth: 20 });
 export function foil(ctx, x, y, w, h) {
   const gradient = ctx.createLinearGradient(x, y, x + w, y + h);
@@ -208,12 +208,13 @@ export function drawFront(ctx, data, { t = 0, scene = null } = {}) {
   drawWindow(ctx, data, t, scene);
 }
 function holo(ctx, x, y, s, t) {
-  const g = foil(ctx, x, y, s, s);
-  roundRect(ctx, x, y, s, s, 9); ctx.fillStyle = g; ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.save(); roundRect(ctx, x + 5, y + 5, s - 10, s - 10, 6);
-  ctx.fillStyle = '#242631'; ctx.fill(); ctx.restore();
-  wheelMark(ctx, x + s / 2, y + s / 2, s * 0.29, t);
+  // Holo chip: unchanged look, foil colours drift with t.
+  const d = Math.sin(t) * s;
+  const g = ctx.createLinearGradient(x + d, y, x + s - d, y + s);
+  FOIL_COLORS.forEach((c, i, a) => g.addColorStop(i / (a.length - 1), c));
+  roundRect(ctx, x, y, s, s, 8); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.save(); ctx.translate(x + s / 2, y + s / 2); ctx.strokeStyle = 'rgba(10,10,12,.55)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, s * 0.28, 0, Math.PI * 2); ctx.stroke();
+  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + t * 0.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * s * 0.28, Math.sin(a) * s * 0.28); ctx.stroke(); } ctx.restore();
 }
 export function drawBack(ctx, data, { t = 0 } = {}) {
   ctx.clearRect(0, 0, FACE_W, FACE_H); cardBase(ctx);
@@ -221,11 +222,18 @@ export function drawBack(ctx, data, { t = 0 } = {}) {
   // The entire rim stays inside the face, with clearance from the badge and footer.
   const { x, y, radius, lineWidth } = BACK_WHEEL;
   ctx.translate(x, y); ctx.rotate(-t * 0.15);
-  ctx.globalAlpha = 0.12; ctx.strokeStyle = foil(ctx, -radius, -radius, radius * 2, radius * 2);
-  ctx.lineWidth = lineWidth; ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke();
-  ctx.globalAlpha = 0.065; ctx.lineWidth = 10;
-  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * (radius - 10), Math.sin(a) * (radius - 10)); ctx.stroke(); }
-  ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fillStyle = '#B9A6FF'; ctx.fill();
+  // Solid wheel: one filled rim, tapered filled spokes, hub. No stroked lines, no overlaps.
+  const outer = radius + lineWidth / 2, inner = radius - lineWidth / 2, hub = 22;
+  ctx.fillStyle = foil(ctx, -outer, -outer, outer * 2, outer * 2); ctx.globalAlpha = 0.16;
+  ctx.beginPath(); ctx.arc(0, 0, outer, 0, Math.PI * 2); ctx.arc(0, 0, inner, 0, Math.PI * 2, true); ctx.fill();
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3, ca = Math.cos(a), sa = Math.sin(a), px = -sa, py = ca;
+    ctx.moveTo(ca * hub + px * 7, sa * hub + py * 7); ctx.lineTo(ca * inner + px * 4, sa * inner + py * 4);
+    ctx.lineTo(ca * inner - px * 4, sa * inner - py * 4); ctx.lineTo(ca * hub - px * 7, sa * hub - py * 7); ctx.closePath();
+  }
+  ctx.fill();
+  ctx.beginPath(); ctx.arc(0, 0, hub, 0, Math.PI * 2); ctx.arc(0, 0, 8, 0, Math.PI * 2, true); ctx.globalAlpha = 0.24; ctx.fill();
   ctx.restore();
   logo(ctx, data); holo(ctx, FACE_W - 92, 36, 50, t);
   if (!data.back.length && data.meta === false) { label(ctx, 'HOLDER CHECKPOINT', 44, 182); ctx.fillStyle='#FFFFFF'; ctx.font=`600 28px ${SANS}`; ctx.fillText('No reward metrics selected',44,238); }

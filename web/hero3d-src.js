@@ -286,7 +286,7 @@ function createFlipStage(front, back) {
   edgeGeo.translate(0,0,-0.0225);
   // Vertex colors create the same mint → ice → lavender → cream foil as the canvas faces.
   const edgeColors = [], edgePosition = edgeGeo.attributes.position;
-  const stops = [0x9cffd0, 0x9be7ff, 0xb9a6ff, 0xfff3d6].map(color => new Color(color));
+  const stops = [0xff9ad5, 0x9be7ff, 0xfff3a6, 0xb9a6ff, 0x9cffd0].map(color => new Color(color));
   for (let i = 0; i < edgePosition.count; i++) {
     const u = Math.max(0, Math.min(1, ((edgePosition.getX(i) / w + 0.5) + (edgePosition.getY(i) / h + 0.5)) / 2)) * (stops.length - 1);
     const j = Math.min(stops.length - 2, Math.floor(u));
