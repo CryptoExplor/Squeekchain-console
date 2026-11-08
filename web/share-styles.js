@@ -35,9 +35,9 @@ function drawBackdrop(ctx, data, t = 0) {
   ctx.strokeStyle = '#2A2D3A'; ctx.lineWidth = 16; ctx.beginPath(); ctx.moveTo(-70, r + 120); ctx.lineTo(0, 0); ctx.lineTo(70, r + 120); ctx.stroke();
   ctx.shadowColor = 'rgba(89,122,247,.8)'; ctx.shadowBlur = 30; ctx.strokeStyle = '#597AF7'; ctx.lineWidth = 14; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
   ctx.shadowBlur = 0; ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(89,122,247,.45)'; ctx.beginPath(); ctx.arc(0, 0, r - 22, 0, Math.PI * 2); ctx.stroke();
-  for (let i = 0; i < 24; i++) { const a = spin + i * Math.PI / 12; ctx.strokeStyle = i % 6 === 0 ? '#FCBE46' : 'rgba(255,255,255,.22)'; ctx.lineWidth = i % 6 === 0 ? 5 : 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * (r - 22), Math.sin(a) * (r - 22)); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); ctx.stroke(); }
+  for (let i = 0; i < 24; i++) { const a = spin + i * Math.PI / 12; ctx.strokeStyle = i % 6 === 0 ? '#B9A6FF' : 'rgba(255,255,255,.22)'; ctx.lineWidth = i % 6 === 0 ? 5 : 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * (r - 22), Math.sin(a) * (r - 22)); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); ctx.stroke(); }
   for (let i = 0; i < 6; i++) { const a = spin + i * Math.PI / 3; ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * (r - 22), Math.sin(a) * (r - 22)); ctx.stroke(); }
-  ctx.fillStyle = '#FCBE46'; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = foil(ctx, -14, -14, 28, 28); ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
   // orbs roll along the rail (bezier sampled), bigger for higher levels
   const orbs = orbList(data.orbLevels ?? data.levels); const P = (u) => { const a = [-40, 330], b = [260, 400], c = [520, 250], d = [860, 420], m = 1 - u; return [m*m*m*a[0] + 3*m*m*u*b[0] + 3*m*u*u*c[0] + u*u*u*d[0], m*m*m*a[1] + 3*m*m*u*b[1] + 3*m*u*u*c[1] + u*u*u*d[1]]; };
@@ -60,9 +60,7 @@ function drawOverlay(ctx, data) {
   ctx.fillStyle = top; ctx.fillRect(0, 0, W, 140);
   ctx.textBaseline = 'alphabetic';
   // logo mark + wordmark (no trailing dot)
-  ctx.save(); ctx.translate(76, 70); ctx.strokeStyle = '#FCBE46'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.stroke();
-  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 18, Math.sin(a) * 18); ctx.lineWidth = 2.5; ctx.stroke(); }
-  ctx.restore();
+  wheelMark(ctx, 76, 70, 19);
   ctx.fillStyle = '#FFFFFF'; ctx.font = `700 36px ${SANS}`; ctx.fillText('wheelhouse', 108, 82);
   if (data.meta !== false) {
     ctx.font = `600 20px ${MONO}`; const chip = `${data.network.toUpperCase()} · ${data.date}`; const cw = ctx.measureText(chip).width + 32;
@@ -128,8 +126,12 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
 
   // wheel (top right): spokes turn with t
   const cx = 1050, cy = 185 + dy, r = 70, spin = t * 2.4; // sits above the stat boxes (top 300)
-  ctx.beginPath(); ctx.moveTo(cx - 30, cy + r + 24); ctx.lineTo(cx, cy); ctx.lineTo(cx + 30, cy + r + 24); ctx.lineWidth = 6; ctx.strokeStyle = dark ? '#B9A6FF' : '#786699'; ctx.stroke();
-  wheelMark(ctx, cx, cy, r, spin * 2);
+  ctx.beginPath(); ctx.moveTo(cx - 30, cy + r + 24); ctx.lineTo(cx, cy); ctx.lineTo(cx + 30, cy + r + 24); ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.strokeStyle = dark ? '#B9A6FF' : '#786699'; ctx.stroke();
+  // Open running wheel like the first card (rim, 8 spokes, hub), coloured with the foil palette.
+  ctx.lineWidth = 10; ctx.strokeStyle = foil(ctx, cx - r, cy - r, r * 2, r * 2); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 4; ctx.strokeStyle = dark ? '#B9A6FF' : '#8E7FC0';
+  for (let i = 0; i < 8; i++) { const a = spin + i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * (r - 6), cy + Math.sin(a) * (r - 6)); ctx.stroke(); }
+  ctx.fillStyle = foil(ctx, cx - 12, cy - 12, 24, 24); ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI * 2); ctx.fill(); ctx.lineCap = 'butt';
 
 
   // stats
@@ -190,8 +192,8 @@ export function drawClassicMoving(ctx, data, { t = 0, dark = true, makeCanvas = 
   ctx.save(); ctx.scale(1, 0.12); ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(cx, (H - 34) / 0.12, fw * 0.55, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   ctx.translate(cx, cy); ctx.rotate(roll); ctx.translate(-cx, -cy);
   const N = 150, sw = W / N, proj = u => { const xl = (u - 0.5) * fw, k = D / (D + xl * sn); return { x: cx + xl * c * k, k, dy: (u - 0.5) * fw * pitch }; };
-  // yellow slab edge on the side turned toward the viewer, like the 3D box's gold sides
-  { const a = proj(0), b = proj(1), e = sn * 16, ka = a.k, kb = b.k; ctx.fillStyle = BRAND.yellow; ctx.beginPath();
+  // foil slab edge on the side turned toward the viewer
+  { const a = proj(0), b = proj(1), e = sn * 16, ka = a.k, kb = b.k; ctx.fillStyle = foil(ctx, a.x, cy - fh / 2, b.x - a.x, fh); ctx.beginPath();
     ctx.moveTo(a.x - Math.max(0, -e), cy - fh * ka / 2 + a.dy); ctx.lineTo(b.x + Math.max(0, e), cy - fh * kb / 2 + b.dy);
     ctx.lineTo(b.x + Math.max(0, e), cy + fh * kb / 2 + b.dy); ctx.lineTo(a.x - Math.max(0, -e), cy + fh * ka / 2 + a.dy); ctx.closePath(); ctx.fill(); }
   for (let i = 0; i < N; i++) {
