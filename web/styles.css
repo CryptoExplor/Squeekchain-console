@@ -810,39 +810,22 @@ body.modal-open { overflow: hidden; }
 .earnings-labels dd { font-variant-numeric: tabular-nums; }
 .sqk-facts:has(> div:nth-child(2):last-child) { grid-template-columns: repeat(2, max-content); column-gap: 48px; }
 
-/* Muted foil UI palette. Legacy gold/yellow token names remain for existing components. */
+/* ── Brand colour layer (squeekchain.com: hamster yellow #FCBE46, block blue #597AF7, night #0A0A0C) ── */
 :root {
-  --brand-yellow: #9ebbb0; --brand-blue: #597af7; --brand-pink: #f2668b; --brand-green: #2fbf71; --brand-purple: #9b6cf2;
-  --ui-foil: linear-gradient(115deg, #b7cec2, #bccbd5 35%, #c3bdd6 72%, #ded8c9);
-  --sqk-bg: #f8f9f7; --sqk-panel: #ffffff; --sqk-panel-alt: #f1f3f2; --sqk-line: #dce1df; --sqk-line-soft: #e9edeb; --sqk-dot: #e0e5e2;
-  --sqk-blue: #3d5fe6; --sqk-blue-soft: #e9eeff;
-  --sqk-gold: #4c6861; --sqk-gold-bright: #9ebbb0; --sqk-gold-soft: #eaf0ed;
-  --sqk-primary-fill: var(--ui-foil); --sqk-primary-hover: linear-gradient(115deg, #adc5b9, #b3c2cd 35%, #bab3ce 72%, #d5cebe);
-  --sqk-primary-border: #99aba5; --sqk-on-primary: #252831;
+  --brand-yellow: #fcbe46; --brand-blue: #597af7; --brand-pink: #f2668b; --brand-green: #2fbf71; --brand-purple: #9b6cf2;
+  --sqk-bg: #fffaee; --sqk-panel: #ffffff; --sqk-panel-alt: #fff6e0; --sqk-line: #eadfc4; --sqk-line-soft: #f3ead4; --sqk-dot: #ecdcb3;
+  --sqk-blue: #3d5fe6; --sqk-blue-soft: #e9eeff; --sqk-gold-bright: var(--brand-yellow); --sqk-gold-soft: #fff1cc;
+  --sqk-primary-fill: var(--brand-yellow); --sqk-primary-hover: #ffcd63; --sqk-on-primary: #1d1606;
 }
 [data-theme="dark"] {
   --sqk-bg: #0a0a0c; --sqk-bg-raised: #101016; --sqk-panel: #121218; --sqk-panel-alt: #17171f; --sqk-line: #2a2a38; --sqk-line-soft: #1e1e29; --sqk-dot: #23232e;
-  --sqk-gold: #b0c6bc; --sqk-gold-bright: #a3bdb2; --sqk-gold-soft: #1c2725; --sqk-blue: #7d97ff; --sqk-blue-soft: #161c36;
-  --sqk-primary-fill: var(--ui-foil); --sqk-primary-hover: linear-gradient(115deg, #c2d7cd, #c8d5dd 35%, #cec8df 72%, #e3ded3);
-  --sqk-primary-border: #9eaaa6; --sqk-on-primary: #252831;
+  --sqk-gold: #fcbe46; --sqk-gold-bright: #fcbe46; --sqk-gold-soft: #2a2008; --sqk-blue: #7d97ff; --sqk-blue-soft: #161c36;
+  --sqk-primary-fill: #fcbe46; --sqk-primary-hover: #ffd172; --sqk-on-primary: #14100a;
 }
-.btn-primary, .btn-gold { background: var(--sqk-primary-fill); border-color: var(--sqk-primary-border); color: var(--sqk-on-primary); }
-.btn-primary:hover:not(:disabled), .btn-gold:hover:not(:disabled) { background: var(--sqk-primary-hover); border-color: var(--sqk-primary-border); color: var(--sqk-on-primary); filter: none; }
-.pending-dot { background: var(--sqk-gold-bright); }
-.brand .mark { background: transparent; border-color: var(--sqk-line); color: #343640; }
-.brand .mark svg circle:first-child { stroke: none; }
-/* Status warnings remain amber; they are not decorative brand accents. */
-.chip.warn, .notice.warn, .confirm-details .recipient-warning {
-  --sqk-gold: #806016; --sqk-gold-bright: #b18a3b; --sqk-gold-soft: #f6efdf;
-}
-[data-theme="dark"] :is(.chip.warn, .notice.warn, .confirm-details .recipient-warning) {
-  --sqk-gold: #d3b577; --sqk-gold-bright: #b99a5b; --sqk-gold-soft: #2a2418;
-}
-
-.topbar { border-bottom: 3px solid transparent; border-image: linear-gradient(90deg, #a8c1b5, #babfd0 55%, #cec6d6) 1; }
+.topbar { border-bottom: 3px solid transparent; border-image: linear-gradient(90deg, var(--brand-yellow), var(--brand-blue) 55%, var(--brand-pink)) 1; }
 .tab[aria-selected="true"] { color: var(--sqk-blue); border-bottom: 3px solid var(--brand-blue); }
 [data-theme="dark"] .tab[aria-selected="true"] { color: #fff; }
-.btn:not(.btn-primary):not(.btn-gold):not(.btn-danger):not(:disabled):hover { border-color: var(--brand-blue); color: var(--sqk-blue); }
+.btn:not(.btn-primary):not(.btn-danger):not(:disabled):hover { border-color: var(--brand-blue); color: var(--sqk-blue); }
 .btn[aria-pressed="true"] { background: var(--sqk-blue-soft); border-color: var(--brand-blue); color: var(--sqk-blue); }
 h2::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 10px; border-radius: 2px; background: var(--brand-yellow); vertical-align: 2px; }
 .panel h2::before, .modal-card h2::before { background: var(--brand-blue); }
@@ -854,12 +837,12 @@ h2::before { content: ""; display: inline-block; width: 10px; height: 10px; marg
 .stat { border-top-color: var(--accent, var(--brand-yellow)); }
 .stat strong { color: var(--sqk-ink); }
 /* charts */
-.earnings-bar { background: linear-gradient(180deg, #afc8bc, #aaa1c2); }
+.earnings-bar { background: linear-gradient(180deg, var(--brand-yellow), #f29a2e); }
 /* Squeek cards */
 .squeek-card:hover { transform: translateY(-2px); border-color: var(--brand-yellow); box-shadow: 0 8px 22px color-mix(in srgb, var(--brand-yellow) 25%, transparent); }
 /* chips */
 .chip.ok { background: color-mix(in srgb, var(--brand-green) 14%, var(--sqk-panel)); }
-.chip.warn { background: var(--sqk-gold-soft); }
+.chip.warn { background: color-mix(in srgb, var(--brand-yellow) 22%, var(--sqk-panel)); }
 .status-dot { background: var(--brand-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-green) 25%, transparent); }
 a { color: var(--sqk-blue); }
 .modal-card { border-top: 4px solid var(--brand-yellow); }

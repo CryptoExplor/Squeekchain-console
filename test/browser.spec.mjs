@@ -277,11 +277,8 @@ test('offline design system: light/dark contrast, readable labels, theme state a
     return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
   };
   const expectContrast = record => {
-    const backgrounds = record.backgroundImage?.includes('linear-gradient') ? record.backgroundImage.match(/rgba?\([^)]+\)/g) : [record.background];
-    for (const background of backgrounds) {
-      const values = [luminance(record.color), luminance(background)].sort((a, b) => b - a);
-      expect((values[0] + .05) / (values[1] + .05), `${record.label}: ${record.color} on ${background}`).toBeGreaterThanOrEqual(4.5);
-    }
+    const values = [luminance(record.color), luminance(record.background)].sort((a, b) => b - a);
+    expect((values[0] + .05) / (values[1] + .05), `${record.label}: ${record.color} on ${record.background}`).toBeGreaterThanOrEqual(4.5);
   };
   for (const mode of ['light', 'dark']) {
     await expect(page.locator('html')).toHaveAttribute('data-theme', mode);
@@ -290,17 +287,17 @@ test('offline design system: light/dark contrast, readable labels, theme state a
       const fixture = document.querySelector('#design-fixture');
       return [...fixture.children].map(node => {
         const style = getComputedStyle(node);
-        return { label: node.className, color: style.color, backgroundImage: style.backgroundImage, background: style.backgroundColor === 'rgba(0, 0, 0, 0)' ? getComputedStyle(fixture).backgroundColor : style.backgroundColor };
+        return { label: node.className, color: style.color, background: style.backgroundColor === 'rgba(0, 0, 0, 0)' ? getComputedStyle(fixture).backgroundColor : style.backgroundColor };
       });
     });
     records.forEach(expectContrast);
     expect(await page.locator('#design-fixture .label').evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(11);
-    // The brand layer owns the page surface: muted neutral by day, night in dark mode.
-    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', mode === 'light' ? '#f8f9f7' : '#0a0a0c');
+    // The brand layer owns the page surface: cream by day, night #0a0a0c in dark mode.
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', mode === 'light' ? '#fffaee' : '#0a0a0c');
     for (const selector of ['.btn-primary', '.btn-danger']) {
       const button = page.locator(`#design-fixture ${selector}`);
       await button.hover();
-      expectContrast(await button.evaluate(node => ({ label: `${node.className}:hover`, color: getComputedStyle(node).color, backgroundImage: getComputedStyle(node).backgroundImage, background: getComputedStyle(node).backgroundColor })));
+      expectContrast(await button.evaluate(node => ({ label: `${node.className}:hover`, color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor })));
     }
     await theme.focus();
     await expect(theme).toBeFocused();
