@@ -61,3 +61,7 @@ No unused Tailwind config or unmounted TSX samples: build.mjs bundles the actual
 - No remote image/avatar pipeline exists: icons are bundled inline SVG and the avatar is procedural. Cold-export tests reject unexpected remote requests and confirm no card `<img>` dependency. Merely setting `crossOrigin` would not fix a server without CORS permission; no CORS bypass was added.
 - Fresh desktop and 375px mobile PNG tests assert both encoding passes, 1200×680 output, visible cyan hero pixels, visible right-column stats, opaque right edge, and loaded fonts. The exported fixture PNG was also visually inspected: complete frame, legible metrics/icons, no clipping.
 - Build/lint/typecheck and offline tests pass; dedicated premium tests cover the above and existing privacy/loading/error cases. Full code CI is required before merging this follow-up. Native Chromium evidence does not certify Safari/Firefox/physical devices or override browser/OS permission denials. X remains a text/link draft with manual image attachment, not an automatic upload.
+
+### Final follow-up review hardening
+
+Exports now have a 15-second failure deadline and per-attempt cancellation fences, with safe retry isolation for stalled font/network/canvas work. A shared metric formatter also normalizes X drafts. Constrained grids, adaptive type and wrapping preserve full uint256-sized metric strings without ellipsis. Added mobile full-string/tail-pixel PNG evidence and independent timeout/retry regressions; no fixed render delays or invented financial values were introduced.

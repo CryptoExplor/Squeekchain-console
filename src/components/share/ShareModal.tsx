@@ -3,6 +3,7 @@ import {Copy,Download,Share2,X} from 'lucide-react';
 import {ShareCard,type ShareCardProps} from './ShareCard';
 import {useSqueekMetrics} from './useSqueekMetrics';
 import {downloadCard,exportCard} from './export';
+import {displayMetric} from './metrics';
 export interface ShareModalProps {snapshot:Readonly<ShareCardProps>;holderUrl:string;onClose:()=>void}
 /** Export controller: frozen metrics, explicit identity consent, and no automatic wallet actions. */
 export function ShareModal({snapshot,holderUrl,onClose}:ShareModalProps){
@@ -25,7 +26,7 @@ export function ShareModal({snapshot,holderUrl,onClose}:ShareModalProps){
   finally{busy.current=false;if(alive.current)setExporting(false);}
  };
  /** Open a draft only; full-address URLs require consent separate from the shortened card identity. */
- const share=()=>{const text=`My ${data.network} Squeekchain holder snapshot: ${data.count} Squeeks · ${data.claimable} claimable.\nPNG can be attached manually.`,url=new URL('https://twitter.com/intent/tweet');url.searchParams.set('text',text);url.searchParams.set('url',showAddress&&includeLink?holderUrl:new URL('/',location.href).href);window.open(url.href,'_blank','noopener,noreferrer');};
+ const share=()=>{const text=`My ${data.network} Squeekchain holder snapshot: ${displayMetric(data.count)} Squeeks · ${displayMetric(data.claimable)} claimable.\nPNG can be attached manually.`,url=new URL('https://twitter.com/intent/tweet');url.searchParams.set('text',text);url.searchParams.set('url',showAddress&&includeLink?holderUrl:new URL('/',location.href).href);window.open(url.href,'_blank','noopener,noreferrer');};
  return <div className="premium-overlay"><div ref={dialog} className="premium-modal" role="dialog" aria-modal="true" aria-labelledby="premium-title" data-testid="premium-modal" onKeyDown={event=>{
   if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose();}
   if(event.key==='Tab'){const nodes=[...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),a[href]')];const first=nodes[0],last=nodes[nodes.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}

@@ -146,9 +146,11 @@ test('V2 unknown metrics stay unknown without NaN, fabricated PnL or a verificat
  await installHolderFixture(page,{profile:'sepolia'});
  await page.evaluate(async()=>{
   const {openPremiumShare}=await import('/premium-share.js');
+  window.open=url=>{window.unknownDraft=new URL(url).searchParams.get('text');return null;};
   openPremiumShare({snapshot:{walletAddress:null,count:undefined,power:'NaN',powerLabel:'Power',claimable:null,claimed:'Infinity',compounded:'Not available',network:'Sepolia',date:'2026-11-07'},holderUrl:location.href});
  });
  const card=page.getByTestId('premium-card');await expect(card).toBeVisible();await expect(card).not.toContainText(/NaN|Infinity|342\.8|verified-on-chain/);expect((await card.innerText()).match(/—/g)).toHaveLength(5);
+ await page.getByRole('button',{name:'Share on X'}).click();expect(await page.evaluate(()=>window.unknownDraft)).toContain('— Squeeks · — claimable.');
 });
 
 test('V2 native Chromium clipboard round-trips a real 1200x680 PNG',async({page,context})=>{
@@ -160,4 +162,72 @@ test('V2 native Chromium clipboard round-trips a real 1200x680 PNG',async({page,
   const items=await navigator.clipboard.read(),blob=await items[0].getType('image/png'),bitmap=await createImageBitmap(blob);
   const result={type:blob.type,width:bitmap.width,height:bitmap.height};bitmap.close();return result;
  })).toEqual({type:'image/png',width:1200,height:680});
+});
+
+test('V2 long uint256 metrics remain complete in the SVG and rasterized PNG',async({page})=>{
+ await page.setViewportSize({width:375,height:800});await installHolderFixture(page,{profile:'sepolia'});
+ const full=(2n**256n-1n).toLocaleString('en-US')+'.00';
+ await page.evaluate(async full=>{
+  window.serializedCards=[];const original=XMLSerializer.prototype.serializeToString;
+  XMLSerializer.prototype.serializeToString=function(node){const svg=original.call(this,node);if(svg.includes('premium-card'))serializedCards.push(svg);return svg;};
+  const {openPremiumShare}=await import('/premium-share.js');
+  openPremiumShare({snapshot:{walletAddress:null,count:full,power:full,powerLabel:'Power',claimable:full+' SQK',claimed:full+' SQK',compounded:full+' SQK',network:'Sepolia',date:'2026-11-07'},holderUrl:location.href});
+ },full);
+ const card=page.getByTestId('premium-card');await expect(card).toBeVisible();
+ const tails=await card.evaluate(root=>{
+  const bounds=root.getBoundingClientRect(),scale=bounds.width/600,footer=root.querySelector('footer').getBoundingClientRect();
+  return [...root.querySelectorAll('.premium-amount,.premium-stat strong')].map(el=>{
+   const range=document.createRange(),text=el.firstChild;range.setStart(text,text.length-1);range.setEnd(text,text.length);
+   const last=range.getBoundingClientRect(),parent=el.getBoundingClientRect();
+   return {text:el.textContent,contained:el.scrollWidth<=el.clientWidth+1&&last.right<=parent.right+1&&last.bottom<=footer.top,
+    x:Math.floor((last.left-bounds.left)/scale*2),y:Math.floor((last.top-bounds.top)/scale*2),w:Math.ceil(last.width/scale*2)+1,h:Math.ceil(last.height/scale*2)+1};
+  });
+ });
+ expect(tails).toHaveLength(5);for(const tail of tails){expect(tail.text).toBe(full);expect(tail.contained).toBe(true);}
+ const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download PNG',exact:true}).click();
+ const fs=await import('node:fs/promises'),bytes=await fs.readFile(await(await pending).path());
+ const ink=await page.evaluate(async({base64,tails})=>{
+  const bitmap=await createImageBitmap(new Blob([Uint8Array.from(atob(base64),c=>c.charCodeAt(0))],{type:'image/png'})),canvas=document.createElement('canvas');
+  canvas.width=1200;canvas.height=680;const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);bitmap.close();
+  return tails.map(({x,y,w,h})=>{const {data}=ctx.getImageData(x,y,w,h);let n=0;for(let i=0;i<data.length;i+=4)if(data[i+1]>150&&data[i+2]>150&&data[i+3]===255)n++;return n;});
+ },{base64:bytes.toString('base64'),tails});
+ for(const count of ink)expect(count).toBeGreaterThan(2);
+ const svg=await page.evaluate(()=>window.serializedCards.at(-1));expect(svg.split(full).length-1).toBe(5);
+ await fs.mkdir('artifacts',{recursive:true});await fs.writeFile('artifacts/premium-share-long-values.png',bytes);
+});
+
+test('V2 timed-out font work unlocks controls and cannot complete a later attempt',async({page})=>{
+ await installHolderFixture(page,{profile:'sepolia'});await page.clock.install();
+ let release,fetches=0;const gate=new Promise(resolve=>{release=resolve;});
+ await page.route('**/fonts/*.woff2',async route=>{
+  if(route.request().resourceType()==='fetch'&&++fetches<=2)await gate;
+  try{await route.continue();}catch{/* A timed-out fetch has already been aborted. */}
+ });
+ const downloads=[];page.on('download',d=>downloads.push(d));
+ await page.getByTestId('btn-premium-share').click();const modal=page.getByTestId('premium-modal');
+ await modal.getByRole('button',{name:'Download PNG',exact:true}).click();await expect.poll(()=>fetches).toBe(2);
+ await page.clock.fastForward(15001);await expect(modal.getByRole('status')).toContainText('Card export timed out');
+ await expect(modal.getByRole('button',{name:'Download PNG',exact:true})).toBeEnabled();expect(downloads).toHaveLength(0);
+ await modal.getByRole('button',{name:'Download PNG',exact:true}).click();await expect(modal.getByRole('status')).toContainText('PNG downloaded');
+ expect(downloads).toHaveLength(1);release();await page.clock.runFor(50);expect(downloads).toHaveLength(1);
+ await expect(modal.getByRole('status')).toHaveText('PNG downloaded.');
+});
+
+test('V2 non-abortable font loading cannot restart an expired export after retry',async({page})=>{
+ await installHolderFixture(page,{profile:'sepolia'});await page.clock.install();
+ await page.evaluate(()=>{
+  const load=document.fonts.load.bind(document.fonts);window.holdFontLoad=true;window.framesEncoded=0;
+  const gate=new Promise(resolve=>{window.releaseFontLoad=resolve;});
+  document.fonts.load=(...args)=>window.holdFontLoad?gate.then(()=>load(...args)):load(...args);
+  const encode=HTMLCanvasElement.prototype.toBlob;HTMLCanvasElement.prototype.toBlob=function(...args){window.framesEncoded++;return encode.apply(this,args);};
+ });
+ const downloads=[];page.on('download',d=>downloads.push(d));
+ await page.getByTestId('btn-premium-share').click();const modal=page.getByTestId('premium-modal');
+ await modal.getByRole('button',{name:'Download PNG',exact:true}).click();await page.clock.fastForward(15001);
+ await expect(modal.getByRole('status')).toContainText('Card export timed out');
+ await page.evaluate(()=>{window.holdFontLoad=false;});
+ await modal.getByRole('button',{name:'Download PNG',exact:true}).click();await expect(modal.getByRole('status')).toHaveText('PNG downloaded.');
+ await page.evaluate(()=>window.releaseFontLoad());await page.clock.runFor(50);
+ expect(downloads).toHaveLength(1);expect(await page.evaluate(()=>window.framesEncoded)).toBe(2);
+ await expect(modal.getByRole('status')).toHaveText('PNG downloaded.');
 });
