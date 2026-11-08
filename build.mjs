@@ -32,7 +32,7 @@ fs.writeFileSync("web/tools.json", `${JSON.stringify(buildManifest(), null, 2)}\
 const OUT = "dist";
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
-for (const file of ["_headers", "network.js", "network-strip.js", "browse-grid.js", "image-queue.js", "explore.js", "explore-index.js", "explore-chain.js", "explore-snapshot.js", "holder-routes.js", "holder-workspace.js", "holder-history.js", "merge-planner.js", "squeek-page.js", "earnings.js", "wallet.js", "wheel-feed.js", "holdings.js", "images.js", "theme.js", "index.html", "styles.css", "app.js", "telemetry.js", "activity.js", "components.js", "developers.js", "settings.js", "bundle.js", "hero3d.js", "tools.json"]) {
+for (const file of ["_headers", "network.js", "network-strip.js", "browse-grid.js", "image-queue.js", "explore.js", "explore-index.js", "explore-chain.js", "explore-snapshot.js", "holder-routes.js", "holder-workspace.js", "holder-history.js", "merge-planner.js", "squeek-page.js", "earnings.js", "wallet.js", "wheel-feed.js", "holdings.js", "images.js", "theme.js", "index.html", "styles.css", "app.js", "telemetry.js", "activity.js", "components.js", "developers.js", "settings.js", "bundle.js", "hero3d.js", "share-card.js", "share-styles.js", "tools.json"]) {
   if(file.endsWith(".js") && file!=="bundle.js"&&file!=="hero3d.js") fs.writeFileSync(path.join(OUT,file),(await transform(fs.readFileSync(path.join("web",file),"utf8"),{minify:true,format:"esm",target:"es2022",legalComments:"none"})).code);
   else fs.copyFileSync(path.join("web", file), path.join(OUT, file));
 }
@@ -47,7 +47,7 @@ for (const file of fs.readdirSync(path.join("web", "fonts")).filter((f) => f.end
 }
 
 // Build-time parity, never a reason to check generated dist/ into Git.
-for (const file of ["_headers", "network.js", "network-strip.js", "browse-grid.js", "image-queue.js", "explore.js", "explore-index.js", "explore-chain.js", "explore-snapshot.js", "holder-routes.js", "holder-workspace.js", "holder-history.js", "merge-planner.js", "squeek-page.js", "earnings.js", "wallet.js", "wheel-feed.js", "holdings.js", "images.js", "theme.js", "index.html", "styles.css", "app.js", "telemetry.js", "activity.js", "components.js", "developers.js", "settings.js", "bundle.js", "hero3d.js", "tools.json"]) {
+for (const file of ["_headers", "network.js", "network-strip.js", "browse-grid.js", "image-queue.js", "explore.js", "explore-index.js", "explore-chain.js", "explore-snapshot.js", "holder-routes.js", "holder-workspace.js", "holder-history.js", "merge-planner.js", "squeek-page.js", "earnings.js", "wallet.js", "wheel-feed.js", "holdings.js", "images.js", "theme.js", "index.html", "styles.css", "app.js", "telemetry.js", "activity.js", "components.js", "developers.js", "settings.js", "bundle.js", "hero3d.js", "share-card.js", "share-styles.js", "tools.json"]) {
   if (!file.endsWith(".js") && !fs.readFileSync(path.join("web", file)).equals(fs.readFileSync(path.join(OUT, file)))) throw new Error(`Static output mismatch: ${file}`);
 }
 const manifest = buildManifest();
