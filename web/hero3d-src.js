@@ -341,7 +341,7 @@ export function nightStage({ width = 1200, height = 675, orbs = [] } = {}) {
   scene.add(key);
   const rim = new DirectionalLight(BRAND.blue, 2.2); rim.position.set(4, 3, -4); scene.add(rim);
 
-  const { wheel, stand, floorY } = buildWheel(); const rig = new Group(); rig.add(wheel, stand); scene.add(rig);
+  const { wheel, stand, floorY } = buildWheel({ pastel: true }); const rig = new Group(); rig.add(wheel, stand); scene.add(rig);
   const hamster = buildHamster(); hamster.position.set(0.05, -R + 0.03, 0.02); hamster.scale.setScalar(1.12); wheel.parent.add(hamster);
   rig.position.set(3.2, 0, 0); rig.rotation.y = -0.3;
   const floor = new Mesh(new PlaneGeometry(40, 40), new MeshStandardMaterial({ color: 0x08090d, roughness: 0.95, metalness: 0 }));
