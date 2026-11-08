@@ -253,3 +253,11 @@ test('Classic shares pastel wheel, stat and trim accents in both themes',async({
  });
  for(const result of results){expect(result.foilFills).toBeGreaterThanOrEqual(3);expect(result.foilStrokes).toBeGreaterThanOrEqual(1);expect(result.hasGold).toBe(false);}
 });
+
+
+test('share output format remains disclosed after style and visibility edits',async({page})=>{
+ await installHolderFixture(page,{profile:'sepolia'});await page.getByTestId('btn-share-card').click();
+ const format=page.getByTestId('share-format');await expect(format).toContainText('PNG');
+ const text=await format.textContent();await page.getByTestId('share-style-classic').click();
+ await page.getByTestId('share-show-address').click();await expect(format).toHaveText(text);
+});

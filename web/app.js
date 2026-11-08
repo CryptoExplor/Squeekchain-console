@@ -30,7 +30,7 @@ import {
   profileFromHash, profileInput, canonicalHash, parseEther, formatEther, unstakeQuoteError, SQUEEKS_POLICY,
 } from "./bundle.js";
 
-import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatSqk, formatPower, formatSqkBase } from './components.js';
+import { Panel, Stat, Table, TokenCard, ConfirmDialog, Toast, UNKNOWN, valueText, formatNumber, formatSqk, formatPower, formatStakingPower, formatSqkBase } from './components.js';
 
 // Sepolia is the only chain Wheelhouse talks to; the profile decides the rest.
 const SEPOLIA_CHAIN_ID = 11155111;
@@ -909,7 +909,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const inspected=status?.owner??state.inspected??state.account;
     el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);
     el.holder.refresh.disabled=!state.adapter||!inspected;
-    $('holder-copy-link').classList.toggle('hidden',!inspected);{const share=$('btn-share-card');share.classList.toggle('hidden',!inspected);share.disabled=!status||status.owner?.toLowerCase()!==inspected?.toLowerCase();share.title=share.disabled?'Load this wallet\'s Squeeks first':'Make a picture or short clip of these holdings';}$('btn-planner').disabled=!(status?.squeeks?.length);$('btn-planner').hidden=!status?.squeeks?.some(token=>Number.isInteger(token.level)&&token.level>0&&token.level<state.net?.policy?.maximumLevel);
+    $('holder-copy-link').classList.toggle('hidden',!inspected);{const share=$('btn-share-card');share.classList.toggle('hidden',!inspected);share.disabled=!status||status.owner?.toLowerCase()!==inspected?.toLowerCase();share.title=share.disabled?'Load this wallet\'s Squeeks first':'Make a picture or short clip of these holdings';const premium=$('btn-premium-share');premium.classList.toggle('hidden',!inspected);premium.disabled=share.disabled;}$('btn-planner').disabled=!(status?.squeeks?.length);$('btn-planner').hidden=!status?.squeeks?.some(token=>Number.isInteger(token.level)&&token.level>0&&token.level<state.net?.policy?.maximumLevel);
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
     if (!status) {
@@ -927,7 +927,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     setStat(el.holder.power, isV9 ? totals.deposited : totals.power, isV9 ? num : formatPower);
     // Share is rarely published; fall back to total power so the summary never shows a blank slot.
     const showShare=num(totals.sharePercent,4)!==UNKNOWN;$('holder-share-label').textContent=showShare?'Share':'Power';
-    if(showShare)setStat(el.holder.share, totals.sharePercent, value => `${num(value, 4)}%`);else setStat(el.holder.share, totals.power, value => {const text=String(value??'');if(!/^\d+$/.test(text))return UNKNOWN;/* Staking power is 18-decimal fixed point; formatPower scales it to a whole number. */return formatPower(text);});
+    if(showShare)setStat(el.holder.share, totals.sharePercent, value => `${num(value, 4)}%`);else setStat(el.holder.share, totals.power, value => {const text=String(value??'');if(!/^\d+$/.test(text))return UNKNOWN;/* Staking power is 18-decimal fixed point; formatPower scales it to a whole number. */return formatStakingPower(text);});
     setStat(el.holder.claimable, totals.claimable, sqk);
     el.holder.claim.disabled = state.busy || state.walletPromptPending || num(totals.count) === UNKNOWN || (!has && !isV9) || !signerOwns || !caps.claim;
     $("btn-custom-merge").disabled = state.busy || state.walletPromptPending || !has || !signerOwns || !caps.merge;
@@ -1588,6 +1588,19 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const value = el.holder.watchInput.value.trim();
     try{const address=watchAddress(value);win.location.hash=watchHash(state.profileKey,address);await onHashChange();}catch(error){toast(error.message,'err');}
   };
+  let closePremium = null, premiumGeneration = 0;
+  $('btn-premium-share').onclick=()=>withBusy($('btn-premium-share'),async()=>{
+    const status=state.status,profile=state.profileKey,owner=state.inspected??state.account;
+    if(!status||status.owner?.toLowerCase()!==owner?.toLowerCase())return;
+    const generation=++premiumGeneration;
+    try{
+      const raw=String(status.totals?.power??''),lifetime=value=>/^\d+$/.test(String(value??''))?formatSqkBase(value,formatEther):'—';
+      const snapshot=Object.freeze({walletAddress:`${status.owner.slice(0,6)}…${status.owner.slice(-4)}`,count:el.holder.count.textContent,power:/^\d+$/.test(raw)?formatStakingPower(raw):el.holder.power.textContent,powerLabel:/^\d+$/.test(raw)?'Power':el.holder.power.parentElement.querySelector('.label')?.textContent||'Power',claimable:el.holder.claimable.textContent,claimed:lifetime(status.rewards?.lifetimePaidBaseUnits),compounded:lifetime(status.rewards?.lifetimeCompoundedBaseUnits),network:profile.replace(/^./,c=>c.toUpperCase()),date:new Date().toISOString().slice(0,10)});
+      const {openPremiumShare}=await import('./premium-share.js');
+      if(destroyed||state.status!==status||generation!==premiumGeneration)return;
+      closePremium?.();closePremium=openPremiumShare({snapshot,holderUrl:new URL(watchHash(profile,status.owner),win.location.href).href,onClosed:()=>{if(!destroyed)$('btn-premium-share').focus();}});
+    }catch(error){showBanner(`Premium card unavailable: ${error.message}`,'warn');}
+  });
   // Share card: drawn from what the holder view already shows. Read-only; nothing here reaches a transaction.
   const lockShareControls=()=>{
     const controls=[...$('share-options').querySelectorAll('button'),...$('share-style').querySelectorAll('button'),$('share-png'),$('share-video'),$('share-side')];
@@ -1601,13 +1614,13 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const card=await import('./share-card.js');
     if(state.status!==status||status.owner?.toLowerCase()!==(state.inspected??state.account)?.toLowerCase())return;
     // The holder row shows Deposited on v9; the card shows real staking power (same formatter as the row).
-    const rawPower=String(status.totals?.power??'');const cardPower=/^\d+$/.test(rawPower)?formatPower(rawPower):el.holder.power.textContent;const powerLabel=/^\d+$/.test(rawPower)?'Power':el.holder.power.parentElement.querySelector('.label')?.textContent;
+    const rawPower=String(status.totals?.power??'');const cardPower=/^\d+$/.test(rawPower)?formatStakingPower(rawPower):el.holder.power.textContent;const powerLabel=/^\d+$/.test(rawPower)?'Power':el.holder.power.parentElement.querySelector('.label')?.textContent;
     const lifetime=v=>/^\d+$/.test(v??'')?formatSqkBase(BigInt(v),formatEther):null;
     shareBase=card.cardData({owner:status.owner,count:el.holder.count.textContent,powerLabel,power:cardPower,claimable:el.holder.claimable.textContent,claimed:lifetime(status.rewards?.lifetimePaidBaseUnits),compounded:lifetime(status.rewards?.lifetimeCompoundedBaseUnits),levels:(status.squeeks??[]).map(t=>t.level),network:String(state.profileKey||'sepolia').replace(/^./,c=>c.toUpperCase())});
     shareUrl=new URL(watchHash(state.profileKey,status.owner),win.location.href).href;
     shareShow=loadShareShow(card);shareData=card.applyShow(shareBase,shareShow);renderShareOptions(card);
     openSheet('share-sheet');sheetFocus=$('btn-share-card');const generation=++shareGeneration;shareAbort=new AbortController();
-    $('share-status').textContent='Preparing card…';
+    $('share-format').textContent='';$('share-status').textContent='Preparing card…';
     const wide=win.matchMedia('(min-width: 761px)').matches,reducedMotion=win.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const shareStyleKey='wheelhouse.shareStyle.v1';let firstStyle='flip';try{firstStyle=win.localStorage.getItem(shareStyleKey)||'flip';}catch{}
     if(!card.STYLES.some(([key])=>key===firstStyle))firstStyle='flip';
@@ -1618,7 +1631,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(activeSheet?.id!=='share-sheet'||generation!==shareGeneration){mounted.stop();return;}
       shareView=mounted;
       $('share-side').disabled=firstStyle!=='flip';
-      {const vt=mounted.videoSupported?card.pickVideoType():null;$('share-status').textContent=vt?(vt.ext==='mp4'?'PNG is 1200 × 675. Video records as MP4.':'PNG is 1200 × 675. Video records as WebM here; MP4 isn\'t available in this browser. PNG works everywhere.'):'Video is not supported in this browser. PNG is available.';}
+      {const vt=mounted.videoSupported?card.pickVideoType():null;$('share-status').textContent='';$('share-format').textContent=vt?(vt.ext==='mp4'?'PNG is 1200 × 675. Video records as MP4.':'PNG is 1200 × 675. Video records as WebM here; MP4 isn\'t available in this browser. PNG works everywhere.'):'Video is not supported in this browser. PNG is available.';}
     }catch(error){if(generation===shareGeneration)$('share-status').textContent=error.message||'Could not prepare the card.';}
     finally{unlock();if(generation===shareGeneration){$('share-side').disabled=(shareView?.style??firstStyle)!=='flip';$('share-video').disabled=!shareView?.videoSupported;$('share-png').disabled=!shareView;}}
   }).finally(()=>{if(!activeSheet&&sheetFocus===$('btn-share-card')&&doc.activeElement===doc.body)sheetFocus.focus();});
@@ -1762,7 +1775,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { exploreClosed=true;win.clearTimeout?.(explorePrefetchTimer);explore?.destroy();workspace?.destroy();unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
+    destroy: () => { exploreClosed=true;win.clearTimeout?.(explorePrefetchTimer);explore?.destroy();workspace?.destroy();unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); premiumGeneration++;closePremium?.();closePremium=null;closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
   };
 }
 
