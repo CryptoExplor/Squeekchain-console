@@ -119,12 +119,12 @@ function cardBase(ctx) {
 // Shared foil palette keeps the marks, window trim and turning edge coordinated.
 export const FOIL_COLORS = ['#9CFFD0', '#9BE7FF', '#B9A6FF', '#FFF3D6'];
 export const BACK_WHEEL = Object.freeze({ x: 580, y: 270, radius: 130, lineWidth: 20 });
-function foil(ctx, x, y, w, h) {
+export function foil(ctx, x, y, w, h) {
   const gradient = ctx.createLinearGradient(x, y, x + w, y + h);
   FOIL_COLORS.forEach((color, i) => gradient.addColorStop(i / (FOIL_COLORS.length - 1), color));
   return gradient;
 }
-function wheelMark(ctx, x, y, radius, t = 0) {
+export function wheelMark(ctx, x, y, radius, t = 0) {
   ctx.save(); ctx.translate(x, y);
   ctx.fillStyle = foil(ctx, -radius, -radius, radius * 2, radius * 2);
   ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill();

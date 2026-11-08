@@ -235,3 +235,21 @@ test('share options are pastel toggle buttons with keyboard and persisted state'
  await expect(address).toHaveAttribute('aria-pressed','false');
  await expect(page.getByTestId('share-link')).toBeDisabled();
 });
+
+test('Classic shares pastel wheel, stat and trim accents in both themes',async({page})=>{
+ await installHolderFixture(page,{profile:'sepolia'});
+ const results=await page.evaluate(async()=>{
+  const {cardData,applyShow,CARD_W,CARD_H}=await import('/share-card.js');
+  const {drawClassic}=await import('/share-styles.js');
+  const canvas=document.createElement('canvas');canvas.width=CARD_W;canvas.height=CARD_H;
+  const ctx=canvas.getContext('2d');let fills=[],strokes=[];
+  const fill=ctx.fill.bind(ctx),stroke=ctx.stroke.bind(ctx);
+  ctx.fill=(...args)=>{fills.push(ctx.fillStyle);fill(...args);};ctx.stroke=(...args)=>{strokes.push(ctx.strokeStyle);stroke(...args);};
+  const base=cardData({count:'10',power:'16,349',claimable:'8,695.43 SQK',levels:[1,2]});
+  return [false,true].flatMap(dark=>[false,true].map(levels=>{
+   fills=[];strokes=[];drawClassic(ctx,applyShow(base,{levels}),{dark,t:2});
+   return {dark,levels,foilFills:fills.filter(v=>v instanceof CanvasGradient).length,foilStrokes:strokes.filter(v=>v instanceof CanvasGradient).length,hasGold:[...fills,...strokes].some(v=>String(v).toLowerCase()==='#fcbe46')};
+  }));
+ });
+ for(const result of results){expect(result.foilFills).toBeGreaterThanOrEqual(3);expect(result.foilStrokes).toBeGreaterThanOrEqual(1);expect(result.hasGold).toBe(false);}
+});

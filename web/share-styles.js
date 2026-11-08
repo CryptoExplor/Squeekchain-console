@@ -1,6 +1,6 @@
 // Extra share card styles: "Night scene" and "Classic". Same data and Show on card switches as the flip card.
 // Display only, like share-card.js: they draw values already on screen and never touch a wallet or the chain.
-import { CARD_W, CARD_H, levelColor, orbList } from './share-card.js';
+import { CARD_W, CARD_H, levelColor, orbList, foil, wheelMark } from './share-card.js';
 const BRAND = { yellow: '#FCBE46', blue: '#597AF7', night: '#0A0A0C' };
 const SANS = '"Quicksand", ui-rounded, system-ui, sans-serif', COND = '"Barlow Condensed", "Arial Narrow", sans-serif', MONO = '"IBM Plex Mono", ui-monospace, monospace';
 function roundRect(ctx, x, y, w, h, r) {
@@ -108,9 +108,9 @@ export function drawNight(ctx, data, { t = 0, scene = null } = {}) {
 // ---- Classic (light or dark, follows the app theme) ----
 export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
   const W = CARD_W, H = CARD_H, ink = dark ? '#F6F3EA' : BRAND.night, muted = dark ? '#A7A39A' : '#5D5A52';
-  const panel = dark ? '#16171C' : '#FFFFFF', line = dark ? '#2A2C33' : '#E8E1D0';
+  const panel = dark ? '#16171C' : '#FFFFFF', line = dark ? '#2A2C33' : '#DDD8E9';
   ctx.save(); ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = dark ? BRAND.night : '#FFF8EA'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = dark ? BRAND.night : '#F7F8FC'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = dark ? 'rgba(255,255,255,.06)' : 'rgba(10,10,12,.07)';
   for (let x = 24; x < W; x += 32) for (let y = 24; y < H; y += 32) { ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill(); }
 
@@ -118,8 +118,8 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
   ctx.fillStyle = ink; ctx.font = '800 34px ' + MONO; ctx.textBaseline = 'alphabetic';
   ctx.fillText('WHEELHOUSE', 64, 92);
   if (data.meta !== false) { ctx.font = '600 22px ' + MONO; const chip = `${data.network} · ${data.date}`; const chipW = ctx.measureText(chip).width + 36;
-  roundRect(ctx, W - 64 - chipW, 58, chipW, 46, 23); ctx.fillStyle = panel; ctx.fill(); ctx.strokeStyle = line; ctx.lineWidth = 2; ctx.stroke();
-  ctx.fillStyle = muted; ctx.fillText(chip, W - 64 - chipW + 18, 89); }
+  roundRect(ctx, W - 64 - chipW, 58, chipW, 46, 23); ctx.fillStyle = foil(ctx, W - 64 - chipW, 58, chipW, 46); ctx.fill(); ctx.strokeStyle = '#A39CB8'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = BRAND.night; ctx.fillText(chip, W - 64 - chipW + 18, 89); }
 
   // address (with Levels hidden the body moves down so no empty band is left above the footer)
   const dy = data.levels.length ? 0 : 44;
@@ -128,18 +128,16 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
 
   // wheel (top right): spokes turn with t
   const cx = 1050, cy = 185 + dy, r = 70, spin = t * 2.4; // sits above the stat boxes (top 300)
-  ctx.lineWidth = 10; ctx.strokeStyle = BRAND.blue; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-  ctx.lineWidth = 4; ctx.strokeStyle = BRAND.yellow;
-  for (let i = 0; i < 8; i++) { const a = spin + i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * (r - 6), cy + Math.sin(a) * (r - 6)); ctx.stroke(); }
-  ctx.fillStyle = BRAND.yellow; ctx.beginPath(); ctx.arc(cx, cy, 14, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = ink; ctx.beginPath(); ctx.moveTo(cx - 30, cy + r + 24); ctx.lineTo(cx, cy); ctx.lineTo(cx + 30, cy + r + 24); ctx.lineWidth = 6; ctx.strokeStyle = ink; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx - 30, cy + r + 24); ctx.lineTo(cx, cy); ctx.lineTo(cx + 30, cy + r + 24); ctx.lineWidth = 6; ctx.strokeStyle = dark ? '#B9A6FF' : '#786699'; ctx.stroke();
+  wheelMark(ctx, cx, cy, r, spin * 2);
+
 
   // stats
   const stats = data.stats.map(([value, label]) => [label.toUpperCase(), value]);
   const gap = 20, boxH = 150, top = 300 + dy * 2, boxW = stats.length ? (W - 128 - gap * (stats.length - 1)) / stats.length : 0;
   stats.forEach(([label, value], i) => {
     const x = 64 + i * (boxW + gap); const accent = i === stats.length - 1 && /SQK/.test(label);
-    roundRect(ctx, x, top, boxW, boxH, 20); ctx.fillStyle = accent ? BRAND.yellow : panel; ctx.fill();
+    roundRect(ctx, x, top, boxW, boxH, 20); ctx.fillStyle = accent ? foil(ctx, x, top, boxW, boxH) : panel; ctx.fill();
     if (!accent) { ctx.strokeStyle = line; ctx.lineWidth = 2; ctx.stroke(); }
     ctx.fillStyle = accent ? BRAND.night : muted; ctx.font = '600 20px ' + MONO; fitFont(ctx, label, boxW - 48, 20, 600, MONO); ctx.fillText(label, x + 24, top + 44, boxW-48);
     ctx.fillStyle = accent ? BRAND.night : ink; fit(ctx, value, boxW - 48, stats.length > 3 ? 44 : 56, 800); ctx.fillText(value, x + 24, top + 116, boxW-48);
@@ -151,14 +149,17 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
   const chips = data.levels.map(item => `L${item.level} × ${item.count}`);
   for (const text of chips) {
     const w = ctx.measureText(text).width + 32; if (x + w > W - 64) { ctx.fillStyle = muted; ctx.fillText('…', x, 562); break; }
-    roundRect(ctx, x, 528, w, 48, 24); ctx.fillStyle = panel; ctx.fill(); ctx.strokeStyle = BRAND.blue; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = ink; ctx.fillText(text, x + 16, 561); x += w + 12;
+    roundRect(ctx, x, 528, w, 48, 24); ctx.fillStyle = foil(ctx, x, 528, w, 48); ctx.fill(); ctx.strokeStyle = '#A39CB8'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = BRAND.night; ctx.fillText(text, x + 16, 561); x += w + 12;
   } }
 
   // footer
   ctx.fillStyle = muted; ctx.font = '500 20px ' + MONO;
   ctx.fillText(data.network === 'Mainnet' ? 'Not financial advice.' : 'Testnet values. Not financial advice.', 64, 630);
   const site = 'wheel-house.pages.dev'; ctx.fillText(site, W - 64 - ctx.measureText(site).width, 630);
+
+  // Matching foil trim on the flat PNG as well as the moving preview.
+  roundRect(ctx, 3, 3, W - 6, H - 6, 20); ctx.strokeStyle = foil(ctx, 0, 0, W, H); ctx.lineWidth = 4; ctx.stroke();
 
   // sheen
   const pos = ((t * 0.35) % 1.6) - 0.3; const g = ctx.createLinearGradient(W * pos - 200, 0, W * pos + 200, H);
@@ -177,10 +178,10 @@ export function drawClassicMoving(ctx, data, { t = 0, dark = true, makeCanvas = 
   const fctx = classicFace.getContext('2d');
   fctx.save(); fctx.clearRect(0, 0, W, H); drawClassic(fctx, data, { t, dark });
   fctx.globalCompositeOperation = 'destination-in'; roundRect(fctx, 0, 0, W, H, 22); fctx.fill(); fctx.globalCompositeOperation = 'source-over';
-  roundRect(fctx, 2, 2, W - 4, H - 4, 20); fctx.strokeStyle = dark ? 'rgba(255,255,255,.16)' : 'rgba(10,10,12,.12)'; fctx.lineWidth = 4; fctx.stroke(); fctx.restore();
+  roundRect(fctx, 2, 2, W - 4, H - 4, 20); fctx.strokeStyle = foil(fctx, 0, 0, W, H); fctx.lineWidth = 4; fctx.stroke(); fctx.restore();
   ctx.save(); ctx.clearRect(0, 0, W, H);
   const bg = ctx.createRadialGradient(W / 2, H * 0.4, 40, W / 2, H / 2, W * 0.7);
-  bg.addColorStop(0, dark ? '#1C1D23' : '#FFFFFF'); bg.addColorStop(1, dark ? '#050506' : '#E9E2D2');
+  bg.addColorStop(0, dark ? '#1C1D23' : '#FFFFFF'); bg.addColorStop(1, dark ? '#050506' : '#E6E4F0');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   const s = 0.8, fw = W * s, fh = H * s, cx = W / 2, cy = H / 2 - 6 + Math.sin(t * 1.3) * 7;
   // same motion as the first share card's 3D slab: turn ±0.16 rad, nod ±0.06 rad, small bob
