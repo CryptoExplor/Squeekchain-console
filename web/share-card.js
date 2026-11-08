@@ -311,6 +311,7 @@ export async function loadFonts(doc = document) {
 // text layer; phones or no WebGL get the flat scene. One 2D output canvas is what you see, save and record.
 // Card styles the share sheet offers. Flip is the default and the default; Night also has its own optional 3D stage.
 export const STYLES = [['flip', 'Flip card'], ['night', 'Night scene'], ['classic', 'Classic']];
+export const STYLE_HINTS = { flip: 'Animated showcase · two-sided', night: 'Cinematic scene · level-coloured orbs', classic: 'Clean stats · lightweight' };
 export const styleSeconds = style => style === 'flip' ? LOOP_SECONDS : 5;
 
 export async function mountCard(host, initial, { reducedMotion = false, wide = true, loadStage, loadNight, style: firstStyle = 'flip', dark = true, signal } = {}) {

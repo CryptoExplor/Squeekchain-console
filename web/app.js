@@ -1477,7 +1477,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
   const loadShareShow=card=>{try{const saved=JSON.parse(win.localStorage.getItem(SHARE_SHOW_KEY)||'{}');return {...card.DEFAULT_SHOW,...Object.fromEntries(Object.entries(saved).filter(([k,v])=>k in card.DEFAULT_SHOW&&typeof v==='boolean'))};}catch{return {...card.DEFAULT_SHOW};}};
   const syncShareLink=()=>{const btn=$('share-link');btn.disabled=!shareShow?.address;btn.title=btn.disabled?'The link shows the wallet address, which is hidden on this card.':'';};
   const renderShareStyles=(card,current)=>{const box=$('share-style');box.querySelectorAll('button').forEach(n=>n.remove());
-    for(const [key,text] of card.STYLES){const btn=doc.createElement('button');btn.type='button';btn.className='btn';btn.textContent=text;btn.setAttribute('data-testid',`share-style-${key}`);btn.setAttribute('aria-pressed',String(key===current));
+    for(const [key,text] of card.STYLES){const btn=doc.createElement('button');btn.type='button';btn.className='btn';btn.textContent=text;if(card.STYLE_HINTS?.[key])btn.title=card.STYLE_HINTS[key];btn.setAttribute('data-testid',`share-style-${key}`);btn.setAttribute('aria-pressed',String(key===current));
       btn.onclick=()=>{if(!shareView?.setStyle(key)){$('share-status').textContent='Wait for the recording to finish.';return;}try{win.localStorage.setItem('wheelhouse.shareStyle.v1',key);}catch{}box.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));$('share-side').disabled=key!=='flip';$('share-status').textContent='';};
       box.append(btn);}};
   const renderShareOptions=card=>{const box=$('share-options');box.querySelectorAll('label').forEach(n=>n.remove());
@@ -1600,9 +1600,10 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const status=state.status;if(!status)return;
     const card=await import('./share-card.js');
     if(state.status!==status||status.owner?.toLowerCase()!==(state.inspected??state.account)?.toLowerCase())return;
-    const powerLabel=el.holder.power.parentElement.querySelector('.label')?.textContent;
+    // The holder row shows Deposited on v9; the card shows real staking power (same formatter as the row).
+    const rawPower=String(status.totals?.power??'');const cardPower=/^\d+$/.test(rawPower)?formatPower(rawPower):el.holder.power.textContent;const powerLabel=/^\d+$/.test(rawPower)?'Power':el.holder.power.parentElement.querySelector('.label')?.textContent;
     const lifetime=v=>/^\d+$/.test(v??'')?formatSqkBase(BigInt(v),formatEther):null;
-    shareBase=card.cardData({owner:status.owner,count:el.holder.count.textContent,powerLabel,power:el.holder.power.textContent,claimable:el.holder.claimable.textContent,claimed:lifetime(status.rewards?.lifetimePaidBaseUnits),compounded:lifetime(status.rewards?.lifetimeCompoundedBaseUnits),levels:(status.squeeks??[]).map(t=>t.level),network:String(state.profileKey||'sepolia').replace(/^./,c=>c.toUpperCase())});
+    shareBase=card.cardData({owner:status.owner,count:el.holder.count.textContent,powerLabel,power:cardPower,claimable:el.holder.claimable.textContent,claimed:lifetime(status.rewards?.lifetimePaidBaseUnits),compounded:lifetime(status.rewards?.lifetimeCompoundedBaseUnits),levels:(status.squeeks??[]).map(t=>t.level),network:String(state.profileKey||'sepolia').replace(/^./,c=>c.toUpperCase())});
     shareUrl=new URL(watchHash(state.profileKey,status.owner),win.location.href).href;
     shareShow=loadShareShow(card);shareData=card.applyShow(shareBase,shareShow);renderShareOptions(card);
     openSheet('share-sheet');sheetFocus=$('btn-share-card');const generation=++shareGeneration;shareAbort=new AbortController();
@@ -1617,7 +1618,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(activeSheet?.id!=='share-sheet'||generation!==shareGeneration){mounted.stop();return;}
       shareView=mounted;
       $('share-side').disabled=firstStyle!=='flip';
-      $('share-status').textContent=mounted.videoSupported?'PNG is 1200 × 675. Video format depends on your browser.':'Video is not supported in this browser. PNG is available.';
+      {const vt=mounted.videoSupported?card.pickVideoType():null;$('share-status').textContent=vt?(vt.ext==='mp4'?'PNG is 1200 × 675. Video records as MP4.':'PNG is 1200 × 675. Video records as WebM here; MP4 isn\'t available in this browser. PNG works everywhere.'):'Video is not supported in this browser. PNG is available.';}
     }catch(error){if(generation===shareGeneration)$('share-status').textContent=error.message||'Could not prepare the card.';}
     finally{unlock();if(generation===shareGeneration){$('share-side').disabled=(shareView?.style??firstStyle)!=='flip';$('share-video').disabled=!shareView?.videoSupported;$('share-png').disabled=!shareView;}}
   }).finally(()=>{if(!activeSheet&&sheetFocus===$('btn-share-card')&&doc.activeElement===doc.body)sheetFocus.focus();});

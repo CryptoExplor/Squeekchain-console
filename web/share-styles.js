@@ -72,7 +72,7 @@ function drawOverlay(ctx, data) {
 
   // title: address, like "Checkpoint example"
   const title = data.address || 'A Squeek holder';
-  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `600 22px ${COND}`; ctx.fillText(data.address ? 'SQUEEK HOLDER CHECKPOINT' : 'WHEELHOUSE CHECKPOINT', 72, 452);
+  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `600 22px ${COND}`; ctx.fillText(data.address ? 'SQUEEK HOLDER CHECKPOINT' : 'SQUEEK HOLDER', 72, 452);
   ctx.fillStyle = '#FFFFFF'; fitFont(ctx, title, 640, 68, 700, SANS); ctx.fillText(title, 70, 520);
 
   // Fixed metric cells prevent long numbers or five selected fields from spilling into each other.
@@ -121,12 +121,13 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
   roundRect(ctx, W - 64 - chipW, 58, chipW, 46, 23); ctx.fillStyle = panel; ctx.fill(); ctx.strokeStyle = line; ctx.lineWidth = 2; ctx.stroke();
   ctx.fillStyle = muted; ctx.fillText(chip, W - 64 - chipW + 18, 89); }
 
-  // address
-  ctx.fillStyle = muted; ctx.font = '600 22px ' + MONO; ctx.fillText(data.address ? 'SQUEEK HOLDER' : 'WHEELHOUSE CHECKPOINT', 64, 170);
-  ctx.fillStyle = ink; fit(ctx, data.address || 'A Squeek holder', 640, 64, 800); ctx.fillText(data.address || 'A Squeek holder', 64, 236);
+  // address (with Levels hidden the body moves down so no empty band is left above the footer)
+  const dy = data.levels.length ? 0 : 44;
+  if (data.address) { ctx.fillStyle = muted; ctx.font = '600 22px ' + MONO; ctx.fillText('SQUEEK HOLDER', 64, 170 + dy); }
+  ctx.fillStyle = ink; fit(ctx, data.address || 'A Squeek holder', 640, 64, 800); ctx.fillText(data.address || 'A Squeek holder', 64, 236 + dy);
 
   // wheel (top right): spokes turn with t
-  const cx = 1050, cy = 185, r = 70, spin = t * 2.4; // sits above the stat boxes (top 300)
+  const cx = 1050, cy = 185 + dy, r = 70, spin = t * 2.4; // sits above the stat boxes (top 300)
   ctx.lineWidth = 10; ctx.strokeStyle = BRAND.blue; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
   ctx.lineWidth = 4; ctx.strokeStyle = BRAND.yellow;
   for (let i = 0; i < 8; i++) { const a = spin + i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * (r - 6), cy + Math.sin(a) * (r - 6)); ctx.stroke(); }
@@ -135,7 +136,7 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
 
   // stats
   const stats = data.stats.map(([value, label]) => [label.toUpperCase(), value]);
-  const gap = 20, boxH = 150, top = 300, boxW = stats.length ? (W - 128 - gap * (stats.length - 1)) / stats.length : 0;
+  const gap = 20, boxH = 150, top = 300 + dy * 2, boxW = stats.length ? (W - 128 - gap * (stats.length - 1)) / stats.length : 0;
   stats.forEach(([label, value], i) => {
     const x = 64 + i * (boxW + gap); const accent = i === stats.length - 1 && /SQK/.test(label);
     roundRect(ctx, x, top, boxW, boxH, 20); ctx.fillStyle = accent ? BRAND.yellow : panel; ctx.fill();
