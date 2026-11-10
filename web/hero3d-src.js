@@ -272,9 +272,9 @@ export function cardStage({ width = 628, height = 800 } = {}) {
 // Real rounded 3D card. Text remains in canvas textures; one output canvas is composited for all exports.
 function createFlipStage(front, back) {
   const renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-  renderer.setPixelRatio(1); renderer.setSize(1200, 675, false);
+  renderer.setPixelRatio(1); renderer.setSize(1920, 1080, false);
   renderer.outputColorSpace = SRGBColorSpace; renderer.toneMapping = NoToneMapping;
-  const scene = new Scene(), camera = new PerspectiveCamera(32, 1200 / 675, 0.1, 30);
+  const scene = new Scene(), camera = new PerspectiveCamera(32, 1920 / 1080, 0.1, 30);
   camera.position.z = 7.6;
   const w = 4.8, h = w * 460 / 760, r = 0.19;
   const shape = new Shape();
@@ -325,7 +325,7 @@ function createFlipStage(front, back) {
 // with the holder's Squeeks as glossy orbs rolling along a curved rail toward the wheel (colour and size by level).
 // No text here: share-card.js draws the text layer over each frame. Shares three.js with the hero bundle.
 const LEVEL_HEX = [0xfcbe46, 0x597af7, 0xff5fa2, 0x3ddc97, 0x9b6bff, 0xff8a3d, 0x4fd1e8, 0xf2f2f2];
-export function nightStage({ width = 1200, height = 675, orbs = [] } = {}) {
+export function nightStage({ width = 1920, height = 1080, orbs = [] } = {}) {
   const renderer = new WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'low-power' });
   renderer.setPixelRatio(1); renderer.setSize(width, height, false);
   renderer.outputColorSpace = SRGBColorSpace; renderer.toneMapping = ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;

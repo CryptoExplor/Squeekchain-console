@@ -1,3 +1,5 @@
+> Retirement note: the Premium card button, runtime wiring and production build output have been removed in this working change at the user's request. Source files are retained for history pending explicit cleanup approval. The original Share card studio remains available. The implementation details below are historical.
+
 # V2 premium sharing — implementation and audit notes
 
 ## PR resolution

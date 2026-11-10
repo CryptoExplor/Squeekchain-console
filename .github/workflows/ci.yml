@@ -2,7 +2,7 @@ name: Wheelhouse checks
 on:
   pull_request:
   push:
-    branches: [main, arena/314fd2af-squeekchain-console]
+    branches: [main, arena/314fd2af-squeekchain-console, arena/b97eddeb-squeekchain-console]
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,6 +17,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Reject high or critical production dependency advisories
+        run: npm audit --omit=dev --audit-level=high
       - name: Install Chromium and OS libraries
         run: npx playwright install --with-deps chromium
       - run: npm run build
@@ -36,7 +38,7 @@ jobs:
   browser-readonly-evidence:
     # This explicitly scoped job is separate from offline qualification. It never
     # installs a wallet, injects an adapter, mocks responses or calls signing tools.
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'arena/ba7ca559-squeekchain-console'
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(fromJSON('["arena/ba7ca559-squeekchain-console","arena/b97eddeb-squeekchain-console"]'), github.head_ref)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

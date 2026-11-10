@@ -30,7 +30,17 @@ const MIME = {
 
 const server = http.createServer((req, res) => {
   for(const [name,value] of Object.entries(securityHeaders))res.setHeader(name,value);
-  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  let url, relative;
+  try {
+    // Host is untrusted request input, not a base URL or filesystem authority.
+    if (!req.url?.startsWith('/')) throw new Error('Invalid request target');
+    url = new URL(req.url, 'http://static.invalid');
+    relative = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname);
+    if (relative.includes('\0')) throw new Error('Invalid path');
+  } catch {
+    res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('bad request');
+    return;
+  }
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405, { allow: "GET, HEAD" }).end("method not allowed");
     return;
@@ -40,9 +50,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  const relative = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
-  const file = path.join(DIR, path.normalize(relative).replace(/^([/\\])+/, ""));
-  if (!file.startsWith(DIR)) {
+  const file = path.resolve(DIR, `.${relative}`);
+  if (file !== DIR && !file.startsWith(DIR + path.sep)) {
     res.writeHead(403).end("forbidden");
     return;
   }
@@ -62,5 +71,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  process.stdout.write(`Wheelhouse on http://${HOST}:${PORT}\n`);
+  process.stdout.write(`Wheelhouse on http://${HOST}:${server.address().port}\n`);
 });

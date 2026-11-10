@@ -911,7 +911,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const inspected=status?.owner??state.inspected??state.account;
     el.holder.owner.textContent=inspected?short(inspected):'';el.holder.owner.title=inspected??'';el.holder.owner.classList.toggle('hidden',!inspected);
     el.holder.refresh.disabled=!state.adapter||!inspected;
-    $('holder-copy-link').classList.toggle('hidden',!inspected);{const share=$('btn-share-card');share.classList.toggle('hidden',!inspected);share.disabled=!status||status.owner?.toLowerCase()!==inspected?.toLowerCase();share.title=share.disabled?'Load this wallet\'s Squeeks first':'Make a picture or short clip of these holdings';syncPremiumGate();}$('btn-planner').disabled=!(status?.squeeks?.length);$('btn-planner').hidden=!status?.squeeks?.some(token=>Number.isInteger(token.level)&&token.level>0&&token.level<state.net?.policy?.maximumLevel);
+    $('holder-copy-link').classList.toggle('hidden',!inspected);{const share=$('btn-share-card');share.classList.toggle('hidden',!inspected);share.disabled=!status||status.owner?.toLowerCase()!==inspected?.toLowerCase();share.title=share.disabled?'Load this wallet\'s Squeeks first':'Make a picture or short clip of these holdings';}$('btn-planner').disabled=!(status?.squeeks?.length);$('btn-planner').hidden=!status?.squeeks?.some(token=>Number.isInteger(token.level)&&token.level>0&&token.level<state.net?.policy?.maximumLevel);
     el.holder.empty.classList.toggle("hidden", Boolean(status));
     el.holder.body.classList.toggle("hidden", !status);
     if (!status) {
@@ -1590,25 +1590,6 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     const value = el.holder.watchInput.value.trim();
     try{const address=watchAddress(value);win.location.hash=watchHash(state.profileKey,address);await onHashChange();}catch(error){toast(error.message,'err');}
   };
-  let closePremium = null, premiumGeneration = 0;
-  /** Reapply current-wallet eligibility without clearing an in-flight import's busy lock. */
-  function syncPremiumGate(){
-    const button=$('btn-premium-share'),owner=state.inspected??state.account;
-    button.classList.toggle('hidden',!owner);
-    button.disabled=destroyed||button.getAttribute('aria-busy')==='true'||!state.status||!owner||state.status.owner?.toLowerCase()!==owner.toLowerCase();
-  }
-  $('btn-premium-share').onclick=()=>withBusy($('btn-premium-share'),async()=>{
-    const status=state.status,profile=state.profileKey,owner=state.inspected??state.account;
-    if(!status||status.owner?.toLowerCase()!==owner?.toLowerCase())return;
-    const generation=++premiumGeneration;
-    try{
-      const raw=String(status.totals?.power??''),lifetime=value=>/^\d+$/.test(String(value??''))?formatSqkBase(value,formatEther):'—';
-      const snapshot=Object.freeze({walletAddress:`${status.owner.slice(0,6)}…${status.owner.slice(-4)}`,count:el.holder.count.textContent,power:/^\d+$/.test(raw)?formatStakingPower(raw):el.holder.power.textContent,powerLabel:/^\d+$/.test(raw)?'Power':el.holder.power.parentElement.querySelector('.label')?.textContent||'Power',claimable:el.holder.claimable.textContent,claimed:lifetime(status.rewards?.lifetimePaidBaseUnits),compounded:lifetime(status.rewards?.lifetimeCompoundedBaseUnits),network:profile.replace(/^./,c=>c.toUpperCase()),date:new Date().toISOString().slice(0,10)});
-      const {openPremiumShare}=await import('./premium-share.js');
-      if(destroyed||state.status!==status||generation!==premiumGeneration)return;
-      closePremium?.();closePremium=openPremiumShare({snapshot,holderUrl:new URL(watchHash(profile,status.owner),win.location.href).href,onClosed:()=>{if(!destroyed)$('btn-premium-share').focus();}});
-    }catch(error){showBanner(`Premium card unavailable: ${error.message}`,'warn');}
-  }).finally(syncPremiumGate);
   // Share card: drawn from what the holder view already shows. Read-only; nothing here reaches a transaction.
   const lockShareControls=()=>{
     const controls=[...$('share-options').querySelectorAll('button'),...$('share-style').querySelectorAll('button'),$('share-png'),$('share-video'),$('share-side')];
@@ -1639,7 +1620,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(activeSheet?.id!=='share-sheet'||generation!==shareGeneration){mounted.stop();return;}
       shareView=mounted;
       $('share-side').disabled=firstStyle!=='flip';
-      {const vt=mounted.videoSupported?card.pickVideoType():null;$('share-status').textContent='';$('share-format').textContent=vt?(vt.ext==='mp4'?'PNG is 1200 × 675. Video records as MP4.':'PNG is 1200 × 675. Video records as WebM here; MP4 isn\'t available in this browser. PNG works everywhere.'):'Video is not supported in this browser. PNG is available.';}
+      {const vt=mounted.videoSupported?card.pickVideoType():null;$('share-status').textContent='';$('share-format').textContent=vt?(vt.ext==='mp4'?'PNG and video are 1920 × 1080. Video records as MP4.':'PNG and video are 1920 × 1080. Video records as WebM here; MP4 isn\'t available in this browser. PNG works everywhere.'):'Video is not supported in this browser. PNG is 1920 × 1080.';}
     }catch(error){if(generation===shareGeneration)$('share-status').textContent=error.message||'Could not prepare the card.';}
     finally{unlock();if(generation===shareGeneration){$('share-side').disabled=(shareView?.style??firstStyle)!=='flip';$('share-video').disabled=!shareView?.videoSupported;$('share-png').disabled=!shareView;}}
   }).finally(()=>{if(!activeSheet&&sheetFocus===$('btn-share-card')&&doc.activeElement===doc.body)sheetFocus.focus();});
@@ -1783,7 +1764,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
     requestClaim: ids => viewTask(() => requestClaim(ids)),
     requestMerge: pair => viewTask(() => requestMerge(pair)),
     selectTab,
-    destroy: () => { exploreClosed=true;win.clearTimeout?.(explorePrefetchTimer);explore?.destroy();workspace?.destroy();unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); premiumGeneration++;closePremium?.();closePremium=null;closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
+    destroy: () => { exploreClosed=true;win.clearTimeout?.(explorePrefetchTimer);explore?.destroy();workspace?.destroy();unsubscribeWallet();wallet.destroy();holdings.destroy();images.destroy();headerObserver?.disconnect();win.removeEventListener('resize',positionBanner);win.removeEventListener('scroll',positionBanner);dialog.close(); closeSheet(); win.removeEventListener('hashchange', onHashChange); win.removeEventListener('message', onToolMessage); themeMedia?.removeEventListener?.('change', onSystemTheme); doc.removeEventListener('click', onDocumentClick); doc.removeEventListener('keydown', onOverlayKey); doc.removeEventListener('focusin', onSheetFocus); destroyed = true; generation++; loadController.abort(); activity.destroy(); poller.stop(); },
   };
 }
 

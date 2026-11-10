@@ -30,7 +30,7 @@ The separate operator-only `keeper/checkpoint.mjs` requires both an enable flag 
 
 ## Display API, artwork and browser state
 
-The public API is display-only, never transaction authority. Validate profile/chain/identity/schema and freshness; missing or malformed data is Unknown/unavailable. Confirmation-delayed API data cannot replace fresh owner/custody checks or simulation. Earnings gaps are not fabricated zeros.
+The public API is display-only, never transaction authority. Genesis API failures show an unknown phase, not a closed sale. Official mint webpage prices and limits are informational snapshots only; any future payable integration must read canonical current contract terms, simulate exact value, and require renewed review when price, quantity limits, recipient or phase changes. Validate profile/chain/identity/schema and freshness; missing or malformed data is Unknown/unavailable. Confirmation-delayed API data cannot replace fresh owner/custody checks or simulation. Earnings gaps are not fabricated zeros.
 
 Artwork metadata/card URLs must resolve to exact `https://api.squeekchain.com` origin without credentials; image fetches recheck origin and reject redirects. Foreign metadata is a schema error, not a route to permissive fallback. Valid API failures may use isolated SVG/contract art. Cache keys include profile/token/version; merges invalidate affected artwork. Replaced/destroyed blob URLs are revoked, and late/aborted work cannot replace a newer image. No hard LRU bound is claimed.
 
@@ -45,3 +45,7 @@ Local stdio MCP provides public reads and unsigned preparation, not wallet acces
 CI rejects generated browser-asset drift. Tests may not write into docs; transient evidence belongs in ignored artifacts with seven-day CI retention. Keep pins byte-stable, report new findings in PR descriptions, and retain durable limits here instead of adding run reports.
 
 Identity batches rejected as unsupported fall back to at most two native calls at once, at the same snapshot block. Rate limits retain cooldowns. An unavailable identity peer can be replaced only by a distinct configured peer that agrees on that exact block hash; both replacement identity values and final hashes are checked. Malformed success, chain, hash or pin mismatches still stop.
+
+## Dependency boundary
+
+The root patched Zod 4 dependency satisfies abitype's supported optional peer range and keeps the production dependency graph off the known collection-validation memory-exhaustion advisory. Hardhat and its helper still require Zod 3 in their development-only subtrees; do not force a Zod 4 override into those incompatible ranges. The local fork tooling is opt-in and loopback-only, not a public validation service. Recheck full and production-only dependency audits before release; a clean production audit does not certify development tooling or application security.

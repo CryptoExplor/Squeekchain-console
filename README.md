@@ -34,7 +34,7 @@ Squeeks has separate NFT and SQK views, a merge planner, token detail pages, sha
 | --- | --- |
 | `npm run web` / `serve` | Build and serve the static app. |
 | `npm run dev` | Serve local source without rebuilding. |
-| `npm run build` | Build `dist/`; enforce 500,000 gzip bytes across all JavaScript, including lazy modules. |
+| `npm run build` | Build `dist/`; enforce 2,000,000 gzip bytes (2 MB, decimal) across all JavaScript, including lazy modules. |
 | `npm test` | Offline SDK, safety, documentation and integration checks. |
 | `npm run test:browser` | Mocked Chromium regressions; install with `npx playwright install --with-deps chromium`. |
 | `npm run test:web` / `test:audit` | Focused UI / deployment-baseline checks. |

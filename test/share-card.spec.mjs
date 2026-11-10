@@ -32,7 +32,7 @@ test('share studio: front and back PNGs, style switching and anonymous export', 
   await page.getByTestId('share-png').click();
   const file=await pending;
   const fs=await import('node:fs'); const bytes=fs.readFileSync(await file.path());
-  expect(bytes.readUInt32BE(16)).toBe(1200); expect(bytes.readUInt32BE(20)).toBe(675);
+  expect(bytes.readUInt32BE(16)).toBe(1920); expect(bytes.readUInt32BE(20)).toBe(1080);
   return {bytes,name:file.suggestedFilename()};
  };
  const front=await save('front'), back=await save('back');
@@ -76,7 +76,7 @@ test('real Three.js Flip initializes and renders both sides without silently fal
   finally {flip?.dispose();stage.dispose();}
  });
  test.skip(!result.supported,'WebGL unavailable in this browser runner');
- expect(result.width).toBe(1200);expect(result.height).toBe(675);
+ expect(result.width).toBe(1920);expect(result.height).toBe(1080);
 });
 
 test('Night lazy loading is awaited by export, privacy updates GPU orbs, and late close never mounts', async ({page})=>{
@@ -260,4 +260,52 @@ test('share output format remains disclosed after style and visibility edits',as
  const format=page.getByTestId('share-format');await expect(format).toContainText('PNG');
  const text=await format.textContent();await page.getByTestId('share-style-classic').click();
  await page.getByTestId('share-show-address').click();await expect(format).toHaveText(text);
+});
+
+for(const style of ['classic','flip','night'])test(`${style}: PNG and encoded video are native 1920x1080`,async({page})=>{
+ await page.goto('/',{waitUntil:'domcontentloaded'});
+ const result=await page.evaluate(async style=>{
+  const card=await import('/share-card.js'),host=document.createElement('div');document.body.append(host);
+  const data=card.applyShow(card.cardData({count:'12',power:'123.45',claimable:'67.89 SQK',network:'Sepolia'}));
+  const view=await card.mountCard(host,data,{style,wide:false,reducedMotion:true});
+  try{
+   const canvas=host.querySelector('canvas'),png=await view.png(),bitmap=await createImageBitmap(png);
+   const result={canvas:[canvas.width,canvas.height],png:[bitmap.width,bitmap.height],videoSupported:view.videoSupported};bitmap.close();
+   if(view.videoSupported){
+    const {blob}=await view.video(1);
+    const bytes=new Uint8Array(await blob.arrayBuffer());let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);
+    result.videoBase64=btoa(binary);result.videoType=blob.type;result.bytes=blob.size;
+   }
+   return result;
+  }finally{view.stop();host.remove();}
+ },style);
+ expect(result.canvas).toEqual([1920,1080]);expect(result.png).toEqual([1920,1080]);
+ expect(result.videoSupported).toBe(true);expect(result.bytes).toBeGreaterThan(1000);
+ // Decode through a same-origin test response: the production CSP intentionally disallows blob media.
+ await page.route('**/__recorded_share_video',route=>route.fulfill({contentType:result.videoType,body:Buffer.from(result.videoBase64,'base64')}));
+ const size=await page.evaluate(async()=>{
+  const video=document.createElement('video');video.preload='metadata';video.src='/__recorded_share_video';
+  try{await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;video.onerror=()=>reject(new Error(`Encoded video could not be decoded: ${video.error?.code}`));});return [video.videoWidth,video.videoHeight];}
+  finally{video.removeAttribute('src');video.load();}
+ });
+ expect(size).toEqual([1920,1080]);
+});
+
+test('mounted Flip uses double-density face textures and a Full HD GPU render target',async({page})=>{
+ await page.goto('/',{waitUntil:'domcontentloaded'});
+ const result=await page.evaluate(async()=>{
+  const card=await import('/share-card.js');if(!card.webglAvailable())return {supported:false};
+  const {cardStage}=await import('/hero3d.js'),host=document.createElement('div');document.body.append(host);
+  let textures,gpu;
+  const view=await card.mountCard(host,card.applyShow(card.cardData({count:'12',power:'456',claimable:'7 SQK'})),{
+   style:'flip',wide:true,reducedMotion:true,loadStage:async()=>options=>{
+    const stage=cardStage(options),create=stage.createFlip;
+    stage.createFlip=(front,back)=>{textures=[[front.width,front.height],[back.width,back.height]];const flip=create(front,back);gpu=[flip.canvas.width,flip.canvas.height];return flip;};return stage;
+   },
+  });
+  try{const blob=await view.png();return {supported:true,textures,gpu,mode:view.mode,bytes:blob.size};}
+  finally{view.stop();host.remove();}
+ });
+ test.skip(!result.supported,'WebGL2 unavailable');expect(result.mode).toBe('3d');
+ expect(result.textures).toEqual([[1520,920],[1520,920]]);expect(result.gpu).toEqual([1920,1080]);expect(result.bytes).toBeGreaterThan(10000);
 });
