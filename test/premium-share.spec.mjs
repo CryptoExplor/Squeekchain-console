@@ -4,6 +4,9 @@ import {existsSync} from 'node:fs';
 import {installHolderFixture} from './holder-workspace-fixture.mjs';
 
 test('premium retirement preserves the original share studio without loading premium assets',async({page})=>{
+ // Isolate retirement wiring from the unrelated homepage's continuous GPU animation.
+ await page.addInitScript(()=>{window.__squeekMounted=true;});
+ await page.emulateMedia({reducedMotion:'reduce'});
  const errors=[],premiumRequests=[];page.on('pageerror',e=>errors.push(e.message));
  page.on('request',request=>{if(/\/premium-share\.(?:js|css)(?:\?|$)/.test(request.url()))premiumRequests.push(request.url());});
  await installHolderFixture(page,{profile:'sepolia'});

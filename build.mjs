@@ -6,6 +6,7 @@ import { gzipSync } from "node:zlib";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildManifest } from "./sdk/tools.js";
+import { JS_BUDGET_BYTES, assertJavaScriptBudget } from "./scripts/js-budget.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 process.chdir(ROOT);
@@ -61,7 +62,7 @@ const scripts = fs.readdirSync(OUT).filter(file => file.endsWith('.js')).sort().
   const source = fs.readFileSync(path.join(OUT, file));
   return { file, rawBytes: source.length, gzipBytes: gzipSync(source).length };
 });
-const size = { algorithm: 'gzip (Node default level)', scripts, totalGzipBytes: scripts.reduce((total, file) => total + file.gzipBytes, 0), budgetBytes: 500_000 };
+const size = { algorithm: 'gzip (Node default level)', scripts, totalGzipBytes: scripts.reduce((total, file) => total + file.gzipBytes, 0), budgetBytes: JS_BUDGET_BYTES };
 fs.writeFileSync(path.join(OUT, 'js-size.json'), JSON.stringify(size, null, 2) + '\n');
-if (size.totalGzipBytes >= size.budgetBytes) throw new Error(`JS gzip budget exceeded: ${size.totalGzipBytes} bytes`);
+assertJavaScriptBudget(size.totalGzipBytes);
 console.log(`dist JavaScript gzip: ${size.totalGzipBytes.toLocaleString('en-US')} bytes / ${size.budgetBytes.toLocaleString('en-US')} byte budget (all ${scripts.length} scripts)`);

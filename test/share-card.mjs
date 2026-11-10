@@ -1,7 +1,9 @@
 // Share card: pure data shaping and file naming. Drawing and recording are covered in the browser spec.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { cardData, shortAddress, fileName, pickVideoType, orbList, levelColor, applyShow, DEFAULT_SHOW, MAX_STATS, cardTurn, LOOP_SECONDS } from '../web/share-card.js';
+import { EXPORT_W, EXPORT_H, VIDEO_BITRATE, cardData, shortAddress, fileName, pickVideoType, orbList, levelColor, applyShow, DEFAULT_SHOW, MAX_STATS, cardTurn, LOOP_SECONDS } from '../web/share-card.js';
+
+assert.equal(EXPORT_W,1920);assert.equal(EXPORT_H,1080);assert.equal(VIDEO_BITRATE,16_000_000);
 
 const owner = '0x5C5a38168517B610fe06b00c07a2D45BBB10c2e8';
 const d = cardData({ owner, count: '10', power: '1,234', claimable: '9.00 SQK', levels: [2, 1, 1, null, 3, 0, 1], network: 'Sepolia', date: new Date(2026, 10, 8) });
@@ -94,7 +96,7 @@ assert.equal(levelColor(NaN), levelColor(1));
  globalThis.MediaRecorder=class {
   static isTypeSupported(){return true;}
   state='inactive';
-  constructor(){current=this;}
+  constructor(_stream,options){current=this;assert.equal(options.videoBitsPerSecond,16_000_000);assert.equal(options.mimeType,'video/mp4;codecs=avc1.420028');}
   start(){this.state='recording';}
   stop(){this.state='inactive';queueMicrotask(()=>{this.ondataavailable?.({data:new Blob(['video'])});this.onstop?.();});}
  };

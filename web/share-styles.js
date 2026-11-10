@@ -1,6 +1,6 @@
 // Extra share card styles: "Night scene" and "Classic". Same data and Show on card switches as the flip card.
 // Display only, like share-card.js: they draw values already on screen and never touch a wallet or the chain.
-import { CARD_W, CARD_H, levelColor, orbList, foil, wheelMark } from './share-card.js';
+import { CARD_W, CARD_H, EXPORT_W, EXPORT_H, levelColor, orbList, foil, wheelMark } from './share-card.js';
 const BRAND = { yellow: '#FCBE46', blue: '#597AF7', night: '#0A0A0C' };
 const SANS = '"Quicksand", ui-rounded, system-ui, sans-serif', COND = '"Barlow Condensed", "Arial Narrow", sans-serif', MONO = '"IBM Plex Mono", ui-monospace, monospace';
 function roundRect(ctx, x, y, w, h, r) {
@@ -172,12 +172,14 @@ export function drawClassic(ctx, data, { dark = false, t = 0 } = {}) {
 
 // Classic in motion: the flat card floats as a slab over a plain backdrop. It turns a little left and right,
 // nods and bobs, with a light sheen. The PNG still uses the flat drawClassic.
-const makeFace = () => { if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(CARD_W, CARD_H); const c = document.createElement('canvas'); c.width = CARD_W; c.height = CARD_H; return c; };
+const makeFace = () => { if (typeof OffscreenCanvas === 'function') return new OffscreenCanvas(EXPORT_W, EXPORT_H); const c = document.createElement('canvas'); c.width = EXPORT_W; c.height = EXPORT_H; return c; };
 let classicFace = null;
 export function drawClassicMoving(ctx, data, { t = 0, dark = true, makeCanvas = makeFace } = {}) {
   const W = CARD_W, H = CARD_H;
   if (!classicFace) classicFace = makeCanvas(W, H);
   const fctx = classicFace.getContext('2d');
+  const faceScale = classicFace.width / W;
+  fctx.setTransform(faceScale, 0, 0, faceScale, 0, 0);
   fctx.save(); fctx.clearRect(0, 0, W, H); drawClassic(fctx, data, { t, dark });
   fctx.globalCompositeOperation = 'destination-in'; roundRect(fctx, 0, 0, W, H, 22); fctx.fill(); fctx.globalCompositeOperation = 'source-over';
   roundRect(fctx, 2, 2, W - 4, H - 4, 20); fctx.strokeStyle = foil(fctx, 0, 0, W, H); fctx.lineWidth = 4; fctx.stroke(); fctx.restore();
@@ -198,7 +200,7 @@ export function drawClassicMoving(ctx, data, { t = 0, dark = true, makeCanvas = 
     ctx.lineTo(b.x + Math.max(0, e), cy + fh * kb / 2 + b.dy); ctx.lineTo(a.x - Math.max(0, -e), cy + fh * ka / 2 + a.dy); ctx.closePath(); ctx.fill(); }
   for (let i = 0; i < N; i++) {
     const a = proj(i / N), b = proj((i + 1) / N), k = (a.k + b.k) / 2, hgt = fh * k;
-    ctx.drawImage(classicFace, i * sw, 0, sw, H, Math.min(a.x, b.x), cy - hgt / 2 + (a.dy + b.dy) / 2, Math.abs(b.x - a.x) + 0.6, hgt);
+    ctx.drawImage(classicFace, i * sw * faceScale, 0, sw * faceScale, H * faceScale, Math.min(a.x, b.x), cy - hgt / 2 + (a.dy + b.dy) / 2, Math.abs(b.x - a.x) + 0.6, hgt);
   }
   ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over'; const sx = cx + sn * 520, gl = ctx.createLinearGradient(sx - 140, 0, sx + 140, 0);
   gl.addColorStop(0, 'rgba(255,255,255,0)'); gl.addColorStop(0.5, `rgba(255,255,255,${dark ? 0.07 : 0.22})`); gl.addColorStop(1, 'rgba(255,255,255,0)');

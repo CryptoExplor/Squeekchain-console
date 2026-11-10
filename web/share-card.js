@@ -2,7 +2,10 @@
 // Read-only and local: it draws numbers the page already shows, never reads chain itself,
 // and nothing here ever goes into a transaction. Loaded lazily the first time Share card is clicked.
 
+// Layout coordinates stay stable; rasterize vectors/text into a native Full HD backing store.
 export const CARD_W = 1200, CARD_H = 675;
+export const EXPORT_W = 1920, EXPORT_H = 1080;
+export const VIDEO_BITRATE = 16_000_000;
 const BRAND = { yellow: '#FCBE46', blue: '#597AF7', night: '#0A0A0C' };
 
 export function shortAddress(address) {
@@ -250,6 +253,8 @@ export function drawCard(ctx, input, { t = 0, scene = null, makeCanvas = default
   const data = input.front ? input : applyShow(input);
   drawStudio(ctx, makeCanvas);
   const showBack = Math.cos(turn) < 0, face = makeCanvas(FACE_W, FACE_H), fctx = face.getContext('2d');
+  const faceScale = face.width / FACE_W;
+  fctx.setTransform(faceScale, 0, 0, faceScale, 0, 0);
   if (showBack) drawBack(fctx, data, { t }); else drawFront(fctx, data, { t, scene });
   const cx = CARD_W / 2, cy = 312 + Math.sin(t * 1.3) * 10, D = 2200, c = Math.cos(turn), sn = Math.sin(turn);
   // pitch: the card nods back and forth (strips shear vertically), and rolls a little, so it never sits still
@@ -264,7 +269,7 @@ export function drawCard(ctx, input, { t = 0, scene = null, makeCanvas = default
   if (Math.abs(c) < 0.35) { const k = 1; ctx.fillStyle = foil(ctx, cx - 8, cy - FACE_H / 2, 16, FACE_H); const e = Math.max(3, 14 * Math.abs(sn) * (1 - Math.abs(c))); roundRect(ctx, cx - e / 2, cy - FACE_H * k / 2, e, FACE_H * k, e / 2); ctx.fill(); }
   for (let i = 0; i < N; i++) {
     const a = proj(i / N), b = proj((i + 1) / N), left = Math.min(a.x, b.x), width = Math.abs(b.x - a.x) + 0.6, k = (a.k + b.k) / 2, hgt = FACE_H * k;
-    if (width < 0.2) continue; ctx.drawImage(face, i * sw, 0, sw, FACE_H, left, cy - hgt / 2 + (a.dy + b.dy) / 2, width, hgt);
+    if (width < 0.2) continue; ctx.drawImage(face, i * sw * faceScale, 0, sw * faceScale, FACE_H * faceScale, left, cy - hgt / 2 + (a.dy + b.dy) / 2, width, hgt);
   }
   // sheen sweeping across as it turns
   ctx.save(); ctx.globalCompositeOperation = 'lighter'; const sx = cx + Math.sin(turn) * 380, gl = ctx.createLinearGradient(sx - 120, 0, sx + 120, 0);
@@ -278,7 +283,7 @@ export function drawCard(ctx, input, { t = 0, scene = null, makeCanvas = default
 
 // Best container X accepts first; WebM is the fallback and is labelled so.
 export function pickVideoType(isSupported = type => globalThis.MediaRecorder?.isTypeSupported?.(type)) {
-  for (const type of ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm']) {
+  for (const type of ['video/mp4;codecs=avc1.420028', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm']) {
     try { if (isSupported(type)) return { type, ext: type.startsWith('video/mp4') ? 'mp4' : 'webm' }; } catch { /* next */ }
   }
   return null;
@@ -306,7 +311,7 @@ export function recordCanvas(canvas, frame, { seconds = 5, fps = 30, signal, onP
     try {
       frame(0); if (settled) return;
       stream = canvas.captureStream(fps);
-      recorder = new MediaRecorder(stream, { mimeType: kind.type, videoBitsPerSecond: 8_000_000 });
+      recorder = new MediaRecorder(stream, { mimeType: kind.type, videoBitsPerSecond: VIDEO_BITRATE });
       recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
       recorder.onerror = event => finish(event.error ?? new Error('Recording failed.'));
       recorder.onstop = () => {
@@ -353,17 +358,20 @@ export async function mountCard(host, initial, { reducedMotion = false, wide = t
   assertOpen(); await loadFonts(doc); assertOpen();
   let data = initial, style = STYLES.some(([key]) => key === firstStyle) ? firstStyle : 'flip';
   const styles = await import('./share-styles.js'); assertOpen();
-  const out = doc.createElement('canvas'); out.width = CARD_W; out.height = CARD_H;
+  const out = doc.createElement('canvas'); out.width = EXPORT_W; out.height = EXPORT_H;
   const ctx = out.getContext('2d');
   if (!ctx) throw new Error('Canvas drawing is not supported in this browser.');
+  ctx.setTransform(EXPORT_W / CARD_W, 0, 0, EXPORT_H / CARD_H, 0, 0);
+  ctx.imageSmoothingQuality = 'high';
   let stage = null, flip = null, night = null, stagePromise = null, nightPromise = null;
   let alive = true, exporting = false, raf = 0, lastPreview = 0;
   const abort = new AbortController();
   const scratch = new Map();
-  const makeScratch = (w,h) => { const key=`${w}x${h}`; if(!scratch.has(key))scratch.set(key,defaultCanvas(w,h));return scratch.get(key); };
-  const front = defaultCanvas(FACE_W, FACE_H), back = defaultCanvas(FACE_W, FACE_H);
+  const makeScratch = (w,h) => { const key=`${w}x${h}`; if(!scratch.has(key))scratch.set(key,defaultCanvas(w * (w === FACE_W && h === FACE_H ? 2 : 1),h * (w === FACE_W && h === FACE_H ? 2 : 1)));return scratch.get(key); };
+  const front = defaultCanvas(FACE_W * 2, FACE_H * 2), back = defaultCanvas(FACE_W * 2, FACE_H * 2);
   const frontCtx = front.getContext('2d'), backCtx = back.getContext('2d');
   if (!frontCtx || !backCtx) throw new Error('Canvas drawing is not supported in this browser.');
+  frontCtx.setTransform(2, 0, 0, 2, 0, 0); backCtx.setTransform(2, 0, 0, 2, 0, 0);
   out.classList.add('share-canvas'); out.setAttribute('aria-label', 'Holder share card preview'); out.setAttribute('role', 'img');
   const capable = wide && (loadStage || loadNight) ? webglAvailable(doc) : false;
   const lossHandlers = new Map();
@@ -395,7 +403,7 @@ export async function mountCard(host, initial, { reducedMotion = false, wide = t
   const ensureNight = () => {
     if (!alive || !capable || !loadNight) return Promise.resolve();
     return nightPromise ??= Promise.resolve().then(loadNight).then(factory => {
-      if (alive) { night = factory({ width: CARD_W, height: CARD_H, orbs: orbList(data.orbLevels ?? data.levels) }); watch(night,releaseNight); }
+      if (alive) { night = factory({ width: EXPORT_W, height: EXPORT_H, orbs: orbList(data.orbLevels ?? data.levels) }); watch(night,releaseNight); }
     }).catch(releaseNight);
   };
   const prepare = () => style === 'flip' ? ensureStage() : style === 'night' ? ensureNight() : Promise.resolve();
@@ -420,7 +428,7 @@ export async function mountCard(host, initial, { reducedMotion = false, wide = t
     const shadow = ctx.createRadialGradient(600, 573, 4, 600, 573, 365);
     shadow.addColorStop(0, 'rgba(0,0,0,.6)'); shadow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.save(); ctx.translate(600,573); ctx.scale(1,0.12); ctx.fillStyle=shadow; ctx.translate(-600,-573); ctx.fillRect(200,173,800,800); ctx.restore();
-    ctx.drawImage(flip.canvas, 0, 0);
+    ctx.drawImage(flip.canvas, 0, 0, CARD_W, CARD_H);
     ctx.fillStyle = '#ddd'; ctx.font = `500 15px ${MONO}`; ctx.textAlign = 'center';
     ctx.fillText('WHEEL-HOUSE.PAGES.DEV', CARD_W / 2, 635); ctx.textAlign = 'start';
     drawDisclaimer(ctx, data, 600, 659, true);

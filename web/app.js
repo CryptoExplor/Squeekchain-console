@@ -1620,7 +1620,7 @@ export function mount({ doc = document, win = window, adapterFactory, fetcher = 
       if(activeSheet?.id!=='share-sheet'||generation!==shareGeneration){mounted.stop();return;}
       shareView=mounted;
       $('share-side').disabled=firstStyle!=='flip';
-      {const vt=mounted.videoSupported?card.pickVideoType():null;$('share-status').textContent='';$('share-format').textContent=vt?(vt.ext==='mp4'?'PNG is 1200 × 675. Video records as MP4.':'PNG is 1200 × 675. Video records as WebM here; MP4 isn\'t available in this browser. PNG works everywhere.'):'Video is not supported in this browser. PNG is available.';}
+      {const vt=mounted.videoSupported?card.pickVideoType():null;$('share-status').textContent='';$('share-format').textContent=vt?(vt.ext==='mp4'?'PNG and video are 1920 × 1080. Video records as MP4.':'PNG and video are 1920 × 1080. Video records as WebM here; MP4 isn\'t available in this browser. PNG works everywhere.'):'Video is not supported in this browser. PNG is 1920 × 1080.';}
     }catch(error){if(generation===shareGeneration)$('share-status').textContent=error.message||'Could not prepare the card.';}
     finally{unlock();if(generation===shareGeneration){$('share-side').disabled=(shareView?.style??firstStyle)!=='flip';$('share-video').disabled=!shareView?.videoSupported;$('share-png').disabled=!shareView;}}
   }).finally(()=>{if(!activeSheet&&sheetFocus===$('btn-share-card')&&doc.activeElement===doc.body)sheetFocus.focus();});
